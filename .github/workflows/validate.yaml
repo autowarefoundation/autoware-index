@@ -1,0 +1,54 @@
+name: validate
+
+on:
+  pull_request:
+    paths:
+      - "distributions/**.yaml"
+      - "schema/**.json"
+      - ".github/workflows/validate.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "distributions/**.yaml"
+      - "schema/**.json"
+      - ".github/workflows/validate.yaml"
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  schema:
+    name: schema conformance
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: install check-jsonschema
+        run: python -m pip install --upgrade check-jsonschema pyyaml
+
+      - name: validate distributions against schema
+        run: |
+          check-jsonschema \
+            --schemafile schema/distribution.schema.json \
+            distributions/*.yaml
+
+      - name: ros_distro matches filename stem
+        run: |
+          set -euo pipefail
+          fail=0
+          for f in distributions/*.yaml; do
+            stem=$(basename "$f" .yaml)
+            declared=$(python -c "import sys, yaml; print(yaml.safe_load(open(sys.argv[1]))['ros_distro'])" "$f")
+            if [ "$stem" != "$declared" ]; then
+              echo "::error file=$f::ros_distro is '$declared' but filename stem is '$stem'"
+              fail=1
+            fi
+          done
+          exit $fail
