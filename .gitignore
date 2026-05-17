@@ -29,3 +29,6 @@ node_modules/
 dist/
 build/
 .cache/
+
+# Local scratch ROS 2 workspace for experimentation and CI workflow scratch
+ros2_ws/
