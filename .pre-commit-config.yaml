@@ -1,0 +1,52 @@
+# Pre-commit hooks for autoware-index.
+#
+# One-time setup:
+#   pip install --user pre-commit   # or: pipx install pre-commit
+#   pre-commit install
+#
+# Manual run across the whole repo:
+#   pre-commit run --all-files
+#
+# Refresh hook versions:
+#   pre-commit autoupdate
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+        args: [--maxkb=500]
+
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.38.0
+    hooks:
+      - id: yamllint
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+
+  # Mirrors CI: distributions/*.yaml must conform to the registry schema.
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.37.2
+    hooks:
+      - id: check-jsonschema
+        name: distributions conform to schema
+        files: ^distributions/.*\.yaml$
+        args: [--schemafile, schema/distribution.schema.json]
+
+  # Mirrors CI: each distributions/<distro>.yaml's ros_distro field equals filename stem.
+  - repo: local
+    hooks:
+      - id: ros-distro-filename
+        name: ros_distro field matches filename stem
+        entry: python scripts/check_distro_filename.py
+        language: python
+        additional_dependencies: [pyyaml]
+        files: ^distributions/.*\.yaml$

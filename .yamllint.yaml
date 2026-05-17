@@ -1,0 +1,15 @@
+# yamllint configuration for autoware-index.
+# Defaults are too strict for GitHub Actions workflows (which use `on:` keys)
+# and for embedded examples; the overrides below relax those without losing
+# the catch-typo benefit of yamllint.
+
+extends: default
+
+rules:
+  truthy:
+    # GitHub Actions uses `on:` as a top-level key; without this, yamllint
+    # flags it as a truthy value.
+    check-keys: false
+  document-start: disable
+  line-length: disable
+  comments-indentation: disable
