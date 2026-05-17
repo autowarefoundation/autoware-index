@@ -16,7 +16,7 @@ schema/
   validate.yaml                         # PR-time schema + ros_distro/filename consistency check
 ```
 
-The orphan `data` branch (not yet initialized) carries validation history at `history/<distro>/<package>.ndjson`. See **Validation history** below.
+The orphan [`data`](https://github.com/autowarefoundation/autoware-index/tree/data) branch carries validation history at `history/<distro>/<package>.ndjson`. See **Validation history** below.
 
 ## How to register a package
 
