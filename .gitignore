@@ -1,0 +1,16 @@
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude working notes
+.claude/
+
+# Scratch ROS 2 workspace (kept gitignored on main too)
+ros2_ws/
