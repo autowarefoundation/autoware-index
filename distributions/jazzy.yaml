@@ -1,0 +1,25 @@
+# Autoware Index — jazzy distribution
+#
+# Maintainer placeholders below (TBD) need filling before any sweep workflow
+# runs against this entry. Resolving them requires the upstream package.xml,
+# which is not yet present in autoware_livox_tag_filter.
+
+schema_version: "1"
+ros_distro: jazzy
+
+autoware_versions:
+  - "1.8.0"
+
+packages:
+  autoware_livox_tag_filter:
+    repository: https://github.com/autowarefoundation/autoware_livox_tag_filter
+    governance: community
+    tags:
+      - sensing
+    maintainers:
+      - name: TBD
+        email: tbd@example.com
+        github: TBD
+    ref:
+      kind: tag
+      value: "0.2.1"
