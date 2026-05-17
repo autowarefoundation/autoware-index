@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/autowarefoundation/autoware-index/main/schema/history-record.schema.json",
+  "title": "Autoware Index validation history record",
+  "description": "Schema for one NDJSON line in history/<distro>/<package>.ndjson on the orphan data branch. Append-only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sweep_kind",
+    "ref_at_test",
+    "resolved_sha",
+    "autoware_version",
+    "status",
+    "at",
+    "actions_run_url"
+  ],
+  "properties": {
+    "sweep_kind": {
+      "type": "string",
+      "enum": ["release", "nightly", "eager"],
+      "description": "release = autoware_versions gained an entry. eager = a package's ref changed via PR merge. nightly = daily branch-tip re-test."
+    },
+    "ref_at_test": {
+      "$ref": "distribution.schema.json#/$defs/ref",
+      "description": "The registered ref at the moment of testing. Captured so swapping the registration later doesn't make old records ambiguous."
+    },
+    "resolved_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "Actual commit sha tested. For kind=branch, this is the result of git ls-remote at sweep time."
+    },
+    "autoware_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pass", "fail"]
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp when the test concluded."
+    },
+    "actions_run_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Link to the GitHub Actions run that produced this record."
+    }
+  }
+}
