@@ -1,0 +1,117 @@
+name: sweep-eager
+
+# Fires when a package's `ref` in any distributions/<distro>.yaml changes
+# via push to main. For each changed (distro, package), validates the new
+# ref against every entry in that distro's autoware_versions, then appends
+# one history record per (package, autoware_version) pair to the data
+# branch.
+#
+# All sweep workflows that push to the orphan data branch share the
+# `data-branch-write` concurrency group so they serialize rather than race.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'distributions/**.yaml'
+
+concurrency:
+  group: data-branch-write
+  cancel-in-progress: false
+
+permissions:
+  contents: write    # required for the record job's push to the data branch
+
+jobs:
+  discover:
+    name: discover changed refs
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      has-changes: ${{ steps.matrix.outputs.has-changes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # need both before/after shas accessible to git show
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install pyyaml
+
+      - name: Compute sweep matrix
+        id: matrix
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          matrix=$(scripts/sweep_eager_matrix.py --before "$BEFORE_SHA" --after "$AFTER_SHA")
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          rows=$(printf '%s' "$matrix" | python -c "import json,sys; print(len(json.load(sys.stdin).get('include', [])))")
+          if [ "$rows" -gt 0 ]; then
+            echo "has-changes=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::eager sweep dispatched for $rows row(s)"
+          else
+            echo "has-changes=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::no package ref changed; skipping validate + record"
+          fi
+
+  validate:
+    needs: discover
+    if: needs.discover.outputs.has-changes == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
+    uses: autowarefoundation/autoware-index-github-actions/.github/workflows/validate-package.yaml@main
+    with:
+      ros_distro: ${{ matrix.ros_distro }}
+      autoware_version: ${{ matrix.autoware_version }}
+      package_name: ${{ matrix.package_name }}
+      package_repository: ${{ matrix.package_repository }}
+      package_ref: ${{ matrix.ref_value }}
+
+  record:
+    name: record history
+    needs: [discover, validate]
+    # Run even if some validate matrix rows failed — we record failures too.
+    if: always() && needs.discover.outputs.has-changes == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install pyyaml
+
+      - name: Download validation artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: validate-result-*
+          path: validate-results/
+
+      - name: Build envelopes
+        env:
+          MATRIX_JSON: ${{ needs.discover.outputs.matrix }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$MATRIX_JSON" > matrix.json
+          scripts/build_envelopes.py \
+            --matrix-file matrix.json \
+            --results-dir validate-results \
+            --sweep-kind eager \
+            --actions-run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --output envelopes.json
+          cat envelopes.json
+
+      - name: Append to data branch
+        run: scripts/append_history.py --records envelopes.json
