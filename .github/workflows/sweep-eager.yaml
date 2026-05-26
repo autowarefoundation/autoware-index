@@ -65,7 +65,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
-    uses: autowarefoundation/autoware-index-github-actions/.github/workflows/validate-package.yaml@main
+    uses: autowarefoundation/autoware-index-github-actions/.github/workflows/sweep-package.yaml@main
     with:
       ros_distro: ${{ matrix.ros_distro }}
       autoware_version: ${{ matrix.autoware_version }}

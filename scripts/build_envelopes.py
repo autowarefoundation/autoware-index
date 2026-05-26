@@ -6,7 +6,7 @@ The sweep workflow runs:
     discover  → matrix JSON (rows of (distro, package, autoware_version, ref))
        │
     validate  → per-row jobs that call autoware-index-github-actions'
-                validate-package.yaml, which uploads a result.json artifact
+                sweep-package.yaml, which uploads a result.json artifact
                 named  validate-result-<distro>-<package>-<autoware_version>
        │
     record    → THIS SCRIPT runs in the record job:
@@ -41,9 +41,9 @@ ZERO_SHA = "0" * 40
 def find_result(
     results_dir: Path, distro: str, package: str, autoware_version: str
 ) -> dict | None:
-    """Read the result.json that validate-package.yaml uploaded for this row.
+    """Read the result.json that sweep-package.yaml uploaded for this row.
 
-    Artifact name format (must match validate-package.yaml):
+    Artifact name format (must match sweep-package.yaml):
         validate-result-<distro>-<package>-<autoware_version>
     Inside that subdir: result.json.
     """

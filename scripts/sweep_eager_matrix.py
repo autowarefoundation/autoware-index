@@ -18,7 +18,7 @@ validation rows for the eager sweep workflow:
     ]
 
 One matrix row per (changed package, autoware_version) pair. The workflow
-dispatches one validate-package job per row.
+dispatches one sweep-package job per row.
 
 When BEFORE_SHA is the all-zero sentinel (branch was just created) we treat
 every package in every distribution file as "changed" — first push to main
