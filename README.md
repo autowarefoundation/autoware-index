@@ -1,6 +1,6 @@
 # autoware-index
 
-Federated registry of community Autoware packages. This repo is the **source of truth** for which packages exist, where their source lives, and which Autoware Core versions each package has been validated against.
+Federated registry of community Autoware packages. This repo is the **source of truth** for which packages exist and where their source lives. Validation history (each package × the Autoware version it was tested against) lives on the orphan `data` branch.
 
 The Index layer complements the Core and Universe layers of the Autoware architecture (see [autowarefoundation/autoware#7090](https://github.com/autowarefoundation/autoware/issues/7090)). Community packages register themselves here; downstream tooling (the `aw-index-cli`, the browse site, CI workflows) consumes the registry.
 
@@ -25,7 +25,7 @@ The orphan [`data`](https://github.com/autowarefoundation/autoware-index/tree/da
 3. Open a pull request. The `validate` workflow runs schema + filename consistency checks automatically.
 4. A maintainer reviews and merges.
 
-After merge, the **eager sweep** workflow (Phase 4, not yet built) will validate your package's `ref` against every Autoware version listed in `autoware_versions:` and append history records to the `data` branch.
+After merge, the **eager sweep** workflow validates your package's `ref` against the current latest published Autoware release (resolved by [`latest-autoware-version`](https://github.com/autowarefoundation/autoware-index-github-actions/blob/main/.github/actions/latest-autoware-version/action.yaml) in the actions repo) and appends a history record to the `data` branch.
 
 ## Schema reference
 
@@ -34,9 +34,6 @@ Each `distributions/<distro>.yaml` looks like:
 ```yaml
 schema_version: "1"
 ros_distro: jazzy                       # MUST equal the filename stem
-
-autoware_versions:                      # Autoware Core SemVer versions supported for this distro
-  - "1.8.0"
 
 packages:
   <package_name>:
@@ -54,12 +51,13 @@ packages:
 |-------|---------|
 | `schema_version` | Currently `"1"`. Bumped only on breaking changes. |
 | `ros_distro` | Lowercase ROS 2 distro name. Validate workflow asserts it matches the filename stem. |
-| `autoware_versions` | Autoware Core release versions (SemVer `X.Y.Z`) this distro file currently supports. Adding an entry triggers the release sweep. |
 | `packages.<name>.repository` | Git remote URL — what `vcs import` will clone. |
 | `packages.<name>.governance` | `community` for outside-foundation packages; `foundation` for those owned by the Autoware Foundation. |
 | `packages.<name>.tags` | Free-form taxonomy (`sensing`, `perception`, `planning`, ...). |
 | `packages.<name>.maintainers` | Contact list. Sweeps will surface failures here in the future. |
 | `packages.<name>.ref` | Single ref per (package, distro). See next section. |
+
+Sweeps always validate against the current latest published Autoware release; the index no longer tracks Autoware versions. The Autoware version a record was tested against is captured in each history line.
 
 Full schema: [`schema/distribution.schema.json`](schema/distribution.schema.json).
 
@@ -69,9 +67,9 @@ Exactly one `ref` per (package, distro). Switching kinds is a PR that overwrites
 
 | Kind | Resolution | Sweep behaviour |
 |------|------------|-----------------|
-| `tag` | The git tag named in `value`. | Pinned. Validated once per Autoware version; the result is an immutable history row. |
+| `tag` | The git tag named in `value`. | Pinned. Validated once against the current latest Autoware release; the result is an immutable history row. |
 | `sha` | The exact 40-char commit sha. | Pinned. Same semantics as `tag`. |
-| `branch` | The branch named in `value`, re-resolved at every sweep via `git ls-remote`. | Rolling. Validated by the nightly sweep against every entry in `autoware_versions`; each run appends a new history row. |
+| `branch` | The branch named in `value`, re-resolved at every sweep via `git ls-remote`. | Rolling. Validated by the nightly sweep against the current latest Autoware release; each run appends a new history row. |
 
 Maintainers who want "always test my latest" should use a `branch` ref. Those who want "freeze a known-good release" should use `tag` or `sha`.
 
@@ -85,12 +83,11 @@ data:history/<distro>/<package>.ndjson
 
 Each line is one record conforming to [`schema/history-record.schema.json`](schema/history-record.schema.json), capturing the swept `(ref_at_test, resolved_sha, autoware_version, status, at, actions_run_url)`. No retention pruning. No failure side effects — failing sweeps record `status: fail` and move on. Consumers and the future browse site render the per-package compatibility table from these records.
 
-Three sweep modes (see `.claude/plan.md` for the design):
-- **Release** — fires when `autoware_versions` gains an entry. Tests every package against the new version.
-- **Eager** — fires when a package's `ref` field changes via PR merge. Tests that one package across all `autoware_versions`.
-- **Nightly** — daily UTC cron. Re-resolves every `kind: branch` entry and tests against the full `autoware_versions` list.
+Two sweep modes (see `.claude/plan.md` for the design):
+- **Eager** — fires when a package's `ref` field changes via PR merge. Tests that one package against the current latest Autoware release.
+- **Nightly** — daily UTC cron. Re-resolves every `kind: branch` entry and tests it against the current latest Autoware release.
 
-An hourly **tag poller** workflow polls Autoware Core for new tags and opens PRs adding them to the relevant `autoware_versions:` lists.
+The Autoware version each sweep targets is resolved at runtime by [`latest-autoware-version`](https://github.com/autowarefoundation/autoware-index-github-actions/blob/main/.github/actions/latest-autoware-version/action.yaml). New Autoware releases are picked up on the next sweep automatically; no PR or poller is required to wire them in.
 
 ## Local development workspace
 

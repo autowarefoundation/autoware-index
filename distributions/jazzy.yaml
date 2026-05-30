@@ -7,9 +7,6 @@
 schema_version: "1"
 ros_distro: jazzy
 
-autoware_versions:
-  - "1.8.0"
-
 packages:
   autoware_livox_tag_filter:
     repository: https://github.com/autowarefoundation/autoware_livox_tag_filter

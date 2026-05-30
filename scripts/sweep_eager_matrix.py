@@ -11,14 +11,14 @@ validation rows for the eager sweep workflow:
         "package_name": "autoware_livox_tag_filter",
         "package_repository": "https://github.com/.../autoware_livox_tag_filter",
         "ref_kind": "tag",
-        "ref_value": "0.2.1",
-        "autoware_version": "1.8.0"
+        "ref_value": "0.2.1"
       },
       ...
     ]
 
-One matrix row per (changed package, autoware_version) pair. The workflow
-dispatches one sweep-package job per row.
+One matrix row per changed package. The workflow dispatches one
+sweep-package job per row; the sweep reusable resolves the Autoware
+version at runtime via the latest-autoware-version composite action.
 
 When BEFORE_SHA is the all-zero sentinel (branch was just created) we treat
 every package in every distribution file as "changed" — first push to main
@@ -105,31 +105,28 @@ def build_matrix(before_sha: str, after_sha: str) -> list[dict]:
     for distro_file, package_name in packages_with_changed_ref(before_sha, after_sha):
         doc = load_yaml_at(after_sha, distro_file) or {}
         ros_distro = doc.get("ros_distro")
-        autoware_versions = doc.get("autoware_versions") or []
         package = (doc.get("packages") or {}).get(package_name) or {}
         repository = package.get("repository")
         ref = package.get("ref") or {}
         ref_kind = ref.get("kind")
         ref_value = ref.get("value")
 
-        if not (ros_distro and repository and ref_kind and ref_value and autoware_versions):
+        if not (ros_distro and repository and ref_kind and ref_value):
             print(
                 f"skipping {distro_file}::{package_name}: missing fields after diff",
                 file=sys.stderr,
             )
             continue
 
-        for autoware_version in autoware_versions:
-            rows.append(
-                {
-                    "ros_distro": ros_distro,
-                    "package_name": package_name,
-                    "package_repository": repository,
-                    "ref_kind": ref_kind,
-                    "ref_value": ref_value,
-                    "autoware_version": autoware_version,
-                }
-            )
+        rows.append(
+            {
+                "ros_distro": ros_distro,
+                "package_name": package_name,
+                "package_repository": repository,
+                "ref_kind": ref_kind,
+                "ref_value": ref_value,
+            }
+        )
 
     return rows
 

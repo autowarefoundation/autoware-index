@@ -5,7 +5,7 @@
   "description": "Schema for distributions/<distro>.yaml in the autoware-index registry.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "ros_distro", "autoware_versions", "packages"],
+  "required": ["schema_version", "ros_distro", "packages"],
   "properties": {
     "schema_version": {
       "type": "string",
@@ -15,13 +15,6 @@
       "type": "string",
       "description": "ROS 2 distribution name. MUST equal the filename stem (e.g. 'jazzy' for distributions/jazzy.yaml).",
       "pattern": "^[a-z][a-z0-9_]*$"
-    },
-    "autoware_versions": {
-      "type": "array",
-      "description": "Autoware Core SemVer versions currently supported for this distro. Adding an entry triggers the release sweep.",
-      "items": { "$ref": "#/$defs/semver" },
-      "uniqueItems": true,
-      "minItems": 1
     },
     "packages": {
       "type": "object",
@@ -33,10 +26,6 @@
     }
   },
   "$defs": {
-    "semver": {
-      "type": "string",
-      "pattern": "^\\d+\\.\\d+\\.\\d+$"
-    },
     "package": {
       "type": "object",
       "additionalProperties": false,

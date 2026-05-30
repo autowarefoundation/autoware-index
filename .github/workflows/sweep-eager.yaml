@@ -2,9 +2,9 @@ name: sweep-eager
 
 # Fires when a package's `ref` in any distributions/<distro>.yaml changes
 # via push to main. For each changed (distro, package), validates the new
-# ref against every entry in that distro's autoware_versions, then appends
-# one history record per (package, autoware_version) pair to the data
-# branch.
+# ref against the current latest published Autoware release (resolved
+# inside sweep-package.yaml), then appends one history record per
+# changed package to the data branch.
 #
 # All sweep workflows that push to the orphan data branch share the
 # `data-branch-write` concurrency group so they serialize rather than race.
@@ -68,7 +68,6 @@ jobs:
     uses: autowarefoundation/autoware-index-github-actions/.github/workflows/sweep-package.yaml@main
     with:
       ros_distro: ${{ matrix.ros_distro }}
-      autoware_version: ${{ matrix.autoware_version }}
       package_name: ${{ matrix.package_name }}
       package_repository: ${{ matrix.package_repository }}
       package_ref: ${{ matrix.ref_value }}
