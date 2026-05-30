@@ -17,12 +17,24 @@
   "properties": {
     "sweep_kind": {
       "type": "string",
-      "enum": ["release", "nightly", "eager"],
-      "description": "release = autoware_versions gained an entry. eager = a package's ref changed via PR merge. nightly = daily branch-tip re-test."
+      "enum": ["eager", "nightly"],
+      "description": "eager = a package's ref changed via PR merge. nightly = daily branch-tip re-test. (The dropped 'release' mode is subsumed by the runtime autoware-version resolver.)"
     },
     "ref_at_test": {
-      "$ref": "distribution.schema.json#/$defs/ref",
-      "description": "The registered ref at the moment of testing. Captured so swapping the registration later doesn't make old records ambiguous."
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "value"],
+      "description": "The registered ref at the moment of testing. Captured so swapping the registration later doesn't make old records ambiguous. Mirrors distribution.schema.json#/$defs/ref but inlined so this schema validates offline.",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["tag", "sha", "branch"]
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     },
     "resolved_sha": {
       "type": "string",

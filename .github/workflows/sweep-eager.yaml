@@ -90,7 +90,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install deps
-        run: pip install pyyaml
+        run: pip install pyyaml jsonschema
 
       - name: Download validation artifacts
         uses: actions/download-artifact@v8
