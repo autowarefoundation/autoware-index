@@ -12,8 +12,13 @@ distributions/                          # one file per supported ROS distro
 schema/
   distribution.schema.json              # JSON Schema for distributions/*.yaml
   history-record.schema.json            # JSON Schema for one validation history NDJSON line
+scripts/                                # validation + sweep + site helpers (Python 3.12)
+site/                                   # browse-site generator (site/build.py)
 .github/workflows/
-  validate.yaml                         # PR-time schema + ros_distro/filename consistency check
+  validate.yaml                         # PR-time schema + filename + ref-resolvability checks
+  sweep-eager.yaml                      # validates a package when its ref changes on main
+  sweep-nightly.yaml                    # daily re-validation of kind:branch packages
+  pages.yaml                            # build + deploy the browse site to GitHub Pages
 ```
 
 The orphan [`data`](https://github.com/autowarefoundation/autoware-index/tree/data) branch carries validation history at `history/<distro>/<package>.ndjson`. See **Validation history** below.
@@ -22,10 +27,12 @@ The orphan [`data`](https://github.com/autowarefoundation/autoware-index/tree/da
 
 1. Fork this repo.
 2. Edit `distributions/<distro>.yaml` for each ROS distro you support. Add an entry under `packages:`.
-3. Open a pull request. The `validate` workflow runs schema + filename consistency checks automatically.
+3. Open a pull request. The `validate` workflow automatically checks schema conformance, `ros_distro`/filename consistency, that your `ref` resolves upstream, and that maintainers are real (no placeholders).
 4. A maintainer reviews and merges.
 
-After merge, the **eager sweep** workflow validates your package's `ref` against the current latest published Autoware release (resolved by [`latest-autoware-version`](https://github.com/autowarefoundation/autoware-index-github-actions/blob/main/.github/actions/latest-autoware-version/action.yaml) in the actions repo) and appends a history record to the `data` branch.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full walkthrough and local validation.
+
+After merge, the **eager sweep** workflow validates your package's `ref` against the current latest published Autoware release (resolved by [`latest-autoware-version`](https://github.com/autowarefoundation/autoware-index-github-actions/blob/main/.github/actions/latest-autoware-version/action.yaml) in the actions repo) and appends a history record to the `data` branch; `kind: branch` refs are additionally re-validated by the **nightly sweep**.
 
 ## Schema reference
 
@@ -75,15 +82,15 @@ Maintainers who want "always test my latest" should use a `branch` ref. Those wh
 
 ## Validation history
 
-Sweep workflows (Phase 4 — not yet built) commit append-only NDJSON to the orphan `data` branch:
+Sweep workflows commit append-only NDJSON to the orphan `data` branch:
 
 ```
 data:history/<distro>/<package>.ndjson
 ```
 
-Each line is one record conforming to [`schema/history-record.schema.json`](schema/history-record.schema.json), capturing the swept `(ref_at_test, resolved_sha, autoware_version, status, at, actions_run_url)`. No retention pruning. No failure side effects — failing sweeps record `status: fail` and move on. Consumers and the future browse site render the per-package compatibility table from these records.
+Each line is one record conforming to [`schema/history-record.schema.json`](schema/history-record.schema.json), capturing the swept `(ref_at_test, resolved_sha, autoware_version, status, at, actions_run_url)`. No retention pruning. No failure side effects — failing sweeps record `status: fail` and move on. Consumers and the browse site render the per-package compatibility table from these records.
 
-Two sweep modes (see `.claude/plan.md` for the design):
+Two sweep modes:
 - **Eager** — fires when a package's `ref` field changes via PR merge. Tests that one package against the current latest Autoware release.
 - **Nightly** — daily UTC cron. Re-resolves every `kind: branch` entry and tests it against the current latest Autoware release.
 
@@ -103,17 +110,33 @@ Use it for ad-hoc verification (compose a `.repos` slice from this registry, `vc
 
 ## Local validation
 
+The quickest way is [`pre-commit`](.pre-commit-config.yaml), which mirrors CI:
+
 ```bash
-pipx install check-jsonschema      # or: pip install --user check-jsonschema
-check-jsonschema \
-  --schemafile schema/distribution.schema.json \
-  distributions/*.yaml
+pipx install pre-commit        # or: pip install --user pre-commit
+pre-commit run --all-files
 ```
 
-The validate workflow runs the same command on every PR, plus a filename/`ros_distro` consistency check.
+Or run the checks individually:
+
+```bash
+pipx install check-jsonschema      # or: pip install --user check-jsonschema
+check-jsonschema --schemafile schema/distribution.schema.json distributions/*.yaml
+python scripts/check_distro_filename.py distributions/*.yaml
+python scripts/check_refs.py distributions/*.yaml          # ref resolvability + real maintainers (needs network)
+```
+
+The validate workflow runs the same checks on every PR.
+
+## Browse site
+
+`site/build.py` renders a filterable browse view with a per-package compatibility
+table, joining the registrations on `main` with the validation history on `data`.
+It deploys to GitHub Pages via `.github/workflows/pages.yaml`. To preview locally,
+see [`site/README.md`](site/README.md).
 
 ## Related repositories
 
-- `aw-index-cli` (TBD) — `compose` / `import` / `sync` / `check` / `refresh` commands against this registry.
-- `autoware-index-github-actions` (TBD) — reusable validation workflow consumed by the registry's sweep workflows.
-- `autoware-documentation` — federation guide and registration walkthrough land under `docs/contribute/autoware-index/`.
+- [`autoware-index-github-actions`](https://github.com/autowarefoundation/autoware-index-github-actions) — reusable sweep/validate workflows + the `latest-autoware-version` resolver consumed by the sweep workflows.
+- `aw-index-cli` (planned) — `compose` / `import` / `sync` / `check` / `refresh` commands against this registry.
+- `autoware-documentation` (planned) — federation guide and registration walkthrough under `docs/contributing/`.
