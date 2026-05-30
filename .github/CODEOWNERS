@@ -1,0 +1,15 @@
+# Review routing for autoware-index.
+#
+# Default owner is @xmfcx for now; convert to an
+# @autowarefoundation/autoware-index-maintainers team once it exists.
+
+*                       @xmfcx
+
+# The registry data and its contract are the highest-stakes paths.
+/distributions/         @xmfcx
+/schema/                @xmfcx
+
+# CI, sweep pipeline, and site generator.
+/.github/               @xmfcx
+/scripts/               @xmfcx
+/site/                  @xmfcx

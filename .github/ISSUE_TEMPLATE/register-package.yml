@@ -1,0 +1,92 @@
+name: Register a package
+description: Propose a community Autoware package for the index (or request a change to an existing entry).
+title: "register: <package_name>"
+labels: ["registration"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for federating a package into the Autoware Index! You can also
+        skip this form and open a PR editing `distributions/<distro>.yaml`
+        directly — see [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md). This
+        issue just helps a maintainer draft or review the entry.
+  - type: input
+    id: package_name
+    attributes:
+      label: Package name
+      description: The ROS package name (lowercase, e.g. autoware_livox_tag_filter).
+      placeholder: autoware_my_package
+    validations:
+      required: true
+  - type: input
+    id: repository
+    attributes:
+      label: Repository URL
+      description: Git remote that `vcs import` will clone.
+      placeholder: https://github.com/org/autoware_my_package
+    validations:
+      required: true
+  - type: input
+    id: ros_distros
+    attributes:
+      label: ROS distro(s)
+      description: Which distributions/<distro>.yaml files this entry belongs in.
+      placeholder: jazzy
+    validations:
+      required: true
+  - type: dropdown
+    id: governance
+    attributes:
+      label: Governance
+      options:
+        - community
+        - foundation
+    validations:
+      required: true
+  - type: input
+    id: tags
+    attributes:
+      label: Tags
+      description: Comma-separated taxonomy (sensing, perception, planning, ...).
+      placeholder: sensing
+    validations:
+      required: true
+  - type: dropdown
+    id: ref_kind
+    attributes:
+      label: Ref kind
+      description: tag/sha freeze a known-good commit; branch is re-swept nightly.
+      options:
+        - tag
+        - sha
+        - branch
+    validations:
+      required: true
+  - type: input
+    id: ref_value
+    attributes:
+      label: Ref value
+      description: The tag name, 40-char SHA, or branch name. It MUST already exist upstream.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: textarea
+    id: maintainers
+    attributes:
+      label: Maintainers
+      description: One per line — name, email, GitHub handle. Real contacts only (no placeholders).
+      placeholder: |
+        Jane Doe, jane@example-org.com, janedoe
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmations
+      options:
+        - label: The repository builds against an Autoware Core container (no `build_depends.repos` needed).
+          required: true
+        - label: The `ref` above already exists in the repository.
+          required: true
+        - label: The maintainers listed are real and reachable.
+          required: true

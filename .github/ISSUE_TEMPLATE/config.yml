@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Autoware Index — how it works
+    url: https://github.com/autowarefoundation/autoware-index#readme
+    about: Registration model, schema reference, sweep + validation-history design.
+  - name: Autoware documentation & general help
+    url: https://autowarefoundation.github.io/autoware-documentation/
+    about: Federation guide and general Autoware contribution questions.
