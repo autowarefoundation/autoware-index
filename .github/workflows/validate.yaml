@@ -52,3 +52,6 @@ jobs:
             fi
           done
           exit $fail
+
+      - name: refs resolve and maintainers are real
+        run: python scripts/check_refs.py distributions/*.yaml

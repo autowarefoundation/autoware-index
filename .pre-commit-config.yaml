@@ -50,3 +50,15 @@ repos:
         language: python
         additional_dependencies: [pyyaml]
         files: ^distributions/.*\.yaml$
+
+  # Mirrors CI (offline subset): reject placeholder maintainers. Ref
+  # resolvability needs network (git ls-remote) and runs in CI only, so the
+  # local hook passes --no-network.
+  - repo: local
+    hooks:
+      - id: check-refs-offline
+        name: no placeholder maintainers
+        entry: python scripts/check_refs.py --no-network
+        language: python
+        additional_dependencies: [pyyaml]
+        files: ^distributions/.*\.yaml$
