@@ -1,0 +1,74 @@
+name: pages
+
+# Build the browse site by joining two branches — registry on main
+# (distributions/) and validation history on the orphan data branch
+# (history/) — and deploy it to GitHub Pages.
+#
+# The data branch cannot trigger this workflow itself (it is orphan and
+# carries no workflow files), so new sweep records are picked up on the next
+# push to main, manual dispatch, or the scheduled rebuild below.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'distributions/**.yaml'
+      - 'site/**'
+      - '.github/workflows/pages.yaml'
+  schedule:
+    - cron: '0 7 * * *'   # daily, after the (future) nightly sweep writes data
+  workflow_dispatch:
+
+# Allow one concurrent deployment; let an in-progress run finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout main (registry + site generator)
+        uses: actions/checkout@v6
+
+      - name: Checkout data branch (validation history)
+        uses: actions/checkout@v6
+        with:
+          ref: data
+          path: _data
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install pyyaml
+
+      - name: Build site
+        run: |
+          python site/build.py \
+            --distributions-dir distributions \
+            --history-dir _data/history \
+            --out _site \
+            --built-at "$(date -u +%Y-%m-%d)"
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

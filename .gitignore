@@ -24,11 +24,13 @@ venv/
 .env.*
 !.env.example
 
-# Phase 5 site build artifacts
+# Site build artifacts (site/build.py output + the data-branch checkout)
 node_modules/
 dist/
 build/
 .cache/
+_site/
+_data/
 
 # Local scratch ROS 2 workspace for experimentation and CI workflow scratch
 ros2_ws/
