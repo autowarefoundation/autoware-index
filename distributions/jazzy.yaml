@@ -1,8 +1,8 @@
 # Autoware Index — jazzy distribution
 #
-# Maintainer placeholders below (TBD) need filling before any sweep workflow
-# runs against this entry. Resolving them requires the upstream package.xml,
-# which is not yet present in autoware_livox_tag_filter.
+# autoware_livox_tag_filter is registered against its `main` branch: the
+# upstream repo has no tags/releases yet, so a branch ref is the only thing
+# that resolves today. Switch to `kind: tag` once maintainers cut a release.
 
 schema_version: "1"
 ros_distro: jazzy
@@ -14,9 +14,12 @@ packages:
     tags:
       - sensing
     maintainers:
-      - name: TBD
-        email: tbd@example.com
-        github: TBD
+      - name: Ryohsuke Mitsudome
+        email: ryohsuke.mitsudome@tier4.jp
+        github: mitsudome-r
+      - name: Kenzo Lobos-Tsunekawa
+        email: kenzo.lobos@tier4.jp
+        github: knzo25
     ref:
-      kind: tag
-      value: "0.2.1"
+      kind: branch
+      value: "main"
