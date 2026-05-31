@@ -1,0 +1,1 @@
+{"sweep_kind":"nightly","ref_at_test":{"kind":"branch","value":"main"},"resolved_sha":"6d9ff35ad8119fa5d05c26e3ae7c9a39d1a28199","autoware_version":"1.8.0","status":"pass","at":"2026-05-31T11:34:01Z","actions_run_url":"https://github.com/autowarefoundation/autoware-index/actions/runs/26711409656"}
