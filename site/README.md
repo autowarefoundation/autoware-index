@@ -1,8 +1,21 @@
 # Autoware Index browse site
 
-A single self-contained `index.html` rendered from the registry and its
-validation history. No build toolchain, no runtime dependencies beyond PyYAML —
-`site/build.py` is plain Python.
+A static front-end rendered client-side from a generated `data.json`. No build
+toolchain and no runtime dependencies beyond PyYAML.
+
+```
+site/
+  build.py      # data exporter: load registry + history -> write data.json, copy the assets
+  index.html    # static shell
+  styles.css    # styling (brand: white bg, primary #7290E5, secondary #EED45B)
+  app.js        # fetch data.json -> render cards + compatibility tables, wire filters
+  sample-data/  # local-preview history fixture (CI never reads it)
+```
+
+`build.py` only loads the data and writes `data.json` next to copies of
+`index.html` / `styles.css` / `app.js` in `--out`; everything you see is rendered
+in the browser by `app.js`. To change the look or behaviour, edit those three
+static files directly — no Python involved.
 
 ## What it shows
 
@@ -35,6 +48,10 @@ python site/build.py \
   --out _site
 python -m http.server -d _site    # then open http://localhost:8000
 ```
+
+You **must** serve over HTTP — opening `_site/index.html` via `file://` won't
+work, because `app.js` `fetch()`es `data.json` and browsers block that on the
+`file://` scheme.
 
 Against real data, check out the `data` branch somewhere and point
 `--history-dir` at its `history/` directory. The `sample-data/` fixture is for
