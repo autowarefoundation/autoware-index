@@ -31,6 +31,7 @@ header.site a { color:var(--link); text-decoration:none; }
 .pill-pass { background:var(--pass); }
 .pill-fail { background:var(--fail); }
 .pill-unknown { background:var(--unknown); }
+.description { margin:10px 0 0; color:var(--fg); font-size:14px; max-width:78ch; }
 .tags { margin:10px 0 6px; display:flex; gap:6px; flex-wrap:wrap; }
 .tag { font-size:12px; background:var(--secondary-soft); border:1px solid var(--secondary); border-radius:6px; padding:1px 8px; color:var(--secondary-ink); }
 .meta { font-size:13px; }

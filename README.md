@@ -45,6 +45,7 @@ ros_distro: jazzy                       # MUST equal the filename stem
 packages:
   <package_name>:
     repository: https://github.com/...
+    description: ...                       # optional; overrides cached package.xml
     governance: community | foundation
     tags: [sensing, perception, planning, ...]
     maintainers:
@@ -59,6 +60,7 @@ packages:
 | `schema_version` | Currently `"1"`. Bumped only on breaking changes. |
 | `ros_distro` | Lowercase ROS 2 distro name. Validate workflow asserts it matches the filename stem. |
 | `packages.<name>.repository` | Git remote URL — what `vcs import` will clone. |
+| `packages.<name>.description` | *(optional)* one-line card summary. Omit it to show the cached `package.xml` `<description>`; set it to override that upstream text. |
 | `packages.<name>.governance` | `community` for outside-foundation packages; `foundation` for those owned by the Autoware Foundation. |
 | `packages.<name>.tags` | Free-form taxonomy (`sensing`, `perception`, `planning`, ...). |
 | `packages.<name>.maintainers` | Contact list. Sweeps will surface failures here in the future. |

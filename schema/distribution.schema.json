@@ -36,6 +36,11 @@
           "format": "uri",
           "description": "Git remote URL for the package source."
         },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional registry-side override for the card description. When set it wins over the package.xml <description> cached by the sweep; omit it to render the upstream description."
+        },
         "governance": {
           "type": "string",
           "enum": ["community", "foundation"]

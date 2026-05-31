@@ -10,6 +10,10 @@ ros_distro: jazzy
 packages:
   autoware_livox_tag_filter:
     repository: https://github.com/autowarefoundation/autoware_livox_tag_filter
+    description: >-
+      Removes noise from a Livox lidar point cloud by dropping points whose
+      Livox tag (spatial-position confidence, intensity confidence, and return
+      number) is in a configurable ignore list.
     governance: community
     tags:
       - sensing

@@ -9,7 +9,7 @@ site/
   index.html    # static shell
   styles.css    # styling (brand: white bg, primary #7290E5, secondary #EED45B)
   app.js        # fetch data.json -> render cards + compatibility tables, wire filters
-  sample-data/  # local-preview history fixture (CI never reads it)
+  sample-data/  # local-preview history + metadata fixtures (CI never reads it)
 ```
 
 `build.py` only loads the data and writes `data.json` next to copies of
@@ -33,6 +33,10 @@ The site joins data from two branches:
 |--------|--------|---------|
 | `distributions/<distro>.yaml` (what is registered) | `main` | `--distributions-dir` |
 | `history/<distro>/<package>.ndjson` (how it validated) | `data` (orphan) | `--history-dir` |
+| `metadata/<distro>/<package>.xml` (cached upstream `package.xml`) | `data` (orphan) | `--metadata-dir` |
+
+Each card's description is the registry-side `description:` override if set,
+otherwise the cached `package.xml` `<description>`.
 
 CI checks out both and runs the generator. There is **no real history until the
 first sweep runs**, so before then the compatibility tables read "not yet swept".
@@ -45,6 +49,7 @@ With the sample fixture (so the table is populated even before a real sweep):
 python site/build.py \
   --distributions-dir distributions \
   --history-dir site/sample-data/history \
+  --metadata-dir site/sample-data/metadata \
   --out _site
 python -m http.server -d _site    # then open http://localhost:8000
 ```

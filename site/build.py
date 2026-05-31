@@ -5,11 +5,13 @@ The browse site is a static front-end (index.html + styles.css + app.js) that
 renders client-side from a generated data.json. This script is just the data
 exporter + assembler: it joins the two branches the data lives on —
 
-  - main:  distributions/<distro>.yaml   (what is registered)
-  - data:  history/<distro>/<package>.ndjson   (how it has validated)
+  - main:  distributions/<distro>.yaml          (what is registered)
+  - data:  history/<distro>/<package>.ndjson    (how it has validated)
+  - data:  metadata/<distro>/<package>.xml      (cached upstream package.xml)
 
-— summarizes each package, writes data.json, and copies the static assets next
-to it so --out is a complete, deployable directory.
+— summarizes each package, resolves its card description (registry override, or
+else the cached package.xml <description>), writes data.json, and copies the
+static assets next to it so --out is a complete, deployable directory.
 
 In CI the `data` branch is checked out into a sibling path and passed via
 --history-dir; locally you can point --history-dir at site/sample-data/history
@@ -30,6 +32,7 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import yaml
@@ -59,6 +62,7 @@ def load_distributions(distributions_dir: Path) -> list[dict]:
                     "distro": distro,
                     "name": name,
                     "repository": spec.get("repository", ""),
+                    "description": spec.get("description") or "",
                     "governance": spec.get("governance", "community"),
                     "tags": spec.get("tags") or [],
                     "maintainers": spec.get("maintainers") or [],
@@ -66,6 +70,36 @@ def load_distributions(distributions_dir: Path) -> list[dict]:
                 }
             )
     return registrations
+
+
+def parse_description(package_xml: str) -> str:
+    """Extract <description> from a package.xml string, whitespace-normalized."""
+    try:
+        root = ET.fromstring(package_xml)
+    except ET.ParseError:
+        return ""
+    node = root.find("description")
+    if node is None:
+        return ""
+    return " ".join("".join(node.itertext()).split())
+
+
+def load_metadata(metadata_dir: Path) -> dict[tuple[str, str], str]:
+    """Read cached metadata/<distro>/<package>.xml into {(distro, package): description}.
+
+    The sweep caches each swept package's upstream package.xml here so the site
+    can render an upstream-sourced description without re-fetching at build time.
+    """
+    descriptions: dict[tuple[str, str], str] = {}
+    if not metadata_dir or not metadata_dir.is_dir():
+        return descriptions
+    for package_xml in sorted(metadata_dir.glob("*/*.xml")):
+        distro = package_xml.parent.name
+        package = package_xml.stem
+        descriptions[(distro, package)] = parse_description(
+            package_xml.read_text(encoding="utf-8")
+        )
+    return descriptions
 
 
 def load_history(history_dir: Path) -> dict[tuple[str, str], list[dict]]:
@@ -121,11 +155,19 @@ def summarize(records: list[dict]) -> dict:
     }
 
 
-def build_packages(registrations: list[dict], history: dict[tuple[str, str], list[dict]]) -> list[dict]:
+def build_packages(
+    registrations: list[dict],
+    history: dict[tuple[str, str], list[dict]],
+    metadata: dict[tuple[str, str], str],
+) -> list[dict]:
     packages = []
     for reg in registrations:
-        records = history.get((reg["distro"], reg["name"]), [])
-        packages.append({**reg, **summarize(records)})
+        key = (reg["distro"], reg["name"])
+        records = history.get(key, [])
+        # Registry-side override wins; otherwise fall back to the cached
+        # upstream package.xml <description>.
+        description = reg["description"] or metadata.get(key, "")
+        packages.append({**reg, **summarize(records), "description": description})
     packages.sort(key=lambda p: (p["name"], p["distro"]))
     return packages
 
@@ -134,13 +176,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--distributions-dir", default="distributions")
     parser.add_argument("--history-dir", default="", help="Path to the data branch's history/ dir")
+    parser.add_argument("--metadata-dir", default="", help="Path to the data branch's metadata/ dir")
     parser.add_argument("--out", default="_site")
     parser.add_argument("--built-at", default="", help="Build timestamp to stamp into data.json")
     args = parser.parse_args()
 
     registrations = load_distributions(Path(args.distributions_dir))
     history = load_history(Path(args.history_dir)) if args.history_dir else {}
-    packages = build_packages(registrations, history)
+    metadata = load_metadata(Path(args.metadata_dir)) if args.metadata_dir else {}
+    packages = build_packages(registrations, history, metadata)
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)

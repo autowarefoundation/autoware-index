@@ -66,7 +66,7 @@ function maintainers(list) {
 
 function searchBlob(pkg) {
   const names = (pkg.maintainers || []).map((m) => m.name || "").join(" ");
-  return `${pkg.name} ${(pkg.tags || []).join(" ")} ${names}`.toLowerCase();
+  return `${pkg.name} ${pkg.description || ""} ${(pkg.tags || []).join(" ")} ${names}`.toLowerCase();
 }
 
 function card(pkg) {
@@ -98,6 +98,7 @@ function card(pkg) {
     "data-search": searchBlob(pkg),
   },
     el("header", {}, el("h2", { text: pkg.name }), badges),
+    pkg.description ? el("p", { class: "description", text: pkg.description }) : null,
     tags, meta, maintainers(pkg.maintainers), details);
 }
 

@@ -111,6 +111,11 @@ jobs:
       - name: Append to data branch
         run: scripts/append_history.py --records envelopes.json
 
+      - name: Cache package.xml on data branch
+        # Refresh each swept package's upstream package.xml so the browse card
+        # can render its <description>. Independent of build/test outcome.
+        run: scripts/cache_package_xml.py --matrix-file matrix.json --push
+
       - name: Trigger site rebuild
         # Best-effort: refresh the Pages site with the new records instead of
         # waiting for the daily pages schedule. Never fail the sweep over this.

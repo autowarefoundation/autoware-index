@@ -26,6 +26,14 @@ body:
       placeholder: https://github.com/org/autoware_my_package
     validations:
       required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description (optional)
+      description: One-line summary for the browse card. Leave blank to use the package's own package.xml <description>; fill it in only to override that upstream text.
+      placeholder: Removes noise from a Livox lidar point cloud using its per-point tag.
+    validations:
+      required: false
   - type: input
     id: ros_distros
     attributes:

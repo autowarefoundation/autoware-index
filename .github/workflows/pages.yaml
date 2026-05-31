@@ -54,6 +54,7 @@ jobs:
           python site/build.py \
             --distributions-dir distributions \
             --history-dir _data/history \
+            --metadata-dir _data/metadata \
             --out _site \
             --built-at "$(date -u +%Y-%m-%d)"
 
