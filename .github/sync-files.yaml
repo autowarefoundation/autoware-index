@@ -1,0 +1,5 @@
+- repository: autowarefoundation/sync-file-templates
+  source-dir: sources
+  files:
+    - source: .github/workflows/semantic-pull-request.yaml
+    - source: .github/workflows/sync-files.yaml
