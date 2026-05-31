@@ -2,7 +2,7 @@
         --primary:#7290E5; --secondary:#EED45B; --pass:#2ea043; --fail:#d1242f; --unknown:#9aa1ab; }
 * { box-sizing:border-box; }
 body { margin:0; background:var(--bg); color:var(--fg);
-       border-top:4px solid; border-image:linear-gradient(90deg,var(--primary),var(--secondary)) 1;
+       border-top:4px solid var(--secondary);
        font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
 header.site { padding:32px 24px 16px; border-bottom:1px solid var(--border); }
 header.site h1 { margin:0; font-size:26px; }
