@@ -48,5 +48,11 @@ table.versions { width:100%; border-collapse:collapse; margin-top:10px; font-siz
 table.versions th, table.versions td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--border); }
 table.versions th { color:var(--muted); font-weight:500; }
 .empty { color:var(--muted); padding:40px 0; text-align:center; }
-footer { color:var(--muted); font-size:12px; text-align:center; padding:24px; border-top:1px solid var(--border); }
-footer a { color:var(--link); }
+footer { color:var(--muted); font-size:13px; text-align:center; padding:28px 24px; border-top:1px solid var(--border); }
+footer .foundation { font-weight:600; margin-bottom:6px; }
+footer .foundation a { color:var(--fg); }
+footer .links { display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:6px 14px; }
+footer a { color:var(--link); text-decoration:none; display:inline-flex; align-items:center; gap:5px; }
+footer a:hover { text-decoration:underline; }
+footer svg { fill:currentColor; }
+footer .sep { color:var(--border); }
