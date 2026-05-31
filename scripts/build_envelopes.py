@@ -66,25 +66,22 @@ def status_for(result: dict) -> str | None:
 
 
 def find_result(results_dir: Path, distro: str, package: str) -> dict | None:
-    """Read the result.json that sweep-package.yaml uploaded for this row.
+    """Find the result.json sweep-package.yaml uploaded for (distro, package).
 
-    Artifact name pattern (must match sweep-package.yaml):
-        validate-result-<distro>-<package>-<resolved_version>
-    Exactly one match is expected per sweep (one sweep-package run per
-    package). Returns None if zero matches; raises if more than one.
+    download-artifact's on-disk layout is not stable: with several matching
+    artifacts it makes a per-artifact subdirectory, but with a single match it
+    extracts straight into the download path root. So we cannot key off the
+    artifact directory name. Every result.json carries its own ros_distro and
+    package_name, so search recursively and match on the file's contents.
     """
-    matches = sorted(results_dir.glob(f"validate-result-{distro}-{package}-*"))
-    if not matches:
-        return None
-    if len(matches) > 1:
-        names = [m.name for m in matches]
-        raise RuntimeError(
-            f"ambiguous result artifacts for {distro}/{package}: {names}"
-        )
-    result_file = matches[0] / "result.json"
-    if not result_file.is_file():
-        return None
-    return json.loads(result_file.read_text())
+    for result_file in sorted(results_dir.glob("**/result.json")):
+        try:
+            data = json.loads(result_file.read_text())
+        except (json.JSONDecodeError, OSError):
+            continue
+        if data.get("ros_distro") == distro and data.get("package_name") == package:
+            return data
+    return None
 
 
 def envelope_for(
