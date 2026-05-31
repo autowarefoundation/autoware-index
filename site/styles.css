@@ -21,7 +21,9 @@ header.site a { color:var(--link); text-decoration:none; }
 .controls input:focus, .controls select:focus { outline:2px solid var(--primary); outline-offset:0; border-color:var(--primary); }
 .controls input[type=search] { flex:1; min-width:200px; }
 .card { background:var(--panel); border:1px solid var(--border); border-radius:12px;
-        padding:18px 20px; margin-bottom:14px; box-shadow:0 1px 3px rgba(27,35,51,.08); }
+        padding:18px 20px; margin-bottom:14px; box-shadow:0 1px 3px rgba(27,35,51,.08);
+        transition:border-color .15s ease, box-shadow .15s ease; }
+.card:hover { border-color:var(--secondary); box-shadow:0 2px 10px rgba(238,212,91,.35); }
 .card header { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; }
 .card h2 { margin:0; font-size:18px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
 .badges { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
