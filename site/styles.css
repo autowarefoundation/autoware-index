@@ -1,5 +1,6 @@
 :root { --bg:#ffffff; --panel:#f7f8fb; --border:#dbe0ea; --fg:#1c2333; --muted:#6b7280;
-        --primary:#7290E5; --secondary:#EED45B; --pass:#2ea043; --fail:#d1242f; --unknown:#9aa1ab; }
+        --primary:#7290E5; --secondary:#EED45B; --secondary-soft:#fbf4d4; --secondary-ink:#7a6713;
+        --pass:#2ea043; --fail:#d1242f; --unknown:#9aa1ab; }
 * { box-sizing:border-box; }
 body { margin:0; background:var(--bg); color:var(--fg);
        border-top:4px solid var(--secondary);
@@ -24,13 +25,13 @@ header.site a { color:var(--primary); text-decoration:none; }
 .card h2 { margin:0; font-size:18px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
 .badges { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .badge { font-size:12px; padding:2px 8px; border-radius:20px; border:1px solid var(--border); color:var(--muted); background:#fff; }
-.badge-distro { border-color:var(--primary); color:var(--primary); }
+.badge-distro { border-color:var(--secondary); background:var(--secondary); color:#3a3208; }
 .pill { font-size:12px; font-weight:600; padding:2px 9px; border-radius:20px; color:#fff; }
 .pill-pass { background:var(--pass); }
 .pill-fail { background:var(--fail); }
 .pill-unknown { background:var(--unknown); }
 .tags { margin:10px 0 6px; display:flex; gap:6px; flex-wrap:wrap; }
-.tag { font-size:12px; background:#eef1f8; border:1px solid var(--border); border-radius:6px; padding:1px 8px; color:#4a5260; }
+.tag { font-size:12px; background:var(--secondary-soft); border:1px solid var(--secondary); border-radius:6px; padding:1px 8px; color:var(--secondary-ink); }
 .meta { font-size:13px; }
 .repo { color:var(--primary); text-decoration:none; word-break:break-all; }
 .maintainers { font-size:13px; color:var(--muted); margin-top:6px; }
