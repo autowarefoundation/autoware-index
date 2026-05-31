@@ -1,28 +1,22 @@
 name: test
 
 # Unit tests for the pipeline scripts (scripts/) and the site generator
-# (site/build.py). These guard the data contract — honest pass/fail status,
-# schema-valid history records, the placeholder-maintainer guard, changed-ref
-# detection, package.xml caching, and the site's last-green join.
+# (site/build.py): honest pass/fail status, schema-valid history records, the
+# placeholder-maintainer guard, changed-ref detection, package.xml caching, and
+# the site's last-green join.
+#
+# The workflow triggers on EVERY pull request (no `paths:` filter on the
+# trigger) so the required `pytest` check is always reported. A `changed-files`
+# gate decides whether relevant files actually changed: if not, the `pytest`
+# job is skipped — and a skipped required check counts as passing. (A
+# `paths:`-filtered workflow that is skipped *entirely* never reports its check
+# and would instead block the merge.) Mirrors autowarefoundation/autoware's
+# health-check workflows.
 
 on:
   pull_request:
-    paths:
-      - "scripts/**.py"
-      - "site/**.py"
-      - "tests/**.py"
-      - "schema/**.json"
-      - "pytest.ini"
-      - ".github/workflows/test.yaml"
   push:
     branches: [main]
-    paths:
-      - "scripts/**.py"
-      - "site/**.py"
-      - "tests/**.py"
-      - "schema/**.json"
-      - "pytest.ini"
-      - ".github/workflows/test.yaml"
 
 concurrency:
   group: test-${{ github.ref }}
@@ -32,8 +26,31 @@ permissions:
   contents: read
 
 jobs:
+  changed-files:
+    name: detect relevant changes
+    runs-on: ubuntu-latest
+    outputs:
+      should-run: ${{ steps.check.outputs.any_changed }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - id: check
+        uses: step-security/changed-files@v47
+        with:
+          files: |
+            scripts/**.py
+            site/**.py
+            tests/**.py
+            schema/**.json
+            pytest.ini
+            .github/workflows/test.yaml
+
   pytest:
     name: pytest
+    needs: changed-files
+    if: needs.changed-files.outputs.should-run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
