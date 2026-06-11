@@ -35,3 +35,6 @@ _data/
 
 # Local scratch ROS 2 workspace for experimentation and CI workflow scratch
 ros2_ws/
+
+# colcon residue from ad-hoc local runs at the repo root
+/log/
