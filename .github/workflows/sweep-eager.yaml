@@ -16,8 +16,9 @@ name: sweep-eager
 #
 # Only the RECORD job serializes on the data branch (`data-branch-write`):
 # validate jobs of overlapping sweeps run in parallel, shrinking the window
-# in which a queued run can be displaced — and the state cursor makes any
-# displacement self-healing anyway.
+# in which a queued run can be displaced — and a displaced run self-heals:
+# its state never advanced, so the stale entry is re-detected by the next
+# eager push or by the nightly's catch-up diff.
 
 on:
   push:

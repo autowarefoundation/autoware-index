@@ -34,7 +34,8 @@
         "url": {
           "type": "string",
           "format": "uri",
-          "description": "Git remote URL of the repository. One entry per repository; spelling variants of the same repo (.git suffix, ssh form, trailing slash) are rejected by check_refs.py."
+          "minLength": 1,
+          "description": "Git remote URL of the repository. One entry per repository; spelling variants of the same repo (.git suffix, ssh form, trailing slash) are rejected by check_refs.py. (format is annotation-only in most validators, hence the explicit minLength: an empty url would otherwise pass CI and be silently skipped by every sweep.)"
         },
         "ref": { "$ref": "#/$defs/ref" },
         "governance": {
@@ -65,6 +66,7 @@
       "properties": {
         "tags": {
           "type": "array",
+          "minItems": 1,
           "items": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
           "uniqueItems": true
         },

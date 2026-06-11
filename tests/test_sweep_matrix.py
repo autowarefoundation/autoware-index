@@ -230,17 +230,21 @@ def test_packages_space_joined_sorted(tmp_path):
     assert rows[0]["packages"] == "aaa_pkg zzz_pkg"
 
 
-def test_missing_fields_row_skipped_loudly(tmp_path, capsys):
+def test_missing_fields_fail_discover_loudly(tmp_path):
+    # A schema-valid file can't produce these (url/ref/packages are required);
+    # reaching build_matrix with one means the PR gate was bypassed. Soft-
+    # skipping would leave the entry registered-but-never-swept with all CI
+    # green, so discover must go red, naming every offender.
     repos = {
         "no_url": {"ref": {"kind": "tag", "value": "1"}, "packages": {"p": {"tags": ["a"]}}},
         "no_packages": {"url": "u", "ref": {"kind": "tag", "value": "1"}, "packages": {}},
         "good": branch_repo(),
     }
     dist = write_distribution(tmp_path / "distributions", repositories=repos)
-    rows = m.build_matrix(dist, tmp_path / "state", "eager")
-    assert [r["repo_name"] for r in rows] == ["good"]
-    err = capsys.readouterr().err
-    assert "no_url" in err and "no_packages" in err
+    with pytest.raises(RegistryError) as exc:
+        m.build_matrix(dist, tmp_path / "state", "eager")
+    assert "no_url" in str(exc.value) and "no_packages" in str(exc.value)
+    assert "unsweepable" in str(exc.value)
 
 
 def test_v1_distribution_raises_registry_error(tmp_path):

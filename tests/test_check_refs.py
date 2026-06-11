@@ -345,7 +345,7 @@ class TestCheckRefMemoization:
 # ===========================================================================
 
 class TestLsRemote:
-    def test_resolves_when_stdout_nonempty(self, monkeypatch):
+    def test_resolves_on_exact_ref_match(self, monkeypatch):
         captured = {}
 
         def fake_run(cmd, capture_output, text):
@@ -354,7 +354,24 @@ class TestLsRemote:
 
         monkeypatch.setattr(check_refs.subprocess, "run", fake_run)
         assert check_refs.ls_remote("https://r", "--heads", "main") is True
-        assert captured["cmd"] == ["git", "ls-remote", "--heads", "https://r", "main"]
+        assert captured["cmd"] == ["git", "ls-remote", "--heads", "--end-of-options", "https://r", "main"]
+
+    def test_glob_pattern_match_is_not_an_exact_ref(self, monkeypatch):
+        # `git ls-remote <repo> 'v1.*'` glob-matches v1.0.0 and returns output;
+        # the literal ref refs/tags/v1.* does NOT exist, so the sweep's later
+        # `git checkout 'v1.*'` would hard-fail. Exact-match parsing rejects it.
+        def fake_run(cmd, capture_output, text):
+            return SimpleNamespace(returncode=0, stdout="abc123\trefs/tags/v1.0.0\n", stderr="")
+
+        monkeypatch.setattr(check_refs.subprocess, "run", fake_run)
+        assert check_refs.ls_remote("https://r", "--tags", "v1.*") is False
+
+    def test_peeled_tag_line_counts_as_match(self, monkeypatch):
+        def fake_run(cmd, capture_output, text):
+            return SimpleNamespace(returncode=0, stdout="abc123\trefs/tags/v1.0.0^{}\n", stderr="")
+
+        monkeypatch.setattr(check_refs.subprocess, "run", fake_run)
+        assert check_refs.ls_remote("https://r", "--tags", "v1.0.0") is True
 
     def test_not_resolved_when_stdout_empty(self, monkeypatch):
         def fake_run(cmd, capture_output, text):
@@ -382,6 +399,8 @@ class TestLsRemote:
         assert check_refs.ls_remote(url, "--tags", "v1.0.0") is True
         assert check_refs.ls_remote(url, "--heads", "does-not-exist") is False
         assert check_refs.ls_remote(url, "--tags", "v9.9.9") is False
+        # Glob patterns resolve upstream but are not exact refs.
+        assert check_refs.ls_remote(url, "--tags", "v1.*") is False
 
 
 # ===========================================================================
@@ -543,8 +562,10 @@ class TestCheckFile:
         assert len(errors) == 1
         assert "branch ref 'ghost-branch' does not resolve" in errors[0]
 
-    def test_ref_without_url_is_not_checked(self, tmp_path, monkeypatch):
-        # check_file only calls check_ref when BOTH ref and url are truthy.
+    def test_ref_without_url_errors_and_skips_resolution(self, tmp_path, monkeypatch):
+        # A missing/empty url is an ERROR (the entry would otherwise be
+        # registered but silently never swept), and check_ref must still not
+        # probe the network for it.
         monkeypatch.setattr(
             check_refs, "ls_remote",
             lambda *a, **k: pytest.fail("ls_remote should not run without a url"),
@@ -562,7 +583,9 @@ class TestCheckFile:
                     tags: [sensing]
             """
         p = write_yaml(tmp_path, body)
-        assert check_refs.check_file(p, network=True, resolve_cache={}) == []
+        errors = check_refs.check_file(p, network=True, resolve_cache={})
+        assert len(errors) == 1
+        assert "repository url is empty" in errors[0]
 
     # --- duplicate-URL detection ----------------------------------------
     def test_duplicate_url_spelling_variants_rejected(self, tmp_path):
@@ -766,8 +789,10 @@ class TestCheckFile:
         assert len(errors) == 1
         assert "cannot parse" in errors[0]
 
-    def test_null_repo_spec_handled(self, tmp_path):
-        # `spec or {}` guards a repo entry mapped to null.
+    def test_null_repo_spec_errors_on_empty_url(self, tmp_path):
+        # `spec or {}` guards a repo entry mapped to null — no crash, but a
+        # null entry has no url, which is now a loud error (it would be
+        # registered yet never swept).
         body = """\
             schema_version: "2"
             ros_distro: jazzy
@@ -775,7 +800,9 @@ class TestCheckFile:
               repo_a:
             """
         p = write_yaml(tmp_path, body)
-        assert check_refs.check_file(p, network=False, resolve_cache={}) == []
+        errors = check_refs.check_file(p, network=False, resolve_cache={})
+        assert len(errors) == 1
+        assert "repository url is empty" in errors[0]
 
     def test_multiple_repos_accumulate_errors(self, tmp_path):
         body = """\

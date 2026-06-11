@@ -30,10 +30,12 @@ compatibility tables.
 
 A repository hosting several ROS packages is **one** `repositories:` entry:
 
-- The entry's key is the repository's name; each `packages:` key must equal
-  the corresponding `package.xml` `<name>`. Don't register an entry named
-  after the repository unless a package of that exact name exists — the sweep
-  looks the package up with `colcon list` and fails loudly when it's absent.
+- The entry's key is the repository's name — pure registry identity, never
+  looked up in the source tree. The `packages:` keys are different: each must
+  equal a real `package.xml` `<name>` at the registered ref, because the
+  sweep resolves every one with `colcon list` and fails loudly when a name is
+  absent. Don't list the repository's name under `packages:` unless a package
+  of that exact name actually exists.
 - All packages of the repository share the entry's single `ref` (lockstep):
   one repo @ one sha is one source state, and `vcs import` can only
   materialize one checkout. A package that needs a different ref than its

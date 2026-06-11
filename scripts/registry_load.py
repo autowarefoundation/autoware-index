@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import yaml
 
@@ -71,6 +72,20 @@ def load_distribution(path: Path) -> dict:
     if not isinstance(repositories, dict):
         raise RegistryError(f"{path}: `repositories` must be a mapping of repo entries")
 
+    for repo_name, spec in repositories.items():
+        ref = (spec or {}).get("ref")
+        if ref is not None:
+            value = (ref or {}).get("value") if isinstance(ref, dict) else None
+            if value is not None and not isinstance(value, str):
+                # YAML happily types `value: 1.20` as a float and str() would
+                # silently mangle it to "1.2" — the sweep would then check out
+                # the wrong ref. The schema requires a string; enforce it at
+                # the uniform gate too (defense for paths that skip CI).
+                raise RegistryError(
+                    f"{path}::{repo_name}: ref value {value!r} must be a string "
+                    f"(quote it in YAML)"
+                )
+
     return doc
 
 
@@ -86,19 +101,28 @@ def canonical_url(url: str) -> str:
     """Normalize a git remote URL for duplicate detection.
 
     Folds the spellings that point at the same repository — scheme, ssh
-    `git@host:org/repo` form, a trailing slash, a `.git` suffix, and case —
-    into one canonical string. Used to reject two repository entries that
-    register the same repo under different spellings.
+    `git@host:org/repo` scp form, userinfo, an explicit port, a trailing
+    slash, a `.git` suffix, and case — into one canonical `host/path` string.
+    Used to reject two repository entries that register the same repo under
+    different spellings. (Ports are dropped deliberately: a host serving the
+    same path on two ports is rarer than the same repo spelled with and
+    without its standard port.)
     """
     u = url.strip()
-    ssh = re.match(r"^(?:ssh://)?git@([^:/]+)[:/](.+)$", u)
-    if ssh:
-        u = f"{ssh.group(1)}/{ssh.group(2)}"
+    scp = re.match(r"^(?:[^@/]+@)?([^:/@]+):(?!//)(.+)$", u)
+    if "://" in u:
+        parsed = urlsplit(u)
+        host = parsed.hostname or ""
+        path = parsed.path
+    elif scp:
+        # scp-like syntax: [user@]host:path
+        host, path = scp.group(1), scp.group(2)
     else:
-        u = re.sub(r"^[a-z][a-z0-9+.-]*://", "", u, flags=re.IGNORECASE)
-    u = u.rstrip("/")
-    u = u.removesuffix(".git")
-    return u.lower()
+        host, path = "", u
+    combined = f"{host}/{path.lstrip('/')}" if host else path
+    combined = combined.rstrip("/")
+    combined = combined.removesuffix(".git")
+    return combined.lower()
 
 
 def flatten_packages(doc: dict, *, distro: str | None = None) -> list[dict]:

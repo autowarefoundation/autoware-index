@@ -19,11 +19,13 @@ static files directly — no Python involved.
 
 ## What it shows
 
-A filterable list of every registered package (search by name/tag/maintainer,
-filter by ROS distro, tag, and current status) with a per-package
-**compatibility history** table built from sweep records: which Autoware version
-each ref was tested against, pass/fail, the resolved commit, and a link to the
-Actions run. Failing packages surface their last-green Autoware version.
+A filterable list of every registered package (search by name/tag/maintainer/
+repository URL/repo name, filter by ROS distro, tag, and current status) with a
+per-package **compatibility history** table built from sweep records: which
+Autoware version each ref was tested against, pass/fail, the resolved commit,
+and a link to the Actions run. Failing packages surface their last-green
+Autoware version, and a package sharing its repository with registered siblings
+notes "one of N registered packages from this repository" on its card.
 
 ## The two-branch join
 

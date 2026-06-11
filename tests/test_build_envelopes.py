@@ -188,9 +188,14 @@ def test_envelopes_for_row_no_autoware_version_skips_whole_row():
     assert len(skips) == 1 and "autoware_version" in skips[0]
 
 
-def test_envelopes_for_row_bad_sha_normalized_to_zero_sha():
-    envelopes, _ = m.envelopes_for_row(make_row(), make_result(resolved_sha="short"), "eager", AT, URL)
-    assert all(e["record"]["resolved_sha"] == m.ZERO_SHA for e in envelopes)
+@pytest.mark.parametrize("bad_sha", ["short", "", None, "Z" * 40, "0" * 39])
+def test_envelopes_for_row_invalid_sha_skips_whole_row(bad_sha):
+    # No real sha = clone/resolve never completed = nothing validated.
+    # Fabricating a sentinel sha inside conclusive records would be false
+    # provenance; the whole row is an inconclusive loud skip.
+    envelopes, skips = m.envelopes_for_row(make_row(), make_result(resolved_sha=bad_sha), "eager", AT, URL)
+    assert envelopes == []
+    assert len(skips) == 1 and "resolved_sha" in skips[0]
 
 
 # --------------------------------------------------------------------------

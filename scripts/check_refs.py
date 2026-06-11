@@ -56,15 +56,29 @@ PLACEHOLDER_NAMES = {"tbd", "todo", "n/a", "na", "none", "xxx", ""}
 
 
 def ls_remote(repository: str, ref_filter: str, value: str) -> bool:
-    """True if `git ls-remote <ref_filter> <repository> <value>` resolves."""
+    """True if the EXACT ref `refs/{heads,tags}/<value>` exists upstream.
+
+    `git ls-remote <repo> <value>` treats the value as a glob pattern and
+    returns success on ANY match — a typo like "v1.*" would false-pass while
+    the sweep's literal `git checkout 'v1.*'` later hard-fails. So the output
+    is parsed and the exact ref name (tags also appear peeled as `...^{}`)
+    must be present. `--end-of-options` keeps a dash-prefixed value from
+    being parsed as a git option.
+    """
     result = subprocess.run(
-        ["git", "ls-remote", ref_filter, repository, value],
+        ["git", "ls-remote", ref_filter, "--end-of-options", repository, value],
         capture_output=True,
         text=True,
     )
     if result.returncode != 0:
         return False
-    return bool(result.stdout.strip())
+    namespace = "heads" if ref_filter == "--heads" else "tags"
+    wanted = f"refs/{namespace}/{value}"
+    for line in result.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) == 2 and parts[1] in (wanted, f"{wanted}^{{}}"):
+            return True
+    return False
 
 
 def check_maintainers(file: str, owner: str, maintainers: list[dict]) -> list[str]:
@@ -124,9 +138,14 @@ def check_file(path: Path, network: bool, resolve_cache: dict) -> list[str]:
     seen_packages: dict[str, str] = {}
     for repo_name, spec in (doc.get("repositories") or {}).items():
         spec = spec or {}
-        url = spec.get("url") or ""
+        url = (spec.get("url") or "").strip()
 
-        if url:
+        if not url:
+            # An empty url would pass schema `format: uri` (annotation-only in
+            # most validators) and then be silently green-skipped by every
+            # sweep — registered but never validated. Reject it here too.
+            errors.append(f"{path}::{repo_name}: repository url is empty")
+        else:
             canon = canonical_url(url)
             if canon in seen_urls:
                 errors.append(

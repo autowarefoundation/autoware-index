@@ -660,7 +660,10 @@ def test_push_metadata_commits_and_pushes_on_first_attempt(monkeypatch, tmp_path
 
     joined = [" ".join(c) for c in commands]
     assert any(c.startswith("git fetch origin data") for c in joined)
-    assert any(c.startswith("git commit") for c in joined)
+    # Identity rides the commit command itself (-c user.*), never a
+    # worktree-shared `git config` write.
+    assert any("commit" in c and f"user.name={m.BOT_NAME}" in c for c in joined)
+    assert not any(c.startswith("git config") for c in joined)
     assert any(c.startswith("git push origin HEAD:data") for c in joined)
 
 

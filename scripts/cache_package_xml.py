@@ -148,8 +148,6 @@ def push_metadata(staged: Path, rows: list[dict]) -> None:
     try:
         run(["git", "fetch", "origin", "data"], repo_root)
         run(["git", "worktree", "add", str(tmpdir), "origin/data"], repo_root)
-        run(["git", "config", "user.name", BOT_NAME], tmpdir)
-        run(["git", "config", "user.email", BOT_EMAIL], tmpdir)
 
         for attempt in range(1, MAX_PUSH_RETRIES + 1):
             run(["git", "fetch", "origin", "data"], tmpdir)
@@ -166,7 +164,19 @@ def push_metadata(staged: Path, rows: list[dict]) -> None:
                 print("metadata cache already up to date", file=sys.stderr)
                 return
 
-            run(["git", "commit", "-m", commit_message(rows)], tmpdir)
+            # Per-command identity: `git config user.*` in a linked worktree
+            # writes the SHARED repo config — this script is the documented
+            # MANUAL backfill path, and a local run would leave the operator's
+            # clone authoring every later commit as the bot.
+            run(
+                [
+                    "git",
+                    "-c", f"user.name={BOT_NAME}",
+                    "-c", f"user.email={BOT_EMAIL}",
+                    "commit", "-m", commit_message(rows),
+                ],
+                tmpdir,
+            )
             push = run(["git", "push", "origin", "HEAD:data"], tmpdir, check=False)
             if push.returncode == 0:
                 print(f"pushed metadata cache on attempt {attempt}", file=sys.stderr)
@@ -213,7 +223,10 @@ def main() -> None:
         file=sys.stderr,
     )
 
-    if args.push and cached:
+    if not cached:
+        sys.exit("::error::no package.xml could be cached for any registered package")
+
+    if args.push:
         push_metadata(out_dir, cached)
 
 

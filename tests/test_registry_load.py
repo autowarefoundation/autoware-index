@@ -97,6 +97,21 @@ def test_load_distribution_rejects_non_mapping_repositories(tmp_path):
         m.load_distribution(path)
 
 
+def test_load_distribution_rejects_non_string_ref_value(tmp_path):
+    # YAML types `value: 1.20` as a float; str() would mangle it to "1.2" and
+    # the sweep would check out the wrong ref. The uniform gate rejects it.
+    path = write(
+        tmp_path,
+        "jazzy.yaml",
+        'schema_version: "2"\nros_distro: jazzy\nrepositories:\n'
+        "  r:\n    url: u\n    ref: {kind: tag, value: 1.20}\n"
+        "    packages: {p: {tags: [a]}}\n",
+    )
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_distribution(path)
+    assert "must be a string" in str(exc.value)
+
+
 def test_load_distributions_dir_sorted_and_gated(tmp_path):
     write(tmp_path, "humble.yaml", V2_DOC.replace("jazzy", "humble"))
     write(tmp_path, "jazzy.yaml", V2_DOC)
@@ -121,10 +136,22 @@ def test_load_distributions_dir_sorted_and_gated(tmp_path):
         "http://github.com/example-org/awesome_tools",
         "git@github.com:example-org/awesome_tools.git",
         "ssh://git@github.com/example-org/awesome_tools",
+        # userinfo and explicit ports are dropped (self-hosted forges):
+        "https://oauth2:token@github.com/example-org/awesome_tools.git",
+        "ssh://git@github.com:22/example-org/awesome_tools",
+        "https://github.com:443/example-org/awesome_tools",
     ],
 )
 def test_canonical_url_folds_spelling_variants(variant):
     assert m.canonical_url(variant) == "github.com/example-org/awesome_tools"
+
+
+def test_canonical_url_nonstandard_port_folds_with_plain_form():
+    # GitLab-style ssh on a non-22 port still names the same repository as
+    # the https spelling; ports are deliberately dropped.
+    assert m.canonical_url("ssh://git@gitlab.example.com:2222/org/repo.git") == m.canonical_url(
+        "https://gitlab.example.com/org/repo"
+    )
 
 
 def test_canonical_url_distinct_repos_stay_distinct():

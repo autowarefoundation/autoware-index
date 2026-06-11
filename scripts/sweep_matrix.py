@@ -89,6 +89,7 @@ def recorded_state(state_dir: Path, distro: str, repo_name: str) -> dict | None:
 
 def build_matrix(distributions_dir: Path, state_dir: Path, mode: str) -> list[dict]:
     rows: list[dict] = []
+    malformed: list[str] = []
     for path, doc in load_distributions_dir(distributions_dir):
         distro = doc.get("ros_distro") or path.stem
         for repo_name, spec in sorted((doc.get("repositories") or {}).items()):
@@ -96,10 +97,13 @@ def build_matrix(distributions_dir: Path, state_dir: Path, mode: str) -> list[di
             desired = registered_state(spec)
             ref = spec.get("ref") or {}
             if not (desired["url"] and ref.get("kind") and desired["ref"]["value"] and desired["packages"]):
-                print(
-                    f"::error::{path}::{repo_name}: missing url/ref/packages; row skipped",
-                    file=sys.stderr,
-                )
+                # A schema-valid file can never hit this (url/ref/packages are
+                # all required) — reaching it means something bypassed the PR
+                # gate. Soft-skipping would leave the entry registered but
+                # silently never swept, with every job green; collect it and
+                # fail discover loudly instead (raised after the loop so all
+                # offenders are reported at once).
+                malformed.append(f"{path}::{repo_name}: missing url/ref/packages")
                 continue
 
             is_branch = ref.get("kind") == "branch"
@@ -115,6 +119,11 @@ def build_matrix(distributions_dir: Path, state_dir: Path, mode: str) -> list[di
                         "packages": " ".join(desired["packages"]),
                     }
                 )
+
+    if malformed:
+        raise RegistryError(
+            "malformed repository entries (registered but unsweepable): " + "; ".join(malformed)
+        )
 
     rows.sort(key=lambda r: (r["ros_distro"], r["repo_name"]))
     return rows

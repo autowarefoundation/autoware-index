@@ -270,6 +270,35 @@ def test_write_outputs_state_files_overwrite_not_append(tmp_path):
     assert json.loads(f.read_text(encoding="utf-8")) == {"gen": 2}
 
 
+def test_write_outputs_never_regresses_a_newer_state_cursor(tmp_path, capsys):
+    # Out-of-order record jobs: run B (newer registration) records first, then
+    # the slower run A (older registration) lands. A's history lines still
+    # append, but A must NOT roll the cursor back over B's — otherwise the
+    # level-triggered discover would re-sweep the old ref and the site would
+    # show stale state until the next sweep.
+    newer = make_state(state={"url": "u", "ref": {"kind": "tag", "value": "2.0"}, "at": "2026-06-11T12:00:00Z"})
+    older = make_state(state={"url": "u", "ref": {"kind": "tag", "value": "1.0"}, "at": "2026-06-11T11:00:00Z"})
+    ah.write_outputs(tmp_path, [], [newer], None)
+    ah.write_outputs(tmp_path, [], [older], None)
+
+    f = tmp_path / "state" / "jazzy" / "autoware_demo_repo.json"
+    assert json.loads(f.read_text(encoding="utf-8"))["ref"]["value"] == "2.0"
+    assert "not regressing" in capsys.readouterr().err
+
+    # The reverse order (older first) does advance.
+    ah.write_outputs(tmp_path, [], [older], None)  # idempotent: still newer on disk
+    assert json.loads(f.read_text(encoding="utf-8"))["ref"]["value"] == "2.0"
+
+
+def test_write_outputs_corrupt_existing_state_is_overwritten(tmp_path):
+    f = tmp_path / "state" / "jazzy" / "autoware_demo_repo.json"
+    f.parent.mkdir(parents=True)
+    f.write_text("{not json", encoding="utf-8")
+    fresh = make_state(state={"url": "u", "at": "2026-06-11T12:00:00Z"})
+    ah.write_outputs(tmp_path, [], [fresh], None)
+    assert json.loads(f.read_text(encoding="utf-8"))["url"] == "u"
+
+
 def test_write_outputs_merges_metadata_over_existing_tree(tmp_path):
     # A sweep stages only what it swept; the merge must never delete the
     # other packages' cached files (the rmtree+copytree regression).
@@ -534,9 +563,14 @@ def test_append_history_commit_uses_build_commit_message(monkeypatch, tmp_path):
     )
     ah.append_history([env], [], None)
 
-    commit_calls = [c for c in fake_run.calls if c[:2] == ["git", "commit"]]
+    commit_calls = [c for c in fake_run.calls if "commit" in c]
     assert len(commit_calls) == 1
-    # ["git","commit","-m",<message>]
+    # ["git","-c","user.name=...","-c","user.email=...","commit","-m",<message>]
+    # — identity is per-command so a local run never rewrites the shared
+    # repo config with the bot's name.
+    assert f"user.name={ah.BOT_NAME}" in commit_calls[0]
+    assert f"user.email={ah.BOT_EMAIL}" in commit_calls[0]
+    assert not any(c[:2] == ["git", "config"] for c in fake_run.calls)
     assert commit_calls[0][-1] == ah.build_commit_message([env])
     assert "for solo_pkg (solo_repo) @ jazzy" in commit_calls[0][-1]
 

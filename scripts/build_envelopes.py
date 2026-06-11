@@ -50,13 +50,14 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
 
 import jsonschema
 
-ZERO_SHA = "0" * 40
+SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 SCHEMA_PATH = Path(__file__).resolve().parent.parent / "schema" / "history-record.schema.json"
 
 
@@ -120,9 +121,15 @@ def envelopes_for_row(
     if not autoware_version:
         return [], [f"{distro}/{row['repo_name']}: result.json has no autoware_version (resolve did not complete)"]
 
-    resolved_sha = result.get("resolved_sha") or ZERO_SHA
-    if len(resolved_sha) != 40:
-        resolved_sha = ZERO_SHA
+    resolved_sha = result.get("resolved_sha") or ""
+    if not SHA_RE.match(resolved_sha):
+        # No real sha means the clone/resolve never completed — nothing was
+        # validated. Substituting a sentinel would fabricate provenance inside
+        # otherwise-conclusive records; skip the whole row loudly instead.
+        return [], [
+            f"{distro}/{row['repo_name']}: result.json has no valid resolved_sha "
+            f"({resolved_sha!r}); nothing was validated"
+        ]
 
     outcomes = result.get("packages") or {}
     envelopes: list[dict] = []

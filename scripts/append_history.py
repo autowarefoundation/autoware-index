@@ -31,7 +31,11 @@ States likewise: {"ros_distro", "repo_name", "state": {...}}.
 The script creates a temporary git worktree on the data branch, writes,
 commits, and pushes. On push conflict (someone else wrote to data between our
 fetch and push) it retries with a fresh fetch — every write step is
-re-applied per attempt on top of the fresh tip.
+re-applied per attempt on top of the fresh tip, so the normal retry path is
+exactly-once. (Known residual edge: a "phantom" push — the server applies the
+update but the client sees an error — would re-append the same lines on the
+next attempt. Accepted: rare, and the duplicate lines are self-describing and
+harmless to the site's latest-by-timestamp summarize.)
 
 The sweep workflows' record jobs must declare
 `concurrency: { group: data-branch-write, cancel-in-progress: false }` so
@@ -65,6 +69,15 @@ def run(cmd: list[str], cwd: Path, check: bool = True) -> subprocess.CompletedPr
     return subprocess.run(cmd, cwd=cwd, check=check, capture_output=True, text=True)
 
 
+def _existing_state_is_newer(target_file: Path, state: dict) -> bool:
+    """True when the on-branch cursor carries a strictly newer `at` timestamp."""
+    try:
+        existing = json.loads(target_file.read_text(encoding="utf-8"))
+        return str(existing.get("at", "")) > str(state.get("at", ""))
+    except (OSError, json.JSONDecodeError, ValueError, AttributeError):
+        return False
+
+
 def write_outputs(tmpdir: Path, envelopes: list[dict], states: list[dict], metadata_dir: Path | None) -> None:
     """Apply one attempt's writes onto a fresh data-branch worktree."""
     for env in envelopes:
@@ -78,6 +91,16 @@ def write_outputs(tmpdir: Path, envelopes: list[dict], states: list[dict], metad
         target_dir = tmpdir / "state" / entry["ros_distro"]
         target_dir.mkdir(parents=True, exist_ok=True)
         target_file = target_dir / f"{entry['repo_name']}.json"
+        if _existing_state_is_newer(target_file, entry["state"]):
+            # Out-of-order record jobs: a slower run that swept an OLDER
+            # registration must not roll the cursor back over a fresher one
+            # (its history lines still append — history is append-only and
+            # per-line self-describing; only the cursor keeps the newest).
+            print(
+                f"state {entry['ros_distro']}/{entry['repo_name']} already newer; not regressing it",
+                file=sys.stderr,
+            )
+            continue
         target_file.write_text(json.dumps(entry["state"], indent=2) + "\n", encoding="utf-8")
 
     if metadata_dir is not None and metadata_dir.is_dir():
@@ -96,8 +119,6 @@ def append_history(envelopes: list[dict], states: list[dict], metadata_dir: Path
     try:
         run(["git", "fetch", "origin", "data"], repo_root)
         run(["git", "worktree", "add", str(tmpdir), "origin/data"], repo_root)
-        run(["git", "config", "user.name", BOT_NAME], tmpdir)
-        run(["git", "config", "user.email", BOT_EMAIL], tmpdir)
 
         for attempt in range(1, MAX_PUSH_RETRIES + 1):
             # Refresh to current tip of data before writing.
@@ -112,7 +133,18 @@ def append_history(envelopes: list[dict], states: list[dict], metadata_dir: Path
                 print("no changes to commit", file=sys.stderr)
                 return
 
-            run(["git", "commit", "-m", build_commit_message(envelopes)], tmpdir)
+            # Per-command identity: `git config user.*` in a linked worktree
+            # writes the SHARED repo config — a local run would leave the
+            # operator's clone authoring everything as the bot.
+            run(
+                [
+                    "git",
+                    "-c", f"user.name={BOT_NAME}",
+                    "-c", f"user.email={BOT_EMAIL}",
+                    "commit", "-m", build_commit_message(envelopes),
+                ],
+                tmpdir,
+            )
 
             push = subprocess.run(
                 ["git", "push", "origin", "HEAD:data"],
