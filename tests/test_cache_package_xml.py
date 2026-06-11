@@ -636,6 +636,45 @@ def test_push_metadata_no_changes_skips_commit(monkeypatch, tmp_path):
     assert not any(c.startswith("git push") for c in joined)
 
 
+def test_push_metadata_merges_into_existing_tree(monkeypatch, tmp_path):
+    # Regression: a partial sweep stages only the swept packages' files, so
+    # push_metadata must MERGE into the worktree's existing metadata/ tree.
+    # The old rmtree+copytree replaced the whole tree, deleting every
+    # non-swept package's cached package.xml on every partial sweep.
+    staged = tmp_path / "staged"
+    (staged / "jazzy").mkdir(parents=True)
+    (staged / "jazzy" / "swept.xml").write_text("<package><name>swept</name></package>")
+
+    monkeypatch.chdir(tmp_path)
+    worktree = {}
+
+    def fake_run(cmd, cwd=None, check=True):
+        if cmd[:3] == ["git", "worktree", "add"]:
+            from pathlib import Path as _P
+
+            wt = _P(cmd[3])
+            # Pre-existing cache: a non-swept sibling in the same distro, a
+            # package in another distro, and a stale copy of the swept file.
+            (wt / "metadata" / "jazzy").mkdir(parents=True, exist_ok=True)
+            (wt / "metadata" / "jazzy" / "other.xml").write_text("<package><name>other</name></package>")
+            (wt / "metadata" / "jazzy" / "swept.xml").write_text("STALE")
+            (wt / "metadata" / "humble").mkdir(parents=True, exist_ok=True)
+            (wt / "metadata" / "humble" / "third.xml").write_text("<package><name>third</name></package>")
+            worktree["path"] = wt
+        if cmd[:2] == ["git", "status"]:
+            return _fake_completed(0, stdout=" M metadata/jazzy/swept.xml\n")
+        return _fake_completed(0)
+
+    monkeypatch.setattr(m, "run", fake_run)
+    m.push_metadata(staged, [{"distro": "jazzy", "package": "swept"}])
+
+    wt = worktree["path"]
+    # Swept file refreshed, everything not in this sweep left untouched.
+    assert (wt / "metadata" / "jazzy" / "swept.xml").read_text() == "<package><name>swept</name></package>"
+    assert (wt / "metadata" / "jazzy" / "other.xml").exists()
+    assert (wt / "metadata" / "humble" / "third.xml").exists()
+
+
 def test_push_metadata_retries_then_succeeds(monkeypatch, tmp_path):
     staged = tmp_path / "staged"
     staged.mkdir()

@@ -171,10 +171,11 @@ def push_metadata(staged: Path, rows: list[dict]) -> None:
             run(["git", "fetch", "origin", "data"], tmpdir)
             run(["git", "reset", "--hard", "origin/data"], tmpdir)
 
+            # Merge the staged files over the existing tree — never replace it.
+            # A sweep stages only the packages it swept; wiping metadata/ first
+            # would delete every non-swept package's cached package.xml.
             dest = tmpdir / "metadata"
-            if dest.exists():
-                shutil.rmtree(dest)
-            shutil.copytree(staged, dest)
+            shutil.copytree(staged, dest, dirs_exist_ok=True)
 
             run(["git", "add", "metadata/"], tmpdir)
             if not run(["git", "status", "--porcelain"], tmpdir).stdout.strip():
