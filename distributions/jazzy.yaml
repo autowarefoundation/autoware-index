@@ -1,22 +1,24 @@
 # Autoware Index — jazzy distribution
 #
+# Repositories are first-class (schema_version 2): each entry owns one URL and
+# ONE ref, and lists the registered packages it hosts under `packages:` —
+# a monorepo registers several packages in one entry, all validated in
+# lockstep at the repository's single ref.
+#
 # autoware_livox_tag_filter is registered against its `main` branch: the
 # upstream repo has no tags/releases yet, so a branch ref is the only thing
 # that resolves today. Switch to `kind: tag` once maintainers cut a release.
 
-schema_version: "1"
+schema_version: "2"
 ros_distro: jazzy
 
-packages:
+repositories:
   autoware_livox_tag_filter:
-    repository: https://github.com/autowarefoundation/autoware_livox_tag_filter
-    description: >-
-      Removes noise from a Livox lidar point cloud by dropping points whose
-      Livox tag (spatial-position confidence, intensity confidence, and return
-      number) is in a configurable ignore list.
+    url: https://github.com/autowarefoundation/autoware_livox_tag_filter
+    ref:
+      kind: branch
+      value: "main"
     governance: community
-    tags:
-      - sensing
     maintainers:
       - name: Ryohsuke Mitsudome
         email: ryohsuke.mitsudome@tier4.jp
@@ -24,6 +26,11 @@ packages:
       - name: Kenzo Lobos-Tsunekawa
         email: kenzo.lobos@tier4.jp
         github: knzo25
-    ref:
-      kind: branch
-      value: "main"
+    packages:
+      autoware_livox_tag_filter:
+        tags:
+          - sensing
+        description: >-
+          Removes noise from a Livox lidar point cloud by dropping points whose
+          Livox tag (spatial-position confidence, intensity confidence, and
+          return number) is in a configurable ignore list.

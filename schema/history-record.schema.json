@@ -2,29 +2,36 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/autowarefoundation/autoware-index/main/schema/history-record.schema.json",
   "title": "Autoware Index validation history record",
-  "description": "Schema for one NDJSON line in history/<distro>/<package>.ndjson on the orphan data branch. Append-only.",
+  "description": "Schema for one NDJSON line in history/<distro>/<package>.ndjson on the orphan data branch. Append-only. This is the EMIT contract (record schema 2): lines written before the schema-2 cutover carry no 'schema' field and lack repository/repo_name — readers treat those as schema 1 and must stay permissive; old lines are never rewritten.",
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "schema",
     "sweep_kind",
     "ref_at_test",
     "resolved_sha",
     "autoware_version",
     "status",
     "at",
-    "actions_run_url"
+    "actions_run_url",
+    "repository",
+    "repo_name"
   ],
   "properties": {
+    "schema": {
+      "const": 2,
+      "description": "Record format version. Absent on pre-cutover (v1) lines."
+    },
     "sweep_kind": {
       "type": "string",
       "enum": ["eager", "nightly"],
-      "description": "eager = a package's ref changed via PR merge. nightly = daily branch-tip re-test. (The dropped 'release' mode is subsumed by the runtime autoware-version resolver.)"
+      "description": "eager = the repository entry changed on main (level-triggered against data:state/). nightly = daily branch-tip re-test. (The dropped 'release' mode is subsumed by the runtime autoware-version resolver.)"
     },
     "ref_at_test": {
       "type": "object",
       "additionalProperties": false,
       "required": ["kind", "value"],
-      "description": "The registered ref at the moment of testing. Captured so swapping the registration later doesn't make old records ambiguous. Mirrors distribution.schema.json#/$defs/ref but inlined so this schema validates offline.",
+      "description": "The repository's registered ref at the moment of testing. Captured so swapping the registration later doesn't make old records ambiguous. Mirrors distribution.schema.json#/$defs/ref but inlined so this schema validates offline.",
       "properties": {
         "kind": {
           "type": "string",
@@ -39,7 +46,7 @@
     "resolved_sha": {
       "type": "string",
       "pattern": "^[0-9a-f]{40}$",
-      "description": "Actual commit sha tested. For kind=branch, this is the result of git ls-remote at sweep time."
+      "description": "Actual commit sha tested. For kind=branch, this is the tip the sweep's clone resolved. Sibling packages swept in the same repository row share one resolved_sha by construction."
     },
     "autoware_version": {
       "type": "string",
@@ -47,7 +54,8 @@
     },
     "status": {
       "type": "string",
-      "enum": ["pass", "fail"]
+      "enum": ["pass", "fail"],
+      "description": "pass = this package's own dependency-closure build AND its own tests succeeded at this repo@sha. fail = its closure failed to build or its own tests failed. A sibling package's tests never affect this status. Inconclusive outcomes are skipped loudly, never recorded."
     },
     "at": {
       "type": "string",
@@ -58,6 +66,16 @@
       "type": "string",
       "format": "uri",
       "description": "Link to the GitHub Actions run that produced this record."
+    },
+    "repository": {
+      "type": "string",
+      "format": "uri",
+      "description": "Git URL of the repository the package was registered from at test time. With resolved_sha + actions_run_url this makes same-event sibling records exactly groupable and repo migrations recoverable from history."
+    },
+    "repo_name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*$",
+      "description": "Registry key of the repository entry at test time."
     }
   }
 }

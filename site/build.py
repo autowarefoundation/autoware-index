@@ -32,13 +32,15 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-import yaml
-
 SITE_DIR = Path(__file__).resolve().parent
 STATIC_ASSETS = ("index.html", "styles.css", "app.js")
+
+sys.path.insert(0, str(SITE_DIR.parent / "scripts"))
+from registry_load import RegistryError, flatten_packages, load_distributions_dir  # noqa: E402
 
 
 def semver_key(version: str) -> tuple:
@@ -50,23 +52,29 @@ def semver_key(version: str) -> tuple:
 
 
 def load_distributions(distributions_dir: Path) -> list[dict]:
-    """Flatten distributions/*.yaml into one registration record per package."""
+    """Flatten distributions/*.yaml into one registration record per package.
+
+    Goes through the shared version-gated loader: an unsupported
+    schema_version is a HARD build failure, never a silently empty site.
+    The package -> repository mapping is computed here at load time; cards
+    stay keyed by (distro, package) exactly as before, with repo_name as a
+    display/group field.
+    """
     registrations: list[dict] = []
-    for path in sorted(distributions_dir.glob("*.yaml")):
-        doc = yaml.safe_load(path.read_text()) or {}
+    for path, doc in load_distributions_dir(distributions_dir):
         distro = doc.get("ros_distro") or path.stem
-        for name, spec in (doc.get("packages") or {}).items():
-            spec = spec or {}
+        for rec in flatten_packages(doc, distro=distro):
             registrations.append(
                 {
-                    "distro": distro,
-                    "name": name,
-                    "repository": spec.get("repository", ""),
-                    "description": spec.get("description") or "",
-                    "governance": spec.get("governance", "community"),
-                    "tags": spec.get("tags") or [],
-                    "maintainers": spec.get("maintainers") or [],
-                    "ref": spec.get("ref") or {},
+                    "distro": rec["distro"],
+                    "name": rec["package"],
+                    "repo_name": rec["repo_name"],
+                    "repository": rec["repository"],
+                    "description": rec["description"],
+                    "governance": rec["governance"],
+                    "tags": rec["tags"],
+                    "maintainers": rec["maintainers"],
+                    "ref": rec["ref"],
                 }
             )
     return registrations
@@ -181,7 +189,10 @@ def main() -> None:
     parser.add_argument("--built-at", default="", help="Build timestamp to stamp into data.json")
     args = parser.parse_args()
 
-    registrations = load_distributions(Path(args.distributions_dir))
+    try:
+        registrations = load_distributions(Path(args.distributions_dir))
+    except RegistryError as exc:
+        sys.exit(f"error: {exc}")
     history = load_history(Path(args.history_dir)) if args.history_dir else {}
     metadata = load_metadata(Path(args.metadata_dir)) if args.metadata_dir else {}
     packages = build_packages(registrations, history, metadata)

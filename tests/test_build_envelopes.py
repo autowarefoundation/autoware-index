@@ -1,306 +1,345 @@
-"""Tests for scripts/build_envelopes.py — the data-contract core (honest status, H5).
+"""Tests for scripts/build_envelopes.py (repo artifact -> per-package envelopes).
 
-Focus areas (per assignment):
-  - status_for(result): the honest-status decision. Never a false green/red.
-  - find_result(results_dir, distro, package): matches by CONTENT, not dir name.
-  - envelope_for(...): produces a schema-valid record, or None for inconclusive.
-
-The constructed record is validated against schema/history-record.schema.json
-using jsonschema, mirroring what main() does before emitting.
+The recorder is the honesty chokepoint (locked decision 6): per package,
+`pass` only on success/success of ITS OWN closure build + ITS OWN tests,
+`fail` only on a real failure, anything else (absent from tree, null
+outcomes, missing artifact) is a loud skip — never a fabricated record.
+It also derives the state-advance set (a row advances only when EVERY
+registered package recorded conclusively) and stages the artifact-shipped
+package.xml files, and it hard-fails when a non-empty matrix records nothing.
 """
-
-from __future__ import annotations
 
 import json
 
-import jsonschema
 import pytest
 
-import build_envelopes as be
-
-ZERO_SHA = "0" * 40
-GOOD_SHA = "a" * 40
+import build_envelopes as m
 
 
-# --------------------------------------------------------------------------- #
-# helpers / fixtures
-# --------------------------------------------------------------------------- #
-@pytest.fixture
-def record_validator(repo_root):
-    """A Draft 2020-12 validator for the history-record schema."""
-    schema_path = repo_root / "schema" / "history-record.schema.json"
-    schema = json.loads(schema_path.read_text())
-    return jsonschema.Draft202012Validator(schema)
-
-
-def _result(**overrides):
-    """A plausible result.json dict; overridable per test."""
-    base = {
-        "ros_distro": "humble",
-        "package_name": "autoware_demo",
-        "autoware_version": "1.2.3",
-        "build_outcome": "success",
-        "test_outcome": "success",
-        "resolved_sha": GOOD_SHA,
-    }
-    base.update(overrides)
-    return base
-
-
-def _row(**overrides):
-    base = {
-        "ros_distro": "humble",
-        "package_name": "autoware_demo",
+# --------------------------------------------------------------------------
+# helpers
+# --------------------------------------------------------------------------
+def make_row(packages="autoware_a_filter zz_planner_b", **over):
+    row = {
+        "ros_distro": "jazzy",
+        "repo_name": "awesome_tools",
+        "repository": "https://github.com/example-org/awesome_tools",
         "ref_kind": "tag",
-        "ref_value": "v1.0.0",
+        "ref_value": "1.2.0",
+        "packages": packages,
     }
-    base.update(overrides)
-    return base
+    row.update(over)
+    return row
 
 
-# --------------------------------------------------------------------------- #
-# status_for
-# --------------------------------------------------------------------------- #
-class TestStatusFor:
-    def test_build_and_test_success_is_pass(self):
-        assert be.status_for({"build_outcome": "success", "test_outcome": "success"}) == "pass"
-
-    def test_build_failure_is_fail(self):
-        assert be.status_for({"build_outcome": "failure", "test_outcome": "success"}) == "fail"
-
-    def test_test_failure_is_fail(self):
-        assert be.status_for({"build_outcome": "success", "test_outcome": "failure"}) == "fail"
-
-    def test_both_failure_is_fail(self):
-        assert be.status_for({"build_outcome": "failure", "test_outcome": "failure"}) == "fail"
-
-    def test_both_skipped_is_inconclusive(self):
-        # Nothing was validated -> must NOT be a false green or red.
-        assert be.status_for({"build_outcome": "skipped", "test_outcome": "skipped"}) is None
-
-    def test_build_success_test_skipped_is_inconclusive(self):
-        # test never ran, so a clean pass would be a false green.
-        assert be.status_for({"build_outcome": "success", "test_outcome": "skipped"}) is None
-
-    def test_build_skipped_test_success_is_inconclusive(self):
-        assert be.status_for({"build_outcome": "skipped", "test_outcome": "success"}) is None
-
-    def test_cancelled_is_inconclusive(self):
-        assert be.status_for({"build_outcome": "cancelled", "test_outcome": "cancelled"}) is None
-
-    def test_empty_outcomes_is_inconclusive(self):
-        assert be.status_for({"build_outcome": "", "test_outcome": ""}) is None
-
-    def test_missing_outcome_keys_is_inconclusive(self):
-        assert be.status_for({}) is None
-
-    def test_failure_beats_skipped(self):
-        # A genuine failure on one step is `fail` even if the other was skipped.
-        assert be.status_for({"build_outcome": "failure", "test_outcome": "skipped"}) == "fail"
-        assert be.status_for({"build_outcome": "skipped", "test_outcome": "failure"}) == "fail"
-
-    def test_failure_beats_cancelled(self):
-        assert be.status_for({"build_outcome": "cancelled", "test_outcome": "failure"}) == "fail"
-
-    def test_success_plus_failure_is_fail_not_pass(self):
-        # One success does not buy a pass when the other genuinely failed.
-        assert be.status_for({"build_outcome": "success", "test_outcome": "failure"}) == "fail"
+def make_result(packages=None, **over):
+    result = {
+        "schema": 2,
+        "ros_distro": "jazzy",
+        "autoware_version": "1.8.0",
+        "repo_name": "awesome_tools",
+        "repository": "https://github.com/example-org/awesome_tools",
+        "ref": {"kind": "tag", "value": "1.2.0"},
+        "resolved_sha": "a" * 40,
+        "packages": packages
+        if packages is not None
+        else {
+            "autoware_a_filter": {"present": True, "build_outcome": "success", "test_outcome": "success"},
+            "zz_planner_b": {"present": True, "build_outcome": "success", "test_outcome": "success"},
+        },
+    }
+    result.update(over)
+    return result
 
 
-# --------------------------------------------------------------------------- #
-# find_result
-# --------------------------------------------------------------------------- #
-class TestFindResult:
-    def _write(self, directory, data):
-        directory.mkdir(parents=True, exist_ok=True)
-        (directory / "result.json").write_text(json.dumps(data))
-
-    def test_found_in_oddly_named_subdir(self, tmp_path):
-        # The directory name does not encode the distro/package; only content does.
-        sub = tmp_path / "validate-result-12345"
-        self._write(sub, _result(ros_distro="humble", package_name="autoware_demo"))
-        found = be.find_result(tmp_path, "humble", "autoware_demo")
-        assert found is not None
-        assert found["package_name"] == "autoware_demo"
-        assert found["ros_distro"] == "humble"
-
-    def test_found_at_root_single_artifact_layout(self, tmp_path):
-        # download-artifact extracts straight into the root when there is one match.
-        self._write(tmp_path, _result(ros_distro="jazzy", package_name="autoware_planning"))
-        found = be.find_result(tmp_path, "jazzy", "autoware_planning")
-        assert found is not None
-        assert found["package_name"] == "autoware_planning"
-
-    def test_matches_correct_one_among_many(self, tmp_path):
-        self._write(tmp_path / "a", _result(ros_distro="humble", package_name="pkg_a"))
-        self._write(tmp_path / "b", _result(ros_distro="humble", package_name="pkg_b"))
-        self._write(tmp_path / "c", _result(ros_distro="jazzy", package_name="pkg_a"))
-        found = be.find_result(tmp_path, "jazzy", "pkg_a")
-        assert found is not None
-        assert found["ros_distro"] == "jazzy"
-        assert found["package_name"] == "pkg_a"
-
-    def test_distro_must_match_too(self, tmp_path):
-        # Same package name, different distro -> no match.
-        self._write(tmp_path / "x", _result(ros_distro="humble", package_name="pkg"))
-        assert be.find_result(tmp_path, "jazzy", "pkg") is None
-
-    def test_package_must_match_too(self, tmp_path):
-        self._write(tmp_path / "x", _result(ros_distro="humble", package_name="pkg"))
-        assert be.find_result(tmp_path, "humble", "other_pkg") is None
-
-    def test_none_when_dir_empty(self, tmp_path):
-        assert be.find_result(tmp_path, "humble", "pkg") is None
-
-    def test_skips_corrupt_json_and_finds_valid(self, tmp_path):
-        bad = tmp_path / "bad"
-        bad.mkdir()
-        (bad / "result.json").write_text("{not valid json")
-        good = tmp_path / "good"
-        self._write(good, _result(ros_distro="humble", package_name="pkg"))
-        found = be.find_result(tmp_path, "humble", "pkg")
-        assert found is not None
-        assert found["package_name"] == "pkg"
-
-    def test_corrupt_json_only_returns_none(self, tmp_path):
-        bad = tmp_path / "bad"
-        bad.mkdir()
-        (bad / "result.json").write_text("totally not json")
-        assert be.find_result(tmp_path, "humble", "pkg") is None
-
-    def test_returns_full_dict_contents(self, tmp_path):
-        data = _result(ros_distro="humble", package_name="pkg", autoware_version="9.8.7")
-        self._write(tmp_path / "deep" / "nested" / "dir", data)
-        found = be.find_result(tmp_path, "humble", "pkg")
-        assert found["autoware_version"] == "9.8.7"
-        assert found["resolved_sha"] == GOOD_SHA
+def write_artifact(results_dir, result, xmls=None, subdir="validate-result-jazzy-awesome_tools-1.8.0"):
+    """Lay out one downloaded artifact: result.json + package-xmls/<pkg>.xml."""
+    art = results_dir / subdir
+    art.mkdir(parents=True, exist_ok=True)
+    (art / "result.json").write_text(json.dumps(result))
+    for pkg, content in (xmls or {}).items():
+        xml_dir = art / "package-xmls"
+        xml_dir.mkdir(exist_ok=True)
+        (xml_dir / f"{pkg}.xml").write_text(content)
+    return art
 
 
-# --------------------------------------------------------------------------- #
-# envelope_for
-# --------------------------------------------------------------------------- #
-class TestEnvelopeFor:
-    AT = "2026-05-31T12:00:00Z"
-    URL = "https://github.com/autowarefoundation/autoware-index/actions/runs/1"
-
-    def _build(self, row=None, result=None, sweep_kind="eager"):
-        return be.envelope_for(
-            row or _row(),
-            result or _result(),
-            sweep_kind,
-            self.AT,
-            self.URL,
-        )
-
-    def test_success_record_is_schema_valid(self, record_validator):
-        env, reason = self._build()
-        assert reason is None
-        assert env is not None
-        # The schema validates the record sub-object (as main() does).
-        record_validator.validate(env["record"])
-
-    def test_envelope_top_level_shape(self):
-        env, _ = self._build(row=_row(ros_distro="jazzy", package_name="autoware_x"))
-        assert env["ros_distro"] == "jazzy"
-        assert env["package_name"] == "autoware_x"
-        assert set(env.keys()) == {"ros_distro", "package_name", "record"}
-
-    def test_record_field_values(self):
-        row = _row(ref_kind="branch", ref_value="main")
-        result = _result(autoware_version="2.0.0", resolved_sha=GOOD_SHA)
-        env, _ = self._build(row=row, result=result, sweep_kind="nightly")
-        rec = env["record"]
-        assert rec["sweep_kind"] == "nightly"
-        assert rec["ref_at_test"] == {"kind": "branch", "value": "main"}
-        assert rec["resolved_sha"] == GOOD_SHA
-        assert rec["autoware_version"] == "2.0.0"
-        assert rec["status"] == "pass"
-        assert rec["at"] == self.AT
-        assert rec["actions_run_url"] == self.URL
-
-    def test_fail_status_is_schema_valid(self, record_validator):
-        result = _result(build_outcome="failure", test_outcome="success")
-        env, reason = self._build(result=result)
-        assert reason is None
-        assert env["record"]["status"] == "fail"
-        record_validator.validate(env["record"])
-
-    def test_missing_autoware_version_is_skipped(self):
-        result = _result()
-        del result["autoware_version"]
-        env, reason = self._build(result=result)
-        assert env is None
-        assert reason is not None
-        assert "autoware_version" in reason
-
-    def test_empty_autoware_version_is_skipped(self):
-        env, reason = self._build(result=_result(autoware_version=""))
-        assert env is None
-        assert "autoware_version" in reason
-
-    def test_inconclusive_outcomes_skipped_even_with_version(self):
-        # Has a version, but both steps skipped -> still inconclusive.
-        result = _result(build_outcome="skipped", test_outcome="skipped")
-        env, reason = self._build(result=result)
-        assert env is None
-        assert reason is not None
-        assert "nothing was validated" in reason
-
-    def test_inconclusive_reason_mentions_outcomes(self):
-        result = _result(build_outcome="cancelled", test_outcome="")
-        env, reason = self._build(result=result)
-        assert env is None
-        assert "cancelled" in reason
-
-    def test_missing_resolved_sha_falls_back_to_zero_sha(self, record_validator):
-        result = _result()
-        del result["resolved_sha"]
-        env, reason = self._build(result=result)
-        assert reason is None
-        assert env["record"]["resolved_sha"] == ZERO_SHA
-        # ZERO_SHA is 40 hex chars, so still schema-valid.
-        record_validator.validate(env["record"])
-
-    def test_wrong_length_resolved_sha_falls_back_to_zero_sha(self, record_validator):
-        env, _ = self._build(result=_result(resolved_sha="deadbeef"))
-        assert env["record"]["resolved_sha"] == ZERO_SHA
-        record_validator.validate(env["record"])
-
-    def test_empty_resolved_sha_falls_back_to_zero_sha(self):
-        env, _ = self._build(result=_result(resolved_sha=""))
-        assert env["record"]["resolved_sha"] == ZERO_SHA
-
-    def test_correct_length_sha_is_kept(self):
-        sha = "b" * 40
-        env, _ = self._build(result=_result(resolved_sha=sha))
-        assert env["record"]["resolved_sha"] == sha
-
-    def test_missing_row_key_raises(self):
-        # envelope_for indexes row[...] directly; a malformed row is a hard error.
-        bad_row = {"ros_distro": "humble"}  # missing package_name etc.
-        with pytest.raises(KeyError):
-            self._build(row=bad_row)
-
-    def test_record_for_each_sweep_kind_validates(self, record_validator):
-        for kind in ("eager", "nightly"):
-            env, reason = self._build(sweep_kind=kind)
-            assert reason is None
-            record_validator.validate(env["record"])
-
-    def test_each_ref_kind_validates(self, record_validator):
-        for kind in ("tag", "sha", "branch"):
-            env, _ = self._build(row=_row(ref_kind=kind, ref_value="x"))
-            record_validator.validate(env["record"])
+# --------------------------------------------------------------------------
+# status_for — the per-package honesty mapping
+# --------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    ("outcome", "expected"),
+    [
+        ({"present": True, "build_outcome": "success", "test_outcome": "success"}, "pass"),
+        ({"present": True, "build_outcome": "failure", "test_outcome": None}, "fail"),
+        ({"present": True, "build_outcome": "success", "test_outcome": "failure"}, "fail"),
+        ({"present": True, "build_outcome": "failure", "test_outcome": "failure"}, "fail"),
+        # Inconclusive shapes: absent, half-run, cancelled. Never pass/fail.
+        ({"present": False, "build_outcome": None, "test_outcome": None}, None),
+        ({"present": False, "build_outcome": "success", "test_outcome": "success"}, None),
+        ({"present": True, "build_outcome": None, "test_outcome": None}, None),
+        ({"present": True, "build_outcome": "success", "test_outcome": None}, None),
+        ({"present": True, "build_outcome": "cancelled", "test_outcome": ""}, None),
+        ({}, None),
+    ],
+)
+def test_status_for(outcome, expected):
+    assert m.status_for(outcome) == expected
 
 
-# --------------------------------------------------------------------------- #
-# module-level constants
-# --------------------------------------------------------------------------- #
-class TestConstants:
-    def test_zero_sha_is_40_hex_zeros(self):
-        assert be.ZERO_SHA == "0" * 40
-        assert len(be.ZERO_SHA) == 40
+# --------------------------------------------------------------------------
+# find_result — content-keyed artifact discovery (layout-independent)
+# --------------------------------------------------------------------------
+def test_find_result_matches_on_content_not_dirname(tmp_path):
+    write_artifact(tmp_path, make_result(), subdir="weirdly-named-dir")
+    found = m.find_result(tmp_path, "jazzy", "awesome_tools")
+    assert found is not None
+    assert found.name == "result.json"
+    assert found.parent.name == "weirdly-named-dir"
 
-    def test_schema_path_points_at_history_record_schema(self):
-        assert be.SCHEMA_PATH.name == "history-record.schema.json"
-        assert be.SCHEMA_PATH.is_file()
+
+def test_find_result_root_extraction_layout(tmp_path):
+    # Single-artifact downloads extract to the path root, no subdir.
+    (tmp_path / "result.json").write_text(json.dumps(make_result()))
+    assert m.find_result(tmp_path, "jazzy", "awesome_tools") == tmp_path / "result.json"
+
+
+def test_find_result_distinguishes_repos_and_distros(tmp_path):
+    write_artifact(tmp_path, make_result(), subdir="a")
+    write_artifact(tmp_path, make_result(repo_name="other_repo"), subdir="b")
+    write_artifact(tmp_path, make_result(ros_distro="humble"), subdir="c")
+    assert m.find_result(tmp_path, "jazzy", "other_repo").parent.name == "b"
+    assert m.find_result(tmp_path, "humble", "awesome_tools").parent.name == "c"
+
+
+def test_find_result_ignores_v1_results_and_garbage(tmp_path):
+    # A legacy per-package result.json has no "schema": 2 — never matched.
+    legacy = {"ros_distro": "jazzy", "package_name": "awesome_tools", "build_outcome": "success"}
+    write_artifact(tmp_path, legacy, subdir="legacy")
+    (tmp_path / "junk").mkdir()
+    (tmp_path / "junk" / "result.json").write_text("{not json")
+    assert m.find_result(tmp_path, "jazzy", "awesome_tools") is None
+
+
+def test_find_result_empty_dir(tmp_path):
+    assert m.find_result(tmp_path, "jazzy", "awesome_tools") is None
+
+
+# --------------------------------------------------------------------------
+# envelopes_for_row — fan-out + per-package skips
+# --------------------------------------------------------------------------
+AT = "2026-06-11T12:00:00Z"
+URL = "https://example.com/run/42"
+
+
+def test_envelopes_for_row_happy_path_two_packages():
+    envelopes, skips = m.envelopes_for_row(make_row(), make_result(), "eager", AT, URL)
+    assert skips == []
+    assert [e["package_name"] for e in envelopes] == ["autoware_a_filter", "zz_planner_b"]
+    for e in envelopes:
+        r = e["record"]
+        assert r["schema"] == 2
+        assert r["sweep_kind"] == "eager"
+        assert r["ref_at_test"] == {"kind": "tag", "value": "1.2.0"}
+        assert r["resolved_sha"] == "a" * 40
+        assert r["autoware_version"] == "1.8.0"
+        assert r["status"] == "pass"
+        assert r["at"] == AT
+        assert r["actions_run_url"] == URL
+        assert r["repository"] == "https://github.com/example-org/awesome_tools"
+        assert r["repo_name"] == "awesome_tools"
+
+
+def test_envelopes_for_row_sibling_statuses_independent():
+    result = make_result(
+        packages={
+            "autoware_a_filter": {"present": True, "build_outcome": "success", "test_outcome": "success"},
+            "zz_planner_b": {"present": True, "build_outcome": "success", "test_outcome": "failure"},
+        }
+    )
+    envelopes, skips = m.envelopes_for_row(make_row(), result, "nightly", AT, URL)
+    by_name = {e["package_name"]: e["record"]["status"] for e in envelopes}
+    assert by_name == {"autoware_a_filter": "pass", "zz_planner_b": "fail"}
+    assert skips == []
+
+
+def test_envelopes_for_row_absent_package_skipped_loudly():
+    result = make_result(
+        packages={
+            "autoware_a_filter": {"present": True, "build_outcome": "success", "test_outcome": "success"},
+            "zz_planner_b": {"present": False, "build_outcome": None, "test_outcome": None},
+        }
+    )
+    envelopes, skips = m.envelopes_for_row(make_row(), result, "eager", AT, URL)
+    assert [e["package_name"] for e in envelopes] == ["autoware_a_filter"]
+    assert len(skips) == 1 and "zz_planner_b" in skips[0] and "inconclusive" in skips[0]
+
+
+def test_envelopes_for_row_package_missing_from_result():
+    result = make_result(packages={"autoware_a_filter": {"present": True, "build_outcome": "success", "test_outcome": "success"}})
+    envelopes, skips = m.envelopes_for_row(make_row(), result, "eager", AT, URL)
+    assert len(envelopes) == 1
+    assert len(skips) == 1 and "no outcome" in skips[0]
+
+
+def test_envelopes_for_row_no_autoware_version_skips_whole_row():
+    envelopes, skips = m.envelopes_for_row(make_row(), make_result(autoware_version=""), "eager", AT, URL)
+    assert envelopes == []
+    assert len(skips) == 1 and "autoware_version" in skips[0]
+
+
+def test_envelopes_for_row_bad_sha_normalized_to_zero_sha():
+    envelopes, _ = m.envelopes_for_row(make_row(), make_result(resolved_sha="short"), "eager", AT, URL)
+    assert all(e["record"]["resolved_sha"] == m.ZERO_SHA for e in envelopes)
+
+
+# --------------------------------------------------------------------------
+# stage_metadata — artifact-shipped package.xml -> staged metadata tree
+# --------------------------------------------------------------------------
+def test_stage_metadata_copies_present_files(tmp_path):
+    art = write_artifact(
+        tmp_path / "results",
+        make_result(),
+        xmls={"autoware_a_filter": "<package><name>autoware_a_filter</name></package>"},
+    )
+    out = tmp_path / "staged"
+    staged = m.stage_metadata(art / "result.json", make_row(), out)
+    assert staged == 1
+    assert (out / "jazzy" / "autoware_a_filter.xml").read_text().startswith("<package>")
+    # zz_planner_b had no shipped xml: not staged, no crash, no empty file.
+    assert not (out / "jazzy" / "zz_planner_b.xml").exists()
+
+
+def test_stage_metadata_no_xml_dir(tmp_path):
+    art = write_artifact(tmp_path / "results", make_result())
+    assert m.stage_metadata(art / "result.json", make_row(), tmp_path / "staged") == 0
+
+
+# --------------------------------------------------------------------------
+# main() — end to end on tmp dirs
+# --------------------------------------------------------------------------
+def run_main(monkeypatch, tmp_path, rows, *, sweep_kind="eager"):
+    matrix_file = tmp_path / "matrix.json"
+    matrix_file.write_text(json.dumps({"include": rows}))
+    out = tmp_path / "envelopes.json"
+    states = tmp_path / "states.json"
+    metadata = tmp_path / "staged-metadata"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "build_envelopes.py",
+            "--matrix-file", str(matrix_file),
+            "--results-dir", str(tmp_path / "results"),
+            "--sweep-kind", sweep_kind,
+            "--actions-run-url", URL,
+            "--output", str(out),
+            "--states-output", str(states),
+            "--metadata-output", str(metadata),
+        ],
+    )
+    m.main()
+    return json.loads(out.read_text()), json.loads(states.read_text()), metadata
+
+
+def test_main_full_row_advances_state(monkeypatch, tmp_path):
+    write_artifact(
+        tmp_path / "results",
+        make_result(),
+        xmls={
+            "autoware_a_filter": "<package><name>autoware_a_filter</name></package>",
+            "zz_planner_b": "<package><name>zz_planner_b</name></package>",
+        },
+    )
+    envelopes, states, metadata = run_main(monkeypatch, tmp_path, [make_row()])
+
+    assert len(envelopes) == 2
+    assert len(states) == 1
+    state = states[0]
+    assert state["ros_distro"] == "jazzy" and state["repo_name"] == "awesome_tools"
+    assert state["state"]["url"] == "https://github.com/example-org/awesome_tools"
+    assert state["state"]["ref"] == {"kind": "tag", "value": "1.2.0"}
+    assert state["state"]["packages"] == ["autoware_a_filter", "zz_planner_b"]
+    assert state["state"]["last_run_url"] == URL
+    assert (metadata / "jazzy" / "autoware_a_filter.xml").exists()
+    assert (metadata / "jazzy" / "zz_planner_b.xml").exists()
+
+
+def test_main_partial_row_does_not_advance_state(monkeypatch, tmp_path, capsys):
+    # One package absent: its envelope is skipped, so the row must NOT
+    # advance — the level-triggered discover re-sweeps it until conclusive.
+    write_artifact(
+        tmp_path / "results",
+        make_result(
+            packages={
+                "autoware_a_filter": {"present": True, "build_outcome": "success", "test_outcome": "success"},
+                "zz_planner_b": {"present": False, "build_outcome": None, "test_outcome": None},
+            }
+        ),
+    )
+    envelopes, states, _ = run_main(monkeypatch, tmp_path, [make_row()])
+    assert len(envelopes) == 1
+    assert states == []
+    err = capsys.readouterr().err
+    assert "state not advanced" in err
+
+
+def test_main_fail_records_still_advance_state(monkeypatch, tmp_path):
+    # fail IS conclusive — a red row records and advances; only inconclusive
+    # rows re-sweep. (Otherwise a genuinely broken repo would re-sweep nightly
+    # forever for no new information.)
+    write_artifact(
+        tmp_path / "results",
+        make_result(
+            packages={
+                "autoware_a_filter": {"present": True, "build_outcome": "failure", "test_outcome": None},
+                "zz_planner_b": {"present": True, "build_outcome": "success", "test_outcome": "success"},
+            }
+        ),
+    )
+    envelopes, states, _ = run_main(monkeypatch, tmp_path, [make_row()])
+    assert {e["record"]["status"] for e in envelopes} == {"fail", "pass"}
+    assert len(states) == 1
+
+
+def test_main_missing_artifact_skips_row_loudly(monkeypatch, tmp_path, capsys):
+    write_artifact(tmp_path / "results", make_result())  # only awesome_tools
+    other = make_row(repo_name="other_repo", repository="https://github.com/x/other_repo", packages="p")
+    envelopes, states, _ = run_main(monkeypatch, tmp_path, [make_row(), other])
+    assert len(envelopes) == 2  # awesome_tools' two packages
+    assert len(states) == 1
+    assert "no result artifact for jazzy/other_repo" in capsys.readouterr().err
+
+
+def test_main_zero_envelopes_from_nonempty_matrix_hard_fails(monkeypatch, tmp_path):
+    # No artifacts at all: infra fault, not package failure -> exit non-zero
+    # (locked decision 5 applies to package outcomes, not pipeline faults).
+    (tmp_path / "results").mkdir()
+    with pytest.raises(SystemExit) as exc:
+        run_main(monkeypatch, tmp_path, [make_row()])
+    assert "ZERO envelopes" in str(exc.value)
+
+
+def test_main_empty_matrix_is_fine(monkeypatch, tmp_path):
+    (tmp_path / "results").mkdir()
+    envelopes, states, _ = run_main(monkeypatch, tmp_path, [])
+    assert envelopes == [] and states == []
+
+
+def test_main_schema_invalid_record_dropped(monkeypatch, tmp_path, capsys):
+    # A non-semver autoware_version passes envelope construction but fails
+    # history-record schema validation: dropped loudly, and with every
+    # envelope dropped the zero-envelope tripwire fires.
+    write_artifact(tmp_path / "results", make_result(autoware_version="garbage"))
+    with pytest.raises(SystemExit):
+        run_main(monkeypatch, tmp_path, [make_row()])
+    assert "fails schema" in capsys.readouterr().err
+
+
+def test_main_emitted_records_validate_against_schema(monkeypatch, tmp_path):
+    import jsonschema
+
+    write_artifact(tmp_path / "results", make_result())
+    envelopes, _, _ = run_main(monkeypatch, tmp_path, [make_row()], sweep_kind="nightly")
+    schema = json.loads(m.SCHEMA_PATH.read_text())
+    for e in envelopes:
+        jsonschema.Draft202012Validator(schema).validate(e["record"])

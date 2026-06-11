@@ -2,60 +2,83 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/autowarefoundation/autoware-index/main/schema/distribution.schema.json",
   "title": "Autoware Index distribution file",
-  "description": "Schema for distributions/<distro>.yaml in the autoware-index registry.",
+  "description": "Schema for distributions/<distro>.yaml in the autoware-index registry. schema_version 2: repositories are first-class — each entry owns one URL and ONE ref, and nests the registered packages it hosts (lockstep: every package of a repository is validated and distributed at that single ref; per-package ref skew is unrepresentable). Cross-entry invariants the schema cannot express — globally unique package names per distro, canonical-URL uniqueness across repository entries — are enforced by scripts/check_refs.py.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "ros_distro", "packages"],
+  "required": ["schema_version", "ros_distro", "repositories"],
   "properties": {
     "schema_version": {
       "type": "string",
-      "const": "1"
+      "const": "2"
     },
     "ros_distro": {
       "type": "string",
       "description": "ROS 2 distribution name. MUST equal the filename stem (e.g. 'jazzy' for distributions/jazzy.yaml).",
       "pattern": "^[a-z][a-z0-9_]*$"
     },
-    "packages": {
+    "repositories": {
       "type": "object",
-      "description": "Registered packages keyed by package name.",
-      "additionalProperties": { "$ref": "#/$defs/package" },
+      "description": "Registered repositories keyed by repository name (the registry-wide identity used in sweep artifacts, history records, and CLI .repos entries).",
+      "additionalProperties": { "$ref": "#/$defs/repository" },
       "propertyNames": {
-        "pattern": "^[a-z][a-z0-9_]*$"
+        "pattern": "^[a-z][a-z0-9_-]*$"
       }
     }
   },
   "$defs": {
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "ref", "governance", "maintainers", "packages"],
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Git remote URL of the repository. One entry per repository; spelling variants of the same repo (.git suffix, ssh form, trailing slash) are rejected by check_refs.py."
+        },
+        "ref": { "$ref": "#/$defs/ref" },
+        "governance": {
+          "type": "string",
+          "enum": ["community", "foundation"]
+        },
+        "maintainers": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/maintainer" },
+          "description": "Repository-level default maintainers; a package entry may override with its own list."
+        },
+        "packages": {
+          "type": "object",
+          "minProperties": 1,
+          "description": "Registered ROS packages this repository hosts, keyed by ROS package name (always explicit — the key must equal the package.xml <name>). Unlisted sibling packages in the same repository are not registered: the index makes no claims about them.",
+          "additionalProperties": { "$ref": "#/$defs/package" },
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]*$"
+          }
+        }
+      }
+    },
     "package": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["repository", "governance", "tags", "maintainers", "ref"],
+      "required": ["tags"],
       "properties": {
-        "repository": {
-          "type": "string",
-          "format": "uri",
-          "description": "Git remote URL for the package source."
+        "tags": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
+          "uniqueItems": true
         },
         "description": {
           "type": "string",
           "minLength": 1,
           "description": "Optional registry-side override for the card description. When set it wins over the package.xml <description> cached by the sweep; omit it to render the upstream description."
         },
-        "governance": {
-          "type": "string",
-          "enum": ["community", "foundation"]
-        },
-        "tags": {
-          "type": "array",
-          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
-          "uniqueItems": true
-        },
         "maintainers": {
           "type": "array",
           "minItems": 1,
-          "items": { "$ref": "#/$defs/maintainer" }
-        },
-        "ref": { "$ref": "#/$defs/ref" }
+          "items": { "$ref": "#/$defs/maintainer" },
+          "description": "Optional override of the repository-level maintainers for this package."
+        }
       }
     },
     "maintainer": {
@@ -72,7 +95,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["kind", "value"],
-      "description": "What this package is registered as for this distro. Single ref per (package, distro).",
+      "description": "What this repository is registered as for this distro. Single ref per (repository, distro): every registered package of the repository is validated at this one ref.",
       "properties": {
         "kind": {
           "type": "string",

@@ -1,38 +1,49 @@
 name: sweep-eager
 
-# Fires when a package's `ref` in any distributions/<distro>.yaml changes
-# via push to main. For each changed (distro, package), validates the new
-# ref against the current latest published Autoware release (resolved
-# inside sweep-package.yaml), then appends one history record per
-# changed package to the data branch.
+# Level-triggered sweep: fires on any push to main touching distributions/
+# (and on manual dispatch as the recovery hatch). Instead of diffing two
+# commits, discover compares every repository entry's (url, ref, registered
+# package set) against the last conclusively-recorded cursor in
+# data:state/<distro>/<repo_name>.json — so a sweep that was cancelled,
+# displaced from a concurrency queue, or interrupted before recording is
+# simply re-detected by the next run. URL-only changes trigger too.
 #
-# All sweep workflows that push to the orphan data branch share the
-# `data-branch-write` concurrency group so they serialize rather than race.
+# One matrix row per (distro, repository): sweep-repository.yaml clones and
+# builds the repo once and derives an honest per-package verdict inside the
+# job. The record job fans the per-repo artifact out into per-package history
+# records, advances state/ in the same data-branch commit, and stages each
+# package's pristine package.xml for the site's descriptions.
+#
+# Only the RECORD job serializes on the data branch (`data-branch-write`):
+# validate jobs of overlapping sweeps run in parallel, shrinking the window
+# in which a queued run can be displaced — and the state cursor makes any
+# displacement self-healing anyway.
 
 on:
   push:
     branches: [main]
     paths:
       - 'distributions/**.yaml'
-
-concurrency:
-  group: data-branch-write
-  cancel-in-progress: false
+  workflow_dispatch:
 
 permissions:
-  contents: write    # required for the record job's push to the data branch
+  contents: read
 
 jobs:
   discover:
-    name: discover changed refs
+    name: discover stale repositories
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       has-changes: ${{ steps.matrix.outputs.has-changes }}
     steps:
       - uses: actions/checkout@v6
+
+      - name: Check out data branch (state cursors)
+        uses: actions/checkout@v6
         with:
-          fetch-depth: 0    # need both before/after shas accessible to git show
+          ref: data
+          path: _data
 
       - uses: actions/setup-python@v6
         with:
@@ -43,20 +54,17 @@ jobs:
 
       - name: Compute sweep matrix
         id: matrix
-        env:
-          BEFORE_SHA: ${{ github.event.before }}
-          AFTER_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          matrix=$(scripts/sweep_eager_matrix.py --before "$BEFORE_SHA" --after "$AFTER_SHA")
+          matrix=$(scripts/sweep_matrix.py --mode eager --state-dir _data/state)
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           rows=$(printf '%s' "$matrix" | python -c "import json,sys; print(len(json.load(sys.stdin).get('include', [])))")
           if [ "$rows" -gt 0 ]; then
             echo "has-changes=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::eager sweep dispatched for $rows row(s)"
+            echo "::notice::eager sweep dispatched for $rows repository row(s)"
           else
             echo "has-changes=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::no package ref changed; skipping validate + record"
+            echo "::notice::every repository entry matches its recorded state; nothing to sweep"
           fi
 
   validate:
@@ -65,12 +73,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
-    uses: autowarefoundation/autoware-index-github-actions/.github/workflows/sweep-package.yaml@main
+    uses: autowarefoundation/autoware-index-github-actions/.github/workflows/sweep-repository.yaml@main
     with:
       ros_distro: ${{ matrix.ros_distro }}
-      package_name: ${{ matrix.package_name }}
-      package_repository: ${{ matrix.package_repository }}
-      package_ref: ${{ matrix.ref_value }}
+      repo_name: ${{ matrix.repo_name }}
+      repository: ${{ matrix.repository }}
+      ref_kind: ${{ matrix.ref_kind }}
+      ref_value: ${{ matrix.ref_value }}
+      packages: ${{ matrix.packages }}
 
   record:
     name: record history
@@ -78,6 +88,9 @@ jobs:
     # Run even if some validate matrix rows failed — we record failures too.
     if: always() && needs.discover.outputs.has-changes == 'true'
     runs-on: ubuntu-24.04
+    concurrency:
+      group: data-branch-write
+      cancel-in-progress: false
     permissions:
       contents: write    # push to the data branch
       actions: write     # trigger the pages workflow to rebuild the site
@@ -110,16 +123,19 @@ jobs:
             --results-dir validate-results \
             --sweep-kind eager \
             --actions-run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --output envelopes.json
+            --output envelopes.json \
+            --states-output states.json \
+            --metadata-output staged-metadata
           cat envelopes.json
 
       - name: Append to data branch
-        run: scripts/append_history.py --records envelopes.json
-
-      - name: Cache package.xml on data branch
-        # Refresh each swept package's upstream package.xml so the browse card
-        # can render its <description>. Independent of build/test outcome.
-        run: scripts/cache_package_xml.py --matrix-file matrix.json --push
+        # History records, state cursors, and the package.xml metadata cache
+        # land in ONE commit, so "state advanced" always implies "records landed".
+        run: |
+          scripts/append_history.py \
+            --records envelopes.json \
+            --states states.json \
+            --metadata-dir staged-metadata
 
       - name: Trigger site rebuild
         # Best-effort: refresh the Pages site with the new records instead of

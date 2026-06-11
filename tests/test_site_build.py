@@ -3,8 +3,10 @@
 Imported as ``import build`` because conftest puts site/ on sys.path.
 
 Covers the real signatures verified by reading build.py:
-  semver_key, parse_description, load_distributions, load_history,
-  load_metadata, summarize, build_packages, and main().
+  semver_key, parse_description, load_distributions (via the shared
+  version-gated v2 loader), load_history, load_metadata, summarize,
+  build_packages, and main(). Includes the shared-repo case: one repository
+  entry hosting two packages must yield two independent cards.
 """
 
 import json
@@ -91,21 +93,24 @@ def test_parse_description_empty_description_returns_empty():
 
 
 # --------------------------------------------------------------------------- #
-# load_distributions
+# load_distributions — flattening the v2 repository-keyed format
 # --------------------------------------------------------------------------- #
 
 
 def test_load_distributions_flattens_packages(tmp_path):
     (tmp_path / "humble.yaml").write_text(
+        'schema_version: "2"\n'
         "ros_distro: humble\n"
-        "packages:\n"
-        "  pkg_a:\n"
-        "    repository: https://example.com/a\n"
-        "    description: Package A\n"
+        "repositories:\n"
+        "  repo_a:\n"
+        "    url: https://example.com/a\n"
         "    governance: core\n"
-        "    tags: [planning]\n"
         "    maintainers: [alice]\n"
-        "    ref: {type: branch, name: main}\n"
+        "    ref: {kind: branch, value: main}\n"
+        "    packages:\n"
+        "      pkg_a:\n"
+        "        tags: [planning]\n"
+        "        description: Package A\n"
     )
     regs = build.load_distributions(tmp_path)
     assert len(regs) == 1
@@ -113,23 +118,33 @@ def test_load_distributions_flattens_packages(tmp_path):
     assert reg == {
         "distro": "humble",
         "name": "pkg_a",
+        "repo_name": "repo_a",
         "repository": "https://example.com/a",
         "description": "Package A",
         "governance": "core",
         "tags": ["planning"],
         "maintainers": ["alice"],
-        "ref": {"type": "branch", "name": "main"},
+        "ref": {"kind": "branch", "value": "main"},
     }
 
 
 def test_load_distributions_defaults_for_sparse_spec(tmp_path):
-    # A package whose spec is empty (None) should get all defaults filled in.
-    (tmp_path / "humble.yaml").write_text("ros_distro: humble\npackages:\n  bare:\n")
+    # A package whose spec is empty (None) should get all defaults filled in,
+    # inheriting repository context from the (also sparse) repo entry.
+    (tmp_path / "humble.yaml").write_text(
+        'schema_version: "2"\n'
+        "ros_distro: humble\n"
+        "repositories:\n"
+        "  repo_a:\n"
+        "    packages:\n"
+        "      bare:\n"
+    )
     regs = build.load_distributions(tmp_path)
     assert regs == [
         {
             "distro": "humble",
             "name": "bare",
+            "repo_name": "repo_a",
             "repository": "",
             "description": "",
             "governance": "community",
@@ -140,26 +155,112 @@ def test_load_distributions_defaults_for_sparse_spec(tmp_path):
     ]
 
 
+def test_load_distributions_package_maintainers_override_repo_default(tmp_path):
+    # Repo-level maintainers are the default; a per-package override replaces
+    # them only for that package.
+    (tmp_path / "humble.yaml").write_text(
+        'schema_version: "2"\n'
+        "ros_distro: humble\n"
+        "repositories:\n"
+        "  repo_a:\n"
+        "    url: https://example.com/a\n"
+        "    maintainers:\n"
+        "      - {name: Repo Default, email: d@tier4.jp, github: default}\n"
+        "    packages:\n"
+        "      uses_default:\n"
+        "        tags: [planning]\n"
+        "      has_override:\n"
+        "        tags: [planning]\n"
+        "        maintainers:\n"
+        "          - {name: Override, email: o@tier4.jp, github: override}\n"
+    )
+    regs = {r["name"]: r for r in build.load_distributions(tmp_path)}
+    assert regs["uses_default"]["maintainers"] == [
+        {"name": "Repo Default", "email": "d@tier4.jp", "github": "default"}
+    ]
+    assert regs["has_override"]["maintainers"] == [
+        {"name": "Override", "email": "o@tier4.jp", "github": "override"}
+    ]
+
+
+def test_load_distributions_shared_repo_yields_independent_registrations(tmp_path):
+    # One repository entry hosting TWO packages -> two registrations that
+    # share repository/repo_name/ref but keep their own description + tags.
+    (tmp_path / "humble.yaml").write_text(
+        'schema_version: "2"\n'
+        "ros_distro: humble\n"
+        "repositories:\n"
+        "  shared_repo:\n"
+        "    url: https://example.com/shared\n"
+        "    ref: {kind: tag, value: 1.0.0}\n"
+        "    packages:\n"
+        "      pkg_one:\n"
+        "        tags: [planning]\n"
+        "        description: One\n"
+        "      pkg_two:\n"
+        "        tags: [sensing]\n"
+        "        description: Two\n"
+    )
+    regs = build.load_distributions(tmp_path)
+    assert len(regs) == 2
+    by_name = {r["name"]: r for r in regs}
+    one, two = by_name["pkg_one"], by_name["pkg_two"]
+    assert one["repo_name"] == two["repo_name"] == "shared_repo"
+    assert one["repository"] == two["repository"] == "https://example.com/shared"
+    assert one["ref"] == two["ref"] == {"kind": "tag", "value": "1.0.0"}
+    assert one["description"] == "One" and two["description"] == "Two"
+    assert one["tags"] == ["planning"] and two["tags"] == ["sensing"]
+
+
 def test_load_distributions_distro_falls_back_to_stem(tmp_path):
     # No ros_distro key -> distro derived from filename stem.
-    (tmp_path / "jazzy.yaml").write_text("packages:\n  p:\n    repository: r\n")
+    (tmp_path / "jazzy.yaml").write_text(
+        'schema_version: "2"\n'
+        "repositories:\n"
+        "  r:\n"
+        "    url: u\n"
+        "    packages:\n"
+        "      p:\n"
+        "        tags: [x]\n"
+    )
     regs = build.load_distributions(tmp_path)
     assert regs[0]["distro"] == "jazzy"
 
 
-def test_load_distributions_empty_file_and_no_packages(tmp_path):
-    (tmp_path / "empty.yaml").write_text("")
-    (tmp_path / "nopkgs.yaml").write_text("ros_distro: rolling\n")
+def test_load_distributions_no_repositories_or_packages(tmp_path):
+    (tmp_path / "empty_repos.yaml").write_text(
+        'schema_version: "2"\nros_distro: humble\nrepositories: {}\n'
+    )
+    (tmp_path / "no_pkgs.yaml").write_text(
+        'schema_version: "2"\n'
+        "ros_distro: rolling\n"
+        "repositories:\n"
+        "  r:\n"
+        "    url: u\n"
+    )
     regs = build.load_distributions(tmp_path)
     assert regs == []
 
 
 def test_load_distributions_multiple_files_each_package(tmp_path):
     (tmp_path / "humble.yaml").write_text(
-        "ros_distro: humble\npackages:\n  a:\n    repository: ra\n  b:\n    repository: rb\n"
+        'schema_version: "2"\n'
+        "ros_distro: humble\n"
+        "repositories:\n"
+        "  ra:\n"
+        "    url: ra\n"
+        "    packages:\n"
+        "      a:\n"
+        "      b:\n"
     )
     (tmp_path / "jazzy.yaml").write_text(
-        "ros_distro: jazzy\npackages:\n  c:\n    repository: rc\n"
+        'schema_version: "2"\n'
+        "ros_distro: jazzy\n"
+        "repositories:\n"
+        "  rc:\n"
+        "    url: rc\n"
+        "    packages:\n"
+        "      c:\n"
     )
     regs = build.load_distributions(tmp_path)
     by_name = {(r["distro"], r["name"]): r for r in regs}
@@ -167,10 +268,32 @@ def test_load_distributions_multiple_files_each_package(tmp_path):
 
 
 def test_load_distributions_ignores_non_yaml(tmp_path):
-    (tmp_path / "readme.txt").write_text("ros_distro: x\npackages:\n  p:\n")
-    (tmp_path / "humble.yml").write_text("ros_distro: humble\npackages:\n  q:\n")
+    (tmp_path / "readme.txt").write_text("repositories:\n  r:\n")
+    (tmp_path / "humble.yml").write_text("repositories:\n  q:\n")
     # Only *.yaml is globbed, so both of the above are ignored.
     assert build.load_distributions(tmp_path) == []
+
+
+def test_load_distributions_v1_file_raises_registry_error(tmp_path):
+    # The old flat-packages format hard-fails through the shared loader —
+    # never a silently empty site.
+    (tmp_path / "humble.yaml").write_text(
+        'schema_version: "1"\n'
+        "ros_distro: humble\n"
+        "packages:\n"
+        "  pkg_a:\n"
+        "    repository: https://example.com/a\n"
+    )
+    with pytest.raises(build.RegistryError) as excinfo:
+        build.load_distributions(tmp_path)
+    assert "not supported" in str(excinfo.value)
+
+
+def test_load_distributions_missing_schema_version_raises(tmp_path):
+    # No silent default: a file without schema_version errors too.
+    (tmp_path / "humble.yaml").write_text("ros_distro: humble\nrepositories: {}\n")
+    with pytest.raises(build.RegistryError):
+        build.load_distributions(tmp_path)
 
 
 # --------------------------------------------------------------------------- #
@@ -395,6 +518,7 @@ def _reg(distro="humble", name="pkg", description="", **extra):
     base = {
         "distro": distro,
         "name": name,
+        "repo_name": "repo",
         "repository": "",
         "description": description,
         "governance": "community",
@@ -440,6 +564,7 @@ def test_build_packages_merges_summary_fields():
     assert pkg["last_green"] == "1.6.0"
     assert pkg["last_tested_at"] == "2024-01-01"
     assert pkg["governance"] == "community"  # registration field preserved
+    assert pkg["repo_name"] == "repo"  # registration field preserved
 
 
 def test_build_packages_no_history_is_unknown():
@@ -470,6 +595,33 @@ def test_build_packages_summarize_overrides_description_key_order():
     assert packages[0]["description"] == "from registry"
 
 
+def test_build_packages_shared_repo_packages_join_independently():
+    # Two registrations from ONE repository entry: the history join keys on
+    # (distro, package), so each card gets its own status and versions even
+    # though repository/repo_name/ref are shared.
+    shared = {"repo_name": "shared", "repository": "https://x/shared",
+              "ref": {"kind": "tag", "value": "1.0.0"}}
+    regs = [
+        _reg(name="pkg_a", description="A", **shared),
+        _reg(name="pkg_b", description="B", **shared),
+    ]
+    history = {
+        ("humble", "pkg_a"): [
+            {"status": "pass", "at": "2024-01-01", "autoware_version": "1.6.0"},
+        ],
+        ("humble", "pkg_b"): [
+            {"status": "fail", "at": "2024-02-01", "autoware_version": "1.7.0"},
+        ],
+    }
+    a, b = build.build_packages(regs, history=history, metadata={})
+    assert a["repo_name"] == b["repo_name"] == "shared"
+    assert a["current_status"] == "pass"
+    assert b["current_status"] == "fail"
+    assert [v["autoware_version"] for v in a["versions"]] == ["1.6.0"]
+    assert [v["autoware_version"] for v in b["versions"]] == ["1.7.0"]
+    assert a["description"] == "A" and b["description"] == "B"
+
+
 # --------------------------------------------------------------------------- #
 # main() — end-to-end assembly into --out
 # --------------------------------------------------------------------------- #
@@ -479,11 +631,16 @@ def test_main_writes_data_json_and_copies_assets(tmp_path, monkeypatch, capsys):
     distributions = tmp_path / "distributions"
     distributions.mkdir()
     (distributions / "humble.yaml").write_text(
+        'schema_version: "2"\n'
         "ros_distro: humble\n"
-        "packages:\n"
-        "  pkg_a:\n"
-        "    repository: https://example.com/a\n"
-        "    description: Registry A\n"
+        "repositories:\n"
+        "  repo_a:\n"
+        "    url: https://example.com/a\n"
+        "    ref: {kind: branch, value: main}\n"
+        "    packages:\n"
+        "      pkg_a:\n"
+        "        tags: [planning]\n"
+        "        description: Registry A\n"
     )
 
     history = tmp_path / "history"
@@ -526,6 +683,7 @@ def test_main_writes_data_json_and_copies_assets(tmp_path, monkeypatch, capsys):
     assert len(data["packages"]) == 1
     pkg = data["packages"][0]
     assert pkg["name"] == "pkg_a"
+    assert pkg["repo_name"] == "repo_a"  # cards carry the hosting repo entry
     # Registry description wins over the cached package.xml.
     assert pkg["description"] == "Registry A"
     assert pkg["current_status"] == "pass"
@@ -545,7 +703,14 @@ def test_main_falls_back_to_cached_description(tmp_path, monkeypatch):
     distributions.mkdir()
     # No description in the registry entry -> should use cached package.xml.
     (distributions / "humble.yaml").write_text(
-        "ros_distro: humble\npackages:\n  pkg_a:\n    repository: r\n"
+        'schema_version: "2"\n'
+        "ros_distro: humble\n"
+        "repositories:\n"
+        "  repo_a:\n"
+        "    url: r\n"
+        "    packages:\n"
+        "      pkg_a:\n"
+        "        tags: [planning]\n"
     )
     metadata = tmp_path / "metadata"
     (metadata / "humble").mkdir(parents=True)
@@ -576,7 +741,14 @@ def test_main_without_history_or_metadata(tmp_path, monkeypatch):
     distributions = tmp_path / "distributions"
     distributions.mkdir()
     (distributions / "humble.yaml").write_text(
-        "ros_distro: humble\npackages:\n  pkg_a:\n    repository: r\n"
+        'schema_version: "2"\n'
+        "ros_distro: humble\n"
+        "repositories:\n"
+        "  repo_a:\n"
+        "    url: r\n"
+        "    packages:\n"
+        "      pkg_a:\n"
+        "        tags: [planning]\n"
     )
     out_dir = tmp_path / "out"
     monkeypatch.setattr(
@@ -593,3 +765,89 @@ def test_main_without_history_or_metadata(tmp_path, monkeypatch):
     data = json.loads((out_dir / "data.json").read_text())
     assert data["packages"][0]["current_status"] == "unknown"
     assert (out_dir / "data.json").is_file()
+
+
+def test_main_shared_repo_two_packages_join_independently(tmp_path, monkeypatch):
+    # The shared-repo case end to end: one repository entry, two packages,
+    # two history files -> two cards with independent status/versions that
+    # both carry the same repo_name.
+    distributions = tmp_path / "distributions"
+    distributions.mkdir()
+    (distributions / "humble.yaml").write_text(
+        'schema_version: "2"\n'
+        "ros_distro: humble\n"
+        "repositories:\n"
+        "  shared_repo:\n"
+        "    url: https://example.com/shared\n"
+        "    ref: {kind: tag, value: 1.0.0}\n"
+        "    packages:\n"
+        "      pkg_one:\n"
+        "        tags: [planning]\n"
+        "        description: One\n"
+        "      pkg_two:\n"
+        "        tags: [sensing]\n"
+        "        description: Two\n"
+    )
+    history = tmp_path / "history"
+    (history / "humble").mkdir(parents=True)
+    (history / "humble" / "pkg_one.ndjson").write_text(
+        json.dumps({"status": "pass", "at": "2024-01-01", "autoware_version": "1.6.0"}) + "\n"
+    )
+    (history / "humble" / "pkg_two.ndjson").write_text(
+        json.dumps({"status": "fail", "at": "2024-02-01", "autoware_version": "1.7.0"}) + "\n"
+    )
+    out_dir = tmp_path / "out"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "build.py",
+            "--distributions-dir",
+            str(distributions),
+            "--history-dir",
+            str(history),
+            "--out",
+            str(out_dir),
+        ],
+    )
+    build.main()
+
+    data = json.loads((out_dir / "data.json").read_text())
+    by_name = {p["name"]: p for p in data["packages"]}
+    assert set(by_name) == {"pkg_one", "pkg_two"}
+    one, two = by_name["pkg_one"], by_name["pkg_two"]
+    # same repository entry on both cards...
+    assert one["repo_name"] == two["repo_name"] == "shared_repo"
+    assert one["repository"] == two["repository"] == "https://example.com/shared"
+    assert one["ref"] == two["ref"] == {"kind": "tag", "value": "1.0.0"}
+    # ...but fully independent registration + history joins.
+    assert one["description"] == "One" and two["description"] == "Two"
+    assert one["tags"] == ["planning"] and two["tags"] == ["sensing"]
+    assert one["current_status"] == "pass" and two["current_status"] == "fail"
+    assert [v["autoware_version"] for v in one["versions"]] == ["1.6.0"]
+    assert [v["autoware_version"] for v in two["versions"]] == ["1.7.0"]
+
+
+def test_main_v1_distribution_exits_with_error(tmp_path, monkeypatch):
+    # An unsupported schema_version aborts the build (non-zero SystemExit with
+    # an "error:" message) instead of publishing an empty site.
+    distributions = tmp_path / "distributions"
+    distributions.mkdir()
+    (distributions / "humble.yaml").write_text(
+        'schema_version: "1"\n'
+        "ros_distro: humble\n"
+        "packages:\n"
+        "  pkg_a:\n"
+        "    repository: r\n"
+    )
+    out_dir = tmp_path / "out"
+    monkeypatch.setattr(
+        "sys.argv",
+        ["build.py", "--distributions-dir", str(distributions), "--out", str(out_dir)],
+    )
+    with pytest.raises(SystemExit) as excinfo:
+        build.main()
+    # sys.exit("error: ...") -> message is the (non-zero) exit payload.
+    assert excinfo.value.code != 0
+    assert str(excinfo.value).startswith("error:")
+    assert "not supported" in str(excinfo.value)
+    assert not (out_dir / "data.json").exists()  # nothing published

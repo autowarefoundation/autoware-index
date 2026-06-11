@@ -1,37 +1,56 @@
-name: Register a package
-description: Propose a community Autoware package for the index (or request a change to an existing entry).
-title: "register: <package_name>"
+name: Register packages
+description: Propose a repository's community Autoware packages for the index (or request a change to an existing entry).
+title: "register: <repo_name>"
 labels: ["registration"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for federating a package into the Autoware Index! You can also
-        skip this form and open a PR editing `distributions/<distro>.yaml`
+        Thanks for federating your packages into the Autoware Index! You can
+        also skip this form and open a PR editing `distributions/<distro>.yaml`
         directly — see [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md). This
         issue just helps a maintainer draft or review the entry.
+
+        Registration is per **repository**: one entry owns the git URL and ONE
+        ref, and lists every registered ROS package the repository hosts — a
+        monorepo registers several packages in one entry, validated in
+        lockstep at that single ref.
   - type: input
-    id: package_name
+    id: repo_name
     attributes:
-      label: Package name
-      description: The ROS package name (lowercase, e.g. autoware_livox_tag_filter).
-      placeholder: autoware_my_package
+      label: Repository name
+      description: The registry key for your repository (lowercase, e.g. autoware_livox_tag_filter). Usually the repository's own name.
+      placeholder: awesome_tools
     validations:
       required: true
   - type: input
     id: repository
     attributes:
       label: Repository URL
-      description: Git remote that `vcs import` will clone.
-      placeholder: https://github.com/org/autoware_my_package
+      description: Git remote that `vcs import` will clone. Note that consumers clone the WHOLE repository, including any unregistered sibling packages.
+      placeholder: https://github.com/org/awesome_tools
+    validations:
+      required: true
+  - type: textarea
+    id: packages
+    attributes:
+      label: Packages
+      description: |
+        One line per registered ROS package: the package.xml <name>, then its
+        comma-separated tags (sensing, perception, planning, ...). Every name
+        must exist as a package in the repository at the registered ref.
+      placeholder: |
+        autoware_a_filter: sensing
+        zz_planner_b: planning
     validations:
       required: true
   - type: textarea
     id: description
     attributes:
-      label: Description (optional)
-      description: One-line summary for the browse card. Leave blank to use the package's own package.xml <description>; fill it in only to override that upstream text.
-      placeholder: Removes noise from a Livox lidar point cloud using its per-point tag.
+      label: Description overrides (optional)
+      description: One line per package needing a custom browse-card summary. Leave blank to use each package's own package.xml <description>.
+      placeholder: |
+        autoware_a_filter: Removes noise from a Livox lidar point cloud using its per-point tag.
     validations:
       required: false
   - type: input
@@ -51,19 +70,11 @@ body:
         - foundation
     validations:
       required: true
-  - type: input
-    id: tags
-    attributes:
-      label: Tags
-      description: Comma-separated taxonomy (sensing, perception, planning, ...).
-      placeholder: sensing
-    validations:
-      required: true
   - type: dropdown
     id: ref_kind
     attributes:
       label: Ref kind
-      description: tag/sha freeze a known-good commit; branch is re-swept nightly.
+      description: tag/sha freeze a known-good commit; branch is re-swept nightly. ONE ref for the whole repository — all registered packages validate in lockstep.
       options:
         - tag
         - sha
@@ -82,7 +93,7 @@ body:
     id: maintainers
     attributes:
       label: Maintainers
-      description: One per line — name, email, GitHub handle. Real contacts only (no placeholders).
+      description: One per line — name, email, GitHub handle. Real contacts only (no placeholders). These are the repository-level default; mention per-package overrides if you need them.
       placeholder: |
         Jane Doe, jane@example-org.com, janedoe
     validations:
@@ -95,6 +106,8 @@ body:
         - label: The repository builds against an Autoware Core container (no `build_depends.repos` needed).
           required: true
         - label: The `ref` above already exists in the repository.
+          required: true
+        - label: Every listed package name equals its package.xml `<name>` at that ref.
           required: true
         - label: The maintainers listed are real and reachable.
           required: true

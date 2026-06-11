@@ -1,39 +1,27 @@
 #!/usr/bin/env python3
-"""Cache each registered package's upstream package.xml on the data branch.
+"""Backfill registered packages' upstream package.xml onto the data branch.
 
-The browse card shows a one-line description per package. The source of truth
-for that text is the package's own ``package.xml`` ``<description>`` — but
-``site/build.py`` never clones the package repos, and the external sweep that
-does check them out discards the working tree. So nothing persisted the
-package.xml anywhere. This script is that missing cache step:
+The browse card shows a one-line description per package, sourced from the
+package's own ``package.xml`` ``<description>`` cached at
+``metadata/<distro>/<package>.xml`` on the data branch (a registry-side
+``description:`` override wins when set).
 
-    discover  → matrix JSON (rows of (distro, package, repository, ref))
-       │
-    validate  → external sweep-package.yaml builds/tests each row
-       │
-    record    → append_history.py writes the pass/fail record, then
-                THIS SCRIPT fetches each row's package.xml at the tested ref
-                and writes it to metadata/<distro>/<package>.xml on the data
-                branch, next to history/.
+In the normal pipeline the SWEEP populates that cache: sweep-repository.yaml
+ships every present package's pristine package.xml inside its result artifact,
+and the record job stages those via build_envelopes.py + append_history.py —
+no extra clone. This script is the MANUAL/BACKFILL path for everything the
+sweep hasn't covered (e.g. seeding the cache after the schema-2 cutover, or
+repairing a gap):
 
-``build.py --metadata-dir`` reads those cached files at site-build time and
-renders the ``<description>`` (unless a ``distributions/*.yaml`` entry sets its
-own ``description:`` override, which wins).
+    scripts/cache_package_xml.py --distributions-dir distributions --push
 
-A package repo may contain several ROS packages; the one whose ``<name>``
-matches the registered package_name is the one cached.
+It clones each registered REPOSITORY once at its registered ref (however many
+packages it hosts), picks each package's package.xml by matching the
+``<name>`` element, and merge-pushes the files to the data branch.
 
-Inputs (one of):
-    --matrix-file PATH       sweep matrix {"include": [rows]} (the swept set)
-    --distributions-dir DIR  fall back to every registered package
-
-    --out DIR                where to write metadata/ files (default: _metadata)
-    --push                   commit + push the cache to the data branch
-                             (otherwise just writes --out locally, for preview)
-
-Usage:
-    scripts/cache_package_xml.py --matrix-file matrix.json --push
-    scripts/cache_package_xml.py --distributions-dir distributions --out _metadata
+    --out DIR   where to write metadata/ files (default: _metadata)
+    --push      commit + push the cache to the data branch
+                (otherwise just writes --out locally, for preview)
 """
 
 from __future__ import annotations
@@ -47,7 +35,7 @@ import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-import yaml
+from registry_load import RegistryError, load_distributions_dir
 
 BOT_NAME = "github-actions[bot]"
 BOT_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
@@ -58,49 +46,39 @@ def run(cmd: list[str], cwd: Path | None = None, check: bool = True) -> subproce
     return subprocess.run(cmd, cwd=cwd, check=check, capture_output=True, text=True)
 
 
-def rows_from_matrix(matrix_file: Path) -> list[dict]:
-    """Normalize sweep-matrix rows to {distro, package, repository, kind, value}."""
-    import json
+def repo_groups_from_distributions(distributions_dir: Path) -> list[dict]:
+    """One group per registered repository: clone once, extract N package.xmls."""
+    try:
+        loaded = load_distributions_dir(distributions_dir)
+    except RegistryError as exc:
+        sys.exit(f"::error::{exc}")
 
-    matrix = json.loads(matrix_file.read_text())
-    rows = []
-    for row in matrix.get("include", []):
-        rows.append(
-            {
-                "distro": row["ros_distro"],
-                "package": row["package_name"],
-                "repository": row["package_repository"],
-                "kind": row.get("ref_kind", "branch"),
-                "value": row["ref_value"],
-            }
-        )
-    return rows
-
-
-def rows_from_distributions(distributions_dir: Path) -> list[dict]:
-    """Every registered package, regardless of when it was last swept."""
-    rows = []
-    for path in sorted(distributions_dir.glob("*.yaml")):
-        doc = yaml.safe_load(path.read_text()) or {}
+    groups: list[dict] = []
+    for path, doc in loaded:
         distro = doc.get("ros_distro") or path.stem
-        for name, spec in (doc.get("packages") or {}).items():
+        for repo_name, spec in sorted((doc.get("repositories") or {}).items()):
             spec = spec or {}
             ref = spec.get("ref") or {}
-            repository = spec.get("repository")
+            url = spec.get("url")
             value = ref.get("value")
-            if not (repository and value):
-                print(f"::warning::{path}::{name}: missing repository/ref; skipping", file=sys.stderr)
+            packages = sorted((spec.get("packages") or {}).keys())
+            if not (url and value and packages):
+                print(
+                    f"::warning::{path}::{repo_name}: missing url/ref/packages; skipping",
+                    file=sys.stderr,
+                )
                 continue
-            rows.append(
+            groups.append(
                 {
                     "distro": distro,
-                    "package": name,
-                    "repository": repository,
+                    "repo_name": repo_name,
+                    "repository": url,
                     "kind": ref.get("kind", "branch"),
-                    "value": value,
+                    "value": str(value),
+                    "packages": packages,
                 }
             )
-    return rows
+    return groups
 
 
 def checkout(repository: str, kind: str, value: str, dest: Path) -> bool:
@@ -130,29 +108,35 @@ def find_package_xml(tree: Path, package_name: str) -> Path | None:
     return None
 
 
-def cache_one(row: dict, out_dir: Path) -> bool:
-    """Fetch one package's package.xml into out_dir/<distro>/<package>.xml."""
+def cache_group(group: dict, out_dir: Path) -> list[dict]:
+    """Clone one repository, cache every registered package's package.xml.
+
+    Returns one {distro, package} row per successfully cached file.
+    """
+    cached: list[dict] = []
     tmp = Path(tempfile.mkdtemp(prefix="pkgxml-"))
     try:
-        if not checkout(row["repository"], row["kind"], row["value"], tmp):
+        if not checkout(group["repository"], group["kind"], group["value"], tmp):
             print(
-                f"::error::{row['distro']}/{row['package']}: could not check out "
-                f"{row['kind']} {row['value']} from {row['repository']}",
+                f"::error::{group['distro']}/{group['repo_name']}: could not check out "
+                f"{group['kind']} {group['value']} from {group['repository']}",
                 file=sys.stderr,
             )
-            return False
-        package_xml = find_package_xml(tmp, row["package"])
-        if package_xml is None:
-            print(
-                f"::error::{row['distro']}/{row['package']}: no package.xml with "
-                f"<name>{row['package']}</name> found in {row['repository']}",
-                file=sys.stderr,
-            )
-            return False
-        target_dir = out_dir / row["distro"]
-        target_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(package_xml, target_dir / f"{row['package']}.xml")
-        return True
+            return cached
+        for package in group["packages"]:
+            package_xml = find_package_xml(tmp, package)
+            if package_xml is None:
+                print(
+                    f"::error::{group['distro']}/{package}: no package.xml with "
+                    f"<name>{package}</name> found in {group['repository']}",
+                    file=sys.stderr,
+                )
+                continue
+            target_dir = out_dir / group["distro"]
+            target_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(package_xml, target_dir / f"{package}.xml")
+            cached.append({"distro": group["distro"], "package": package})
+        return cached
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -172,8 +156,8 @@ def push_metadata(staged: Path, rows: list[dict]) -> None:
             run(["git", "reset", "--hard", "origin/data"], tmpdir)
 
             # Merge the staged files over the existing tree — never replace it.
-            # A sweep stages only the packages it swept; wiping metadata/ first
-            # would delete every non-swept package's cached package.xml.
+            # A backfill stages only what it could cache; wiping metadata/
+            # first would delete every other package's cached package.xml.
             dest = tmpdir / "metadata"
             shutil.copytree(staged, dest, dirs_exist_ok=True)
 
@@ -209,26 +193,25 @@ def commit_message(rows: list[dict]) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument("--matrix-file", help="sweep matrix JSON (the swept set)")
-    source.add_argument("--distributions-dir", help="cache every registered package")
+    parser.add_argument("--distributions-dir", required=True, help="cache every registered package")
     parser.add_argument("--out", default="_metadata", help="local output dir for metadata/ files")
     parser.add_argument("--push", action="store_true", help="commit + push the cache to the data branch")
     args = parser.parse_args()
 
-    if args.matrix_file:
-        rows = rows_from_matrix(Path(args.matrix_file))
-    else:
-        rows = rows_from_distributions(Path(args.distributions_dir))
-
-    if not rows:
-        print("no packages to cache", file=sys.stderr)
+    groups = repo_groups_from_distributions(Path(args.distributions_dir))
+    if not groups:
+        print("no repositories to cache", file=sys.stderr)
         return
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
-    cached = [row for row in rows if cache_one(row, out_dir)]
-    print(f"cached {len(cached)}/{len(rows)} package.xml file(s) -> {out_dir}", file=sys.stderr)
+    cached = [row for group in groups for row in cache_group(group, out_dir)]
+    total = sum(len(g["packages"]) for g in groups)
+    print(
+        f"cached {len(cached)}/{total} package.xml file(s) from {len(groups)} "
+        f"repository clone(s) -> {out_dir}",
+        file=sys.stderr,
+    )
 
     if args.push and cached:
         push_metadata(out_dir, cached)

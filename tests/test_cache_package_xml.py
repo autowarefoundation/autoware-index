@@ -1,16 +1,15 @@
-"""Tests for scripts/cache_package_xml.py (metadata caching, Step 4.1).
+"""Tests for scripts/cache_package_xml.py (metadata cache backfill).
 
-Focus is the pure parts:
+The script is the MANUAL/BACKFILL path for the metadata/ cache (the sweep
+populates it in the normal pipeline). Focus is the pure parts:
   - find_package_xml: picks the package.xml whose <name> matches, not the first.
-  - rows_from_matrix: parses the sweep-matrix JSON into normalized rows.
-  - rows_from_distributions: yields a row per registered package.
+  - repo_groups_from_distributions: one group per registered REPOSITORY
+    (schema_version "2"; clone once, however many packages it hosts).
   - commit_message: pure formatting.
 
-The git/network parts (checkout / cache_one / push_metadata) are exercised with
-the side-effecting calls monkeypatched, so no real clones or pushes happen.
+The git/network parts (checkout / cache_group / push_metadata) are exercised
+with the side-effecting calls monkeypatched, so no real clones or pushes happen.
 """
-
-import json
 
 import pytest
 
@@ -33,6 +32,24 @@ def write_package_xml(directory, name, description="desc", fmt="3"):
         encoding="utf-8",
     )
     return path
+
+
+def make_group(
+    distro="humble",
+    repo_name="repo_a",
+    repository="https://example.com/r.git",
+    kind="branch",
+    value="main",
+    packages=None,
+):
+    return {
+        "distro": distro,
+        "repo_name": repo_name,
+        "repository": repository,
+        "kind": kind,
+        "value": value,
+        "packages": packages if packages is not None else ["my_pkg"],
+    }
 
 
 # --------------------------------------------------------------------------
@@ -111,114 +128,283 @@ def test_find_package_xml_nested_deeply(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# rows_from_matrix
-# --------------------------------------------------------------------------
-def test_rows_from_matrix_normalizes_fields(tmp_path):
-    matrix = {
-        "include": [
-            {
-                "ros_distro": "humble",
-                "package_name": "pkg_a",
-                "package_repository": "https://example.com/a.git",
-                "ref_kind": "tag",
-                "ref_value": "v1.2.3",
-            }
-        ]
-    }
-    mf = tmp_path / "matrix.json"
-    mf.write_text(json.dumps(matrix))
-
-    rows = m.rows_from_matrix(mf)
-    assert rows == [
-        {
-            "distro": "humble",
-            "package": "pkg_a",
-            "repository": "https://example.com/a.git",
-            "kind": "tag",
-            "value": "v1.2.3",
-        }
-    ]
-
-
-def test_rows_from_matrix_defaults_kind_to_branch(tmp_path):
-    matrix = {
-        "include": [
-            {
-                "ros_distro": "jazzy",
-                "package_name": "pkg_b",
-                "package_repository": "repo_b",
-                "ref_value": "main",
-            }
-        ]
-    }
-    mf = tmp_path / "matrix.json"
-    mf.write_text(json.dumps(matrix))
-
-    rows = m.rows_from_matrix(mf)
-    assert rows[0]["kind"] == "branch"
-    assert rows[0]["value"] == "main"
-
-
-def test_rows_from_matrix_empty_include(tmp_path):
-    mf = tmp_path / "matrix.json"
-    mf.write_text(json.dumps({"include": []}))
-    assert m.rows_from_matrix(mf) == []
-
-
-def test_rows_from_matrix_missing_include_key(tmp_path):
-    mf = tmp_path / "matrix.json"
-    mf.write_text(json.dumps({}))
-    assert m.rows_from_matrix(mf) == []
-
-
-def test_rows_from_matrix_multiple_rows_preserve_order(tmp_path):
-    matrix = {
-        "include": [
-            {
-                "ros_distro": "humble",
-                "package_name": "p1",
-                "package_repository": "r1",
-                "ref_value": "v1",
-            },
-            {
-                "ros_distro": "jazzy",
-                "package_name": "p2",
-                "package_repository": "r2",
-                "ref_kind": "sha",
-                "ref_value": "abc123",
-            },
-        ]
-    }
-    mf = tmp_path / "matrix.json"
-    mf.write_text(json.dumps(matrix))
-
-    rows = m.rows_from_matrix(mf)
-    assert [r["package"] for r in rows] == ["p1", "p2"]
-    assert rows[1]["kind"] == "sha"
-
-
-def test_rows_from_matrix_missing_required_key_raises(tmp_path):
-    # package_name is required (direct key access); a missing one is a hard error.
-    matrix = {"include": [{"ros_distro": "humble", "package_repository": "r", "ref_value": "v"}]}
-    mf = tmp_path / "matrix.json"
-    mf.write_text(json.dumps(matrix))
-    with pytest.raises(KeyError):
-        m.rows_from_matrix(mf)
-
-
-# --------------------------------------------------------------------------
-# rows_from_distributions
+# repo_groups_from_distributions
 # --------------------------------------------------------------------------
 def write_distribution(dirpath, filename, content):
     dirpath.mkdir(parents=True, exist_ok=True)
     (dirpath / filename).write_text(content)
 
 
-def test_rows_from_distributions_one_package(tmp_path):
+def test_repo_groups_one_repository(tmp_path):
     write_distribution(
         tmp_path,
         "humble.yaml",
         """
+schema_version: "2"
+ros_distro: humble
+repositories:
+  repo_a:
+    url: https://example.com/repo.git
+    ref:
+      kind: tag
+      value: 1.0.0
+    packages:
+      my_pkg:
+        tags: [sensing]
+""",
+    )
+    groups = m.repo_groups_from_distributions(tmp_path)
+    assert groups == [
+        {
+            "distro": "humble",
+            "repo_name": "repo_a",
+            "repository": "https://example.com/repo.git",
+            "kind": "tag",
+            "value": "1.0.0",
+            "packages": ["my_pkg"],
+        }
+    ]
+
+
+def test_repo_groups_one_group_for_multi_package_repo(tmp_path):
+    # ONE group per repository however many packages it hosts; package names
+    # come out sorted.
+    write_distribution(
+        tmp_path,
+        "humble.yaml",
+        """
+schema_version: "2"
+ros_distro: humble
+repositories:
+  shared_repo:
+    url: https://example.com/shared.git
+    ref:
+      kind: branch
+      value: main
+    packages:
+      zeta_pkg:
+        tags: [a]
+      alpha_pkg:
+        tags: [a]
+""",
+    )
+    groups = m.repo_groups_from_distributions(tmp_path)
+    assert len(groups) == 1
+    assert groups[0]["repo_name"] == "shared_repo"
+    assert groups[0]["packages"] == ["alpha_pkg", "zeta_pkg"]
+
+
+def test_repo_groups_defaults_distro_to_stem(tmp_path):
+    # No ros_distro key -> the file stem is used as the distro.
+    write_distribution(
+        tmp_path,
+        "jazzy.yaml",
+        """
+schema_version: "2"
+repositories:
+  repo_a:
+    url: repo
+    ref:
+      value: main
+    packages:
+      pkg:
+        tags: [a]
+""",
+    )
+    groups = m.repo_groups_from_distributions(tmp_path)
+    assert groups[0]["distro"] == "jazzy"
+
+
+def test_repo_groups_defaults_kind_to_branch(tmp_path):
+    write_distribution(
+        tmp_path,
+        "humble.yaml",
+        """
+schema_version: "2"
+ros_distro: humble
+repositories:
+  repo_a:
+    url: repo
+    ref:
+      value: somebranch
+    packages:
+      pkg:
+        tags: [a]
+""",
+    )
+    groups = m.repo_groups_from_distributions(tmp_path)
+    assert groups[0]["kind"] == "branch"
+    assert groups[0]["value"] == "somebranch"
+
+
+def test_repo_groups_skips_missing_url(tmp_path, capsys):
+    write_distribution(
+        tmp_path,
+        "humble.yaml",
+        """
+schema_version: "2"
+ros_distro: humble
+repositories:
+  no_url_repo:
+    ref:
+      value: main
+    packages:
+      pkg_x:
+        tags: [a]
+  good_repo:
+    url: repo
+    ref:
+      value: main
+    packages:
+      pkg_y:
+        tags: [a]
+""",
+    )
+    groups = m.repo_groups_from_distributions(tmp_path)
+    assert [g["repo_name"] for g in groups] == ["good_repo"]
+    err = capsys.readouterr().err
+    assert "no_url_repo" in err
+    assert "missing url/ref/packages" in err
+    assert "::warning::" in err
+
+
+def test_repo_groups_skips_missing_ref_value(tmp_path, capsys):
+    write_distribution(
+        tmp_path,
+        "humble.yaml",
+        """
+schema_version: "2"
+ros_distro: humble
+repositories:
+  no_value_repo:
+    url: repo
+    packages:
+      pkg:
+        tags: [a]
+""",
+    )
+    assert m.repo_groups_from_distributions(tmp_path) == []
+    assert "no_value_repo" in capsys.readouterr().err
+
+
+def test_repo_groups_skips_empty_packages(tmp_path, capsys):
+    write_distribution(
+        tmp_path,
+        "humble.yaml",
+        """
+schema_version: "2"
+ros_distro: humble
+repositories:
+  no_packages_repo:
+    url: repo
+    ref:
+      value: main
+    packages: {}
+""",
+    )
+    assert m.repo_groups_from_distributions(tmp_path) == []
+    assert "no_packages_repo" in capsys.readouterr().err
+
+
+def test_repo_groups_null_repo_spec_skipped(tmp_path, capsys):
+    # A repo entry mapped to null (spec is None) must not crash; warn + skip.
+    write_distribution(
+        tmp_path,
+        "humble.yaml",
+        """
+schema_version: "2"
+ros_distro: humble
+repositories:
+  null_repo:
+""",
+    )
+    assert m.repo_groups_from_distributions(tmp_path) == []
+    assert "null_repo" in capsys.readouterr().err
+
+
+def test_repo_groups_multiple_files_and_repos_sorted(tmp_path):
+    write_distribution(
+        tmp_path,
+        "humble.yaml",
+        """
+schema_version: "2"
+ros_distro: humble
+repositories:
+  zzz_repo:
+    url: rz
+    ref:
+      value: vz
+    packages:
+      z_pkg:
+        tags: [a]
+  aaa_repo:
+    url: ra
+    ref:
+      value: va
+    packages:
+      a_pkg:
+        tags: [a]
+""",
+    )
+    write_distribution(
+        tmp_path,
+        "jazzy.yaml",
+        """
+schema_version: "2"
+ros_distro: jazzy
+repositories:
+  mid_repo:
+    url: rm
+    ref:
+      value: vm
+    packages:
+      m_pkg:
+        tags: [a]
+""",
+    )
+    groups = m.repo_groups_from_distributions(tmp_path)
+    # files iterated sorted by name; repos sorted by entry name within a file.
+    assert [(g["distro"], g["repo_name"]) for g in groups] == [
+        ("humble", "aaa_repo"),
+        ("humble", "zzz_repo"),
+        ("jazzy", "mid_repo"),
+    ]
+
+
+def test_repo_groups_empty_dir(tmp_path):
+    assert m.repo_groups_from_distributions(tmp_path) == []
+
+
+def test_repo_groups_ignores_non_yaml(tmp_path):
+    write_distribution(
+        tmp_path,
+        "humble.yaml",
+        """
+schema_version: "2"
+ros_distro: humble
+repositories:
+  repo_a:
+    url: ra
+    ref:
+      value: va
+    packages:
+      a:
+        tags: [x]
+""",
+    )
+    (tmp_path / "README.md").write_text("not a distribution")
+    (tmp_path / "notes.txt").write_text("ignore me")
+    groups = m.repo_groups_from_distributions(tmp_path)
+    assert [g["repo_name"] for g in groups] == ["repo_a"]
+
+
+def test_repo_groups_v1_file_exits(tmp_path):
+    # schema_version "1" hard-fails through the shared loader -> sys.exit.
+    write_distribution(
+        tmp_path,
+        "humble.yaml",
+        """
+schema_version: "1"
 ros_distro: humble
 packages:
   my_pkg:
@@ -228,172 +414,10 @@ packages:
       value: 1.0.0
 """,
     )
-    rows = m.rows_from_distributions(tmp_path)
-    assert rows == [
-        {
-            "distro": "humble",
-            "package": "my_pkg",
-            "repository": "https://example.com/repo.git",
-            "kind": "tag",
-            "value": "1.0.0",
-        }
-    ]
-
-
-def test_rows_from_distributions_defaults_distro_to_stem(tmp_path):
-    # No ros_distro key -> the file stem is used as the distro.
-    write_distribution(
-        tmp_path,
-        "jazzy.yaml",
-        """
-packages:
-  pkg:
-    repository: repo
-    ref:
-      value: main
-""",
-    )
-    rows = m.rows_from_distributions(tmp_path)
-    assert rows[0]["distro"] == "jazzy"
-
-
-def test_rows_from_distributions_defaults_kind_to_branch(tmp_path):
-    write_distribution(
-        tmp_path,
-        "humble.yaml",
-        """
-ros_distro: humble
-packages:
-  pkg:
-    repository: repo
-    ref:
-      value: somebranch
-""",
-    )
-    rows = m.rows_from_distributions(tmp_path)
-    assert rows[0]["kind"] == "branch"
-    assert rows[0]["value"] == "somebranch"
-
-
-def test_rows_from_distributions_skips_missing_repository(tmp_path, capsys):
-    write_distribution(
-        tmp_path,
-        "humble.yaml",
-        """
-ros_distro: humble
-packages:
-  no_repo:
-    ref:
-      value: main
-  good:
-    repository: repo
-    ref:
-      value: main
-""",
-    )
-    rows = m.rows_from_distributions(tmp_path)
-    assert [r["package"] for r in rows] == ["good"]
-    err = capsys.readouterr().err
-    assert "no_repo" in err
-    assert "missing repository/ref" in err
-
-
-def test_rows_from_distributions_skips_missing_value(tmp_path, capsys):
-    write_distribution(
-        tmp_path,
-        "humble.yaml",
-        """
-ros_distro: humble
-packages:
-  no_value:
-    repository: repo
-""",
-    )
-    rows = m.rows_from_distributions(tmp_path)
-    assert rows == []
-    assert "no_value" in capsys.readouterr().err
-
-
-def test_rows_from_distributions_multiple_files_and_packages(tmp_path):
-    write_distribution(
-        tmp_path,
-        "humble.yaml",
-        """
-ros_distro: humble
-packages:
-  a:
-    repository: ra
-    ref:
-      value: va
-  b:
-    repository: rb
-    ref:
-      value: vb
-""",
-    )
-    write_distribution(
-        tmp_path,
-        "jazzy.yaml",
-        """
-ros_distro: jazzy
-packages:
-  c:
-    repository: rc
-    ref:
-      value: vc
-""",
-    )
-    rows = m.rows_from_distributions(tmp_path)
-    # files iterated sorted by name; within a file, dict order preserved.
-    assert [(r["distro"], r["package"]) for r in rows] == [
-        ("humble", "a"),
-        ("humble", "b"),
-        ("jazzy", "c"),
-    ]
-
-
-def test_rows_from_distributions_empty_dir(tmp_path):
-    assert m.rows_from_distributions(tmp_path) == []
-
-
-def test_rows_from_distributions_empty_yaml_file(tmp_path):
-    write_distribution(tmp_path, "humble.yaml", "")
-    # Empty doc -> no packages, no crash.
-    assert m.rows_from_distributions(tmp_path) == []
-
-
-def test_rows_from_distributions_null_spec_skipped(tmp_path, capsys):
-    # A package mapped to null (spec is None) must not crash; missing repo/ref.
-    write_distribution(
-        tmp_path,
-        "humble.yaml",
-        """
-ros_distro: humble
-packages:
-  nullpkg:
-""",
-    )
-    assert m.rows_from_distributions(tmp_path) == []
-    assert "nullpkg" in capsys.readouterr().err
-
-
-def test_rows_from_distributions_ignores_non_yaml(tmp_path):
-    write_distribution(
-        tmp_path,
-        "humble.yaml",
-        """
-ros_distro: humble
-packages:
-  a:
-    repository: ra
-    ref:
-      value: va
-""",
-    )
-    (tmp_path / "README.md").write_text("not a distribution")
-    (tmp_path / "notes.txt").write_text("ignore me")
-    rows = m.rows_from_distributions(tmp_path)
-    assert [r["package"] for r in rows] == ["a"]
+    with pytest.raises(SystemExit) as excinfo:
+        m.repo_groups_from_distributions(tmp_path)
+    assert str(excinfo.value).startswith("::error::")
+    assert "not supported" in str(excinfo.value)
 
 
 # --------------------------------------------------------------------------
@@ -503,48 +527,78 @@ def test_checkout_sha_checkout_failure_returns_false(monkeypatch, tmp_path):
 
 
 # --------------------------------------------------------------------------
-# cache_one (checkout monkeypatched; real find_package_xml + copy)
+# cache_group (checkout monkeypatched; real find_package_xml + copy)
 # --------------------------------------------------------------------------
-def test_cache_one_success_copies_package_xml(monkeypatch, tmp_path):
+def test_cache_group_one_checkout_for_many_packages(monkeypatch, tmp_path):
+    # The whole point of grouping: ONE clone per repository, N files cached.
+    checkouts = []
+
     def fake_checkout(repository, kind, value, dest):
-        # Populate the temp checkout dir with a matching package.xml.
+        checkouts.append((repository, kind, value))
+        write_package_xml(dest / "a", "alpha", description="ALPHA")
+        write_package_xml(dest / "b", "beta", description="BETA")
+        return True
+
+    monkeypatch.setattr(m, "checkout", fake_checkout)
+    out = tmp_path / "out"
+    group = make_group(distro="humble", packages=["alpha", "beta"])
+    rows = m.cache_group(group, out)
+
+    assert len(checkouts) == 1
+    assert rows == [
+        {"distro": "humble", "package": "alpha"},
+        {"distro": "humble", "package": "beta"},
+    ]
+    assert "ALPHA" in (out / "humble" / "alpha.xml").read_text()
+    assert "BETA" in (out / "humble" / "beta.xml").read_text()
+
+
+def test_cache_group_single_package(monkeypatch, tmp_path):
+    def fake_checkout(repository, kind, value, dest):
         write_package_xml(dest / "src" / "my_pkg", "my_pkg", description="Hello")
         return True
 
     monkeypatch.setattr(m, "checkout", fake_checkout)
     out = tmp_path / "out"
-    row = {"distro": "humble", "package": "my_pkg", "repository": "r", "kind": "branch", "value": "main"}
-    assert m.cache_one(row, out) is True
+    rows = m.cache_group(make_group(packages=["my_pkg"]), out)
+    assert rows == [{"distro": "humble", "package": "my_pkg"}]
 
     cached = out / "humble" / "my_pkg.xml"
     assert cached.exists()
     assert "Hello" in cached.read_text()
 
 
-def test_cache_one_checkout_failure_returns_false(monkeypatch, tmp_path, capsys):
+def test_cache_group_checkout_failure_returns_no_rows(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(m, "checkout", lambda *a, **k: False)
     out = tmp_path / "out"
-    row = {"distro": "humble", "package": "p", "repository": "r", "kind": "branch", "value": "main"}
-    assert m.cache_one(row, out) is False
-    assert "could not check out" in capsys.readouterr().err
+    rows = m.cache_group(make_group(packages=["p"]), out)
+    assert rows == []
+    err = capsys.readouterr().err
+    assert "could not check out" in err
     assert not (out / "humble" / "p.xml").exists()
 
 
-def test_cache_one_no_matching_package_xml_returns_false(monkeypatch, tmp_path, capsys):
+def test_cache_group_missing_package_xml_errors_but_others_cache(monkeypatch, tmp_path, capsys):
+    # One registered package has no matching package.xml in the tree: it gets
+    # a ::error, while its siblings still cache (no all-or-nothing).
     def fake_checkout(repository, kind, value, dest):
-        write_package_xml(dest / "other", "some_other_pkg")
+        write_package_xml(dest / "a", "alpha", description="ALPHA")
         return True
 
     monkeypatch.setattr(m, "checkout", fake_checkout)
     out = tmp_path / "out"
-    row = {"distro": "humble", "package": "wanted_pkg", "repository": "r", "kind": "branch", "value": "main"}
-    assert m.cache_one(row, out) is False
+    rows = m.cache_group(make_group(packages=["alpha", "ghost_pkg"]), out)
+
+    assert rows == [{"distro": "humble", "package": "alpha"}]
+    assert (out / "humble" / "alpha.xml").exists()
+    assert not (out / "humble" / "ghost_pkg.xml").exists()
     err = capsys.readouterr().err
     assert "no package.xml" in err
-    assert "wanted_pkg" in err
+    assert "ghost_pkg" in err
+    assert "::error::" in err
 
 
-def test_cache_one_picks_matching_among_many(monkeypatch, tmp_path):
+def test_cache_group_picks_matching_among_many(monkeypatch, tmp_path):
     def fake_checkout(repository, kind, value, dest):
         write_package_xml(dest / "a", "alpha", description="ALPHA")
         write_package_xml(dest / "b", "beta", description="BETA")
@@ -552,12 +606,12 @@ def test_cache_one_picks_matching_among_many(monkeypatch, tmp_path):
 
     monkeypatch.setattr(m, "checkout", fake_checkout)
     out = tmp_path / "out"
-    row = {"distro": "humble", "package": "beta", "repository": "r", "kind": "branch", "value": "main"}
-    assert m.cache_one(row, out) is True
+    rows = m.cache_group(make_group(packages=["beta"]), out)
+    assert rows == [{"distro": "humble", "package": "beta"}]
     assert "BETA" in (out / "humble" / "beta.xml").read_text()
 
 
-def test_cache_one_cleans_up_tempdir(monkeypatch, tmp_path):
+def test_cache_group_cleans_up_tempdir(monkeypatch, tmp_path):
     captured = {}
 
     def fake_checkout(repository, kind, value, dest):
@@ -567,8 +621,7 @@ def test_cache_one_cleans_up_tempdir(monkeypatch, tmp_path):
 
     monkeypatch.setattr(m, "checkout", fake_checkout)
     out = tmp_path / "out"
-    row = {"distro": "humble", "package": "p", "repository": "r", "kind": "branch", "value": "main"}
-    assert m.cache_one(row, out) is True
+    assert m.cache_group(make_group(packages=["p"]), out) != []
     # The temp checkout dir is removed in the finally block.
     assert not captured["dest"].exists()
 
@@ -722,3 +775,67 @@ def test_push_metadata_exits_after_max_retries(monkeypatch, tmp_path):
     rows = [{"distro": "humble", "package": "p"}]
     with pytest.raises(SystemExit):
         m.push_metadata(staged, rows)
+
+
+# --------------------------------------------------------------------------
+# main (CLI surface: --distributions-dir is the one required input)
+# --------------------------------------------------------------------------
+def test_main_requires_distributions_dir(monkeypatch):
+    # --matrix-file is gone; --distributions-dir is required, not part of a
+    # mutually-exclusive group. argparse exits with usage error code 2.
+    monkeypatch.setattr("sys.argv", ["cache_package_xml.py"])
+    with pytest.raises(SystemExit) as excinfo:
+        m.main()
+    assert excinfo.value.code == 2
+
+
+def test_main_no_repositories_early_return(monkeypatch, tmp_path, capsys):
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    monkeypatch.setattr(
+        "sys.argv",
+        ["cache_package_xml.py", "--distributions-dir", str(dist), "--out", str(tmp_path / "out")],
+    )
+    m.main()
+    assert "no repositories to cache" in capsys.readouterr().err
+    assert not (tmp_path / "out").exists()  # returned before mkdir
+
+
+def test_main_caches_locally_without_push(monkeypatch, tmp_path, capsys):
+    write_distribution(
+        tmp_path / "dist",
+        "humble.yaml",
+        """
+schema_version: "2"
+ros_distro: humble
+repositories:
+  repo_a:
+    url: https://example.com/repo.git
+    ref:
+      kind: branch
+      value: main
+    packages:
+      my_pkg:
+        tags: [sensing]
+""",
+    )
+
+    def fake_checkout(repository, kind, value, dest):
+        write_package_xml(dest / "my_pkg", "my_pkg", description="Hello")
+        return True
+
+    monkeypatch.setattr(m, "checkout", fake_checkout)
+    monkeypatch.setattr(
+        m, "push_metadata",
+        lambda *a, **k: pytest.fail("push_metadata must not run without --push"),
+    )
+    out = tmp_path / "out"
+    monkeypatch.setattr(
+        "sys.argv",
+        ["cache_package_xml.py", "--distributions-dir", str(tmp_path / "dist"), "--out", str(out)],
+    )
+    m.main()
+
+    assert (out / "humble" / "my_pkg.xml").exists()
+    err = capsys.readouterr().err
+    assert "cached 1/1 package.xml file(s) from 1 repository clone(s)" in err

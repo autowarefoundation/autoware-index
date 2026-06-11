@@ -1,36 +1,40 @@
 name: sweep-nightly
 
-# Daily re-validation of every `kind: branch` package. Branch tips move under a
-# fixed ref value, so a rolling ref needs periodic re-testing against the
-# current latest published Autoware release (resolved inside sweep-package.yaml).
-# Pinned tag/sha refs are immutable and are not swept here — the eager sweep
-# already recorded them.
+# Daily re-validation of every `kind: branch` repository (tips move under a
+# fixed ref value), UNION the level-triggered state-diff as catch-up — any
+# repository whose entry doesn't match its last conclusively-recorded
+# data:state/ cursor (e.g. an eager run lost to cancellation) is swept here
+# too. Pinned tag/sha repositories with an up-to-date cursor are not re-swept:
+# their cells are immutable.
 #
-# Same discover -> validate -> record pipeline as sweep-eager.yaml. All sweep
-# workflows that push to the orphan data branch share the `data-branch-write`
-# concurrency group so they serialize rather than race.
+# Same discover -> validate -> record pipeline as sweep-eager.yaml; one matrix
+# row per (distro, repository), per-package verdicts derived inside
+# sweep-repository.yaml. Only the RECORD job serializes on the data branch
+# (`data-branch-write`).
 
 on:
   schedule:
     - cron: '0 6 * * *'   # daily UTC
   workflow_dispatch:
 
-concurrency:
-  group: data-branch-write
-  cancel-in-progress: false
-
 permissions:
-  contents: write    # required for the record job's push to the data branch
+  contents: read
 
 jobs:
   discover:
-    name: discover branch refs
+    name: discover branch + stale repositories
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       has-changes: ${{ steps.matrix.outputs.has-changes }}
     steps:
       - uses: actions/checkout@v6
+
+      - name: Check out data branch (state cursors)
+        uses: actions/checkout@v6
+        with:
+          ref: data
+          path: _data
 
       - uses: actions/setup-python@v6
         with:
@@ -43,15 +47,15 @@ jobs:
         id: matrix
         run: |
           set -euo pipefail
-          matrix=$(scripts/sweep_nightly_matrix.py)
+          matrix=$(scripts/sweep_matrix.py --mode nightly --state-dir _data/state)
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           rows=$(printf '%s' "$matrix" | python -c "import json,sys; print(len(json.load(sys.stdin).get('include', [])))")
           if [ "$rows" -gt 0 ]; then
             echo "has-changes=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::nightly sweep dispatched for $rows branch ref(s)"
+            echo "::notice::nightly sweep dispatched for $rows repository row(s)"
           else
             echo "has-changes=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::no branch refs registered; skipping validate + record"
+            echo "::notice::no branch refs registered and no stale state; skipping validate + record"
           fi
 
   validate:
@@ -60,12 +64,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
-    uses: autowarefoundation/autoware-index-github-actions/.github/workflows/sweep-package.yaml@main
+    uses: autowarefoundation/autoware-index-github-actions/.github/workflows/sweep-repository.yaml@main
     with:
       ros_distro: ${{ matrix.ros_distro }}
-      package_name: ${{ matrix.package_name }}
-      package_repository: ${{ matrix.package_repository }}
-      package_ref: ${{ matrix.ref_value }}
+      repo_name: ${{ matrix.repo_name }}
+      repository: ${{ matrix.repository }}
+      ref_kind: ${{ matrix.ref_kind }}
+      ref_value: ${{ matrix.ref_value }}
+      packages: ${{ matrix.packages }}
 
   record:
     name: record history
@@ -73,6 +79,9 @@ jobs:
     # Run even if some validate matrix rows failed — we record failures too.
     if: always() && needs.discover.outputs.has-changes == 'true'
     runs-on: ubuntu-24.04
+    concurrency:
+      group: data-branch-write
+      cancel-in-progress: false
     permissions:
       contents: write    # push to the data branch
       actions: write     # trigger the pages workflow to rebuild the site
@@ -105,16 +114,19 @@ jobs:
             --results-dir validate-results \
             --sweep-kind nightly \
             --actions-run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --output envelopes.json
+            --output envelopes.json \
+            --states-output states.json \
+            --metadata-output staged-metadata
           cat envelopes.json
 
       - name: Append to data branch
-        run: scripts/append_history.py --records envelopes.json
-
-      - name: Cache package.xml on data branch
-        # Refresh each swept package's upstream package.xml so the browse card
-        # can render its <description>. Independent of build/test outcome.
-        run: scripts/cache_package_xml.py --matrix-file matrix.json --push
+        # History records, state cursors, and the package.xml metadata cache
+        # land in ONE commit, so "state advanced" always implies "records landed".
+        run: |
+          scripts/append_history.py \
+            --records envelopes.json \
+            --states states.json \
+            --metadata-dir staged-metadata
 
       - name: Trigger site rebuild
         # Best-effort: refresh the Pages site with the new records instead of
