@@ -34,7 +34,7 @@ repos:
 
   # Mirrors CI: distributions/*.yaml must conform to the registry schema.
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.37.2
+    rev: 0.37.3
     hooks:
       - id: check-jsonschema
         name: distributions conform to schema
