@@ -500,7 +500,7 @@ function downloadRepos() {
   const text = document.querySelector("#repos-out code").textContent;
   const blob = new Blob([text], { type: "text/yaml" });
   const url = URL.createObjectURL(blob);
-  const a = el("a", { href: url, download: `${state.active}.repos` });
+  const a = el("a", { href: url, download: "autoware-index.repos" });
   document.body.append(a);
   a.click();
   a.remove();
