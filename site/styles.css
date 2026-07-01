@@ -109,6 +109,8 @@ footer .sep { color:var(--border); }
 .export-block { margin-bottom:12px; }
 .export-head { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:6px; }
 .export-head h3 { margin:0; font-size:13px; }
+.export-head h3 a { color:var(--link); text-decoration:none; }
+.export-head h3 a:hover { text-decoration:underline; }
 .export-actions { display:flex; gap:6px; }
 .export-actions button { font-size:12px; color:var(--link); background:#fff; border:1px solid var(--border);
         border-radius:6px; padding:3px 10px; cursor:pointer; }
