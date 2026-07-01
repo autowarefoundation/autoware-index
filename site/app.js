@@ -7,7 +7,7 @@
 // the canonical composition module vendored from the aw-index-cli repo, so the
 // site and the CLI never diverge (see site/compose.mjs and the drift-check CI).
 
-import { composeReposFile, composeCommand } from "./compose.mjs";
+import { composeReposFile } from "./compose.mjs";
 
 const STATUS_LABELS = { pass: "passing", fail: "failing", unknown: "not yet swept" };
 const CART_STORAGE_KEY = "awx-cart";
@@ -451,10 +451,12 @@ function renderExport(distro, items) {
     reposText = `# could not generate .repos: ${err.message}`;
   }
   document.querySelector("#repos-out code").textContent = reposText;
-  document.querySelector("#cmd-out code").textContent = composeCommand({
-    rosDistro: distro,
-    packages: names,
-  });
+  // The compose command that regenerates this .repos (writes autoware-index.repos
+  // in the workspace root). Built here rather than via compose.mjs's
+  // composeCommand so it can be shown without the `--stdout | vcs import src`
+  // one-liner; the vendored compose.mjs stays byte-identical to the release.
+  document.querySelector("#cmd-out code").textContent =
+    `aw-index-cli compose --rosdistro ${distro} --packages ${names.join(" ")}`;
   document.getElementById("export").hidden = false;
 }
 
