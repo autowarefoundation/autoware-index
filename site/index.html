@@ -17,19 +17,52 @@
   </div>
 </header>
 <div class="wrap">
-  <div class="controls">
-    <input type="search" id="q" placeholder="Search packages, tags, maintainers…" autocomplete="off">
-    <select id="distro"><option value="">All distros</option></select>
-    <select id="tag"><option value="">All tags</option></select>
-    <select id="status">
-      <option value="">Any status</option>
-      <option value="pass">Passing</option>
-      <option value="fail">Failing</option>
-      <option value="unknown">Not yet swept</option>
-    </select>
-  </div>
-  <div id="cards"></div>
-  <div id="empty" class="empty" hidden>No packages match your filters.</div>
+  <main class="browse">
+    <div class="controls">
+      <input type="search" id="q" placeholder="Search packages, tags, maintainers…" autocomplete="off">
+      <select id="distro" aria-label="ROS distro" title="ROS distro"></select>
+      <select id="tag"><option value="">All tags</option></select>
+      <select id="status">
+        <option value="">Any status</option>
+        <option value="pass">Passing</option>
+        <option value="fail">Failing</option>
+        <option value="unknown">Not yet swept</option>
+      </select>
+    </div>
+    <div id="cards"></div>
+    <div id="empty" class="empty" hidden>No packages match your filters.</div>
+  </main>
+  <aside id="cart" aria-label="Repos builder">
+    <div class="cart-head">
+      <h2>Repos builder</h2>
+      <button id="cart-clear" type="button">Clear</button>
+    </div>
+    <p class="cart-scope">Distro: <span id="cart-distro"></span></p>
+    <p id="cart-empty" class="cart-empty">Add packages to build a <code>.repos</code> file.</p>
+    <div id="cart-items"></div>
+    <div id="export" class="export" hidden>
+      <div class="export-block">
+        <div class="export-head">
+          <h3>.repos file</h3>
+          <span class="export-actions">
+            <button type="button" data-copy="repos">Copy</button>
+            <button type="button" id="download-repos">Download</button>
+          </span>
+        </div>
+        <pre class="export-out" id="repos-out"><code></code></pre>
+      </div>
+      <div class="export-block">
+        <div class="export-head">
+          <h3>Or run aw-index-cli</h3>
+          <span class="export-actions">
+            <button type="button" data-copy="cmd">Copy</button>
+          </span>
+        </div>
+        <pre class="export-out" id="cmd-out"><code></code></pre>
+      </div>
+      <p class="copy-status" id="copy-status" aria-live="polite"></p>
+    </div>
+  </aside>
 </div>
 <footer>
   <div class="foundation"><a href="https://autoware.org">Autoware Foundation</a></div>
@@ -49,6 +82,6 @@
   <a href="https://github.com/autowarefoundation/autoware-index/tree/main/distributions">distributions/</a>,
   and the validation history on the <a href="https://github.com/autowarefoundation/autoware-index/tree/data">data branch</a>.</p></div>
 </noscript>
-<script src="app.js" defer></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>
