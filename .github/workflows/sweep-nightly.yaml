@@ -28,10 +28,10 @@ jobs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       has-changes: ${{ steps.matrix.outputs.has-changes }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Check out data branch (state cursors)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: data
           path: _data
@@ -86,7 +86,7 @@ jobs:
       contents: write    # push to the data branch
       actions: write     # trigger the pages workflow to rebuild the site
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
