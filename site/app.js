@@ -454,9 +454,11 @@ function renderExport(distro, items) {
   // The compose command that regenerates this .repos (writes autoware-index.repos
   // in the workspace root). Built here rather than via compose.mjs's
   // composeCommand so it can be shown without the `--stdout | vcs import src`
-  // one-liner; the vendored compose.mjs stays byte-identical to the release.
-  document.querySelector("#cmd-out code").textContent =
-    `aw-index-cli compose --rosdistro ${distro} --packages ${names.join(" ")}`;
+  // one-liner and wrapped one argument/package per line for readability in the
+  // sidebar; the vendored compose.mjs stays byte-identical to the release.
+  const bs = String.fromCharCode(92); // backslash for shell line-continuation
+  const cmdLines = ["aw-index-cli compose", ` --rosdistro ${distro}`, " --packages", ...names];
+  document.querySelector("#cmd-out code").textContent = cmdLines.join(` ${bs}\n`);
   document.getElementById("export").hidden = false;
 }
 
