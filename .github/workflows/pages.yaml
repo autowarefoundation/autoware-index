@@ -49,6 +49,26 @@ jobs:
       - name: Install deps
         run: pip install pyyaml
 
+      - name: Fetch the latest aw-index-cli compose.mjs
+        # The repos builder reuses aw-index-cli's compose module. Rather than
+        # vendoring a pinned copy, bake in the latest release at deploy time so
+        # it stays current with no manual updates. The committed site/compose.mjs
+        # is a local/offline fallback, used only if this fetch fails.
+        run: |
+          repo=autowarefoundation/aw-index-cli
+          tag="$(git ls-remote --tags "https://github.com/$repo.git" 2>/dev/null \
+            | sed -nE 's#.*refs/tags/([0-9]+\.[0-9]+\.[0-9]+)(\^\{\})?$#\1#p' \
+            | sort -V | tail -1)"
+          if [ -n "$tag" ] \
+            && curl -fsSL "https://raw.githubusercontent.com/$repo/$tag/js/compose.mjs" -o /tmp/compose.mjs \
+            && [ -s /tmp/compose.mjs ] \
+            && node --check /tmp/compose.mjs; then
+            cp /tmp/compose.mjs site/compose.mjs
+            echo "repos builder: using aw-index-cli@$tag js/compose.mjs"
+          else
+            echo "::warning::could not fetch the latest aw-index-cli compose.mjs; using the committed site/compose.mjs fallback"
+          fi
+
       - name: Build site
         run: |
           python site/build.py \

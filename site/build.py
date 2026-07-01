@@ -37,7 +37,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 SITE_DIR = Path(__file__).resolve().parent
-STATIC_ASSETS = ("index.html", "styles.css", "app.js")
+STATIC_ASSETS = ("index.html", "styles.css", "app.js", "compose.mjs")
 
 sys.path.insert(0, str(SITE_DIR.parent / "scripts"))
 from registry_load import RegistryError, flatten_packages, load_distributions_dir  # noqa: E402
