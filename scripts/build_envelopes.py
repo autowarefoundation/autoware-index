@@ -50,10 +50,10 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+from pathlib import Path
 import re
 import shutil
 import sys
-from pathlib import Path
 
 import jsonschema
 
@@ -119,7 +119,9 @@ def envelopes_for_row(
 
     autoware_version = result.get("autoware_version")
     if not autoware_version:
-        return [], [f"{distro}/{row['repo_name']}: result.json has no autoware_version (resolve did not complete)"]
+        return [], [
+            f"{distro}/{row['repo_name']}: result.json has no autoware_version (resolve did not complete)"
+        ]
 
     resolved_sha = result.get("resolved_sha") or ""
     if not SHA_RE.match(resolved_sha):
@@ -192,8 +194,12 @@ def main() -> None:
     parser.add_argument("--sweep-kind", required=True, choices=["eager", "nightly"])
     parser.add_argument("--actions-run-url", required=True)
     parser.add_argument("--output", required=True, help="Where to write the envelope array")
-    parser.add_argument("--states-output", required=True, help="Where to write the state-advance array")
-    parser.add_argument("--metadata-output", required=True, help="Dir to stage metadata/<distro>/<pkg>.xml files")
+    parser.add_argument(
+        "--states-output", required=True, help="Where to write the state-advance array"
+    )
+    parser.add_argument(
+        "--metadata-output", required=True, help="Dir to stage metadata/<distro>/<pkg>.xml files"
+    )
     args = parser.parse_args()
 
     matrix = json.loads(Path(args.matrix_file).read_text())
@@ -217,7 +223,9 @@ def main() -> None:
             continue
         result = json.loads(result_file.read_text())
 
-        envelopes, skips = envelopes_for_row(row, result, args.sweep_kind, now, args.actions_run_url)
+        envelopes, skips = envelopes_for_row(
+            row, result, args.sweep_kind, now, args.actions_run_url
+        )
         for reason in skips:
             print(f"::error::{reason}; skipping envelope", file=sys.stderr)
 

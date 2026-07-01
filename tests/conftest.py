@@ -5,9 +5,9 @@ not an installed package. This conftest puts both directories on sys.path so a
 test can do e.g. `import build_envelopes` or (for site/build.py) `import build`.
 """
 
+from pathlib import Path
 import subprocess
 import sys
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -29,7 +29,7 @@ def repo_root() -> Path:
 
 @pytest.fixture
 def git_repo(tmp_path):
-    """A throwaway git repo with deterministic identity.
+    """Create a throwaway git repo with deterministic identity.
 
     Returns a SimpleNamespace with:
       .path   -> Path to the repo working tree

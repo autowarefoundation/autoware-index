@@ -12,10 +12,8 @@ ever made.
 import textwrap
 from types import SimpleNamespace
 
-import pytest
-
 import check_refs
-
+import pytest
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -39,6 +37,7 @@ def write_yaml(tmp_path, body, filename="jazzy.yaml"):
 # ===========================================================================
 # check_maintainers
 # ===========================================================================
+
 
 class TestCheckMaintainers:
     def test_real_maintainer_accepted(self):
@@ -152,45 +151,65 @@ class TestCheckMaintainers:
 # check_ref — sha kind
 # ===========================================================================
 
+
 class TestCheckRefSha:
     def test_valid_sha_no_network(self):
         ref = {"kind": "sha", "value": GOOD_SHA}
-        assert check_refs.check_ref("f.yaml", "repo", "https://r", ref, network=False, resolve_cache={}) == []
+        assert (
+            check_refs.check_ref(
+                "f.yaml", "repo", "https://r", ref, network=False, resolve_cache={}
+            )
+            == []
+        )
 
     def test_valid_sha_with_network_does_not_probe(self, monkeypatch):
         # sha kind returns before any ls_remote call even when network=True.
         monkeypatch.setattr(
-            check_refs, "ls_remote",
+            check_refs,
+            "ls_remote",
             lambda *a, **k: pytest.fail("ls_remote must not be called for sha"),
         )
         ref = {"kind": "sha", "value": GOOD_SHA}
-        assert check_refs.check_ref("f.yaml", "repo", "https://r", ref, network=True, resolve_cache={}) == []
+        assert (
+            check_refs.check_ref("f.yaml", "repo", "https://r", ref, network=True, resolve_cache={})
+            == []
+        )
 
     def test_short_sha_rejected(self):
         ref = {"kind": "sha", "value": "abc123"}
-        errors = check_refs.check_ref("f.yaml", "repo", "https://r", ref, network=False, resolve_cache={})
+        errors = check_refs.check_ref(
+            "f.yaml", "repo", "https://r", ref, network=False, resolve_cache={}
+        )
         assert len(errors) == 1
         assert "is not 40 lowercase hex chars" in errors[0]
 
     def test_uppercase_sha_rejected(self):
         ref = {"kind": "sha", "value": "A" * 40}
-        errors = check_refs.check_ref("f.yaml", "repo", "https://r", ref, network=False, resolve_cache={})
+        errors = check_refs.check_ref(
+            "f.yaml", "repo", "https://r", ref, network=False, resolve_cache={}
+        )
         assert "is not 40 lowercase hex chars" in errors[0]
 
     def test_non_hex_sha_rejected(self):
         ref = {"kind": "sha", "value": "g" * 40}
-        errors = check_refs.check_ref("f.yaml", "repo", "https://r", ref, network=False, resolve_cache={})
+        errors = check_refs.check_ref(
+            "f.yaml", "repo", "https://r", ref, network=False, resolve_cache={}
+        )
         assert "is not 40 lowercase hex chars" in errors[0]
 
     def test_too_long_sha_rejected(self):
         ref = {"kind": "sha", "value": "a" * 41}
-        errors = check_refs.check_ref("f.yaml", "repo", "https://r", ref, network=False, resolve_cache={})
+        errors = check_refs.check_ref(
+            "f.yaml", "repo", "https://r", ref, network=False, resolve_cache={}
+        )
         assert "is not 40 lowercase hex chars" in errors[0]
 
     def test_missing_value_sha_rejected(self):
         # value defaults to "" -> not a valid sha.
         ref = {"kind": "sha"}
-        errors = check_refs.check_ref("f.yaml", "repo", "https://r", ref, network=False, resolve_cache={})
+        errors = check_refs.check_ref(
+            "f.yaml", "repo", "https://r", ref, network=False, resolve_cache={}
+        )
         assert "is not 40 lowercase hex chars" in errors[0]
 
     def test_sha_error_names_file_and_repo_entry(self):
@@ -205,26 +224,44 @@ class TestCheckRefSha:
 # check_ref — branch/tag kinds and the network gate
 # ===========================================================================
 
+
 class TestCheckRefNetworkGate:
     def test_branch_no_network_skipped(self, monkeypatch):
         monkeypatch.setattr(
-            check_refs, "ls_remote",
+            check_refs,
+            "ls_remote",
             lambda *a, **k: pytest.fail("ls_remote must not run with network=False"),
         )
         ref = {"kind": "branch", "value": "main"}
-        assert check_refs.check_ref("f.yaml", "repo", "https://r", ref, network=False, resolve_cache={}) == []
+        assert (
+            check_refs.check_ref(
+                "f.yaml", "repo", "https://r", ref, network=False, resolve_cache={}
+            )
+            == []
+        )
 
     def test_tag_no_network_skipped(self, monkeypatch):
         monkeypatch.setattr(
-            check_refs, "ls_remote",
+            check_refs,
+            "ls_remote",
             lambda *a, **k: pytest.fail("ls_remote must not run with network=False"),
         )
         ref = {"kind": "tag", "value": "1.0.0"}
-        assert check_refs.check_ref("f.yaml", "repo", "https://r", ref, network=False, resolve_cache={}) == []
+        assert (
+            check_refs.check_ref(
+                "f.yaml", "repo", "https://r", ref, network=False, resolve_cache={}
+            )
+            == []
+        )
 
     def test_unknown_kind_no_network_skipped(self):
         ref = {"kind": "nonsense", "value": "x"}
-        assert check_refs.check_ref("f.yaml", "repo", "https://r", ref, network=False, resolve_cache={}) == []
+        assert (
+            check_refs.check_ref(
+                "f.yaml", "repo", "https://r", ref, network=False, resolve_cache={}
+            )
+            == []
+        )
 
     def test_unknown_kind_with_network_probes_as_tag(self, monkeypatch):
         # kind is neither sha nor branch: the source falls through to the
@@ -238,19 +275,29 @@ class TestCheckRefNetworkGate:
 
         monkeypatch.setattr(check_refs, "ls_remote", fake_ls_remote)
         ref = {"kind": "nonsense", "value": "x"}
-        assert check_refs.check_ref("f.yaml", "repo", "https://r", ref, network=True, resolve_cache={}) == []
+        assert (
+            check_refs.check_ref("f.yaml", "repo", "https://r", ref, network=True, resolve_cache={})
+            == []
+        )
         assert calls == [("https://r", "--tags", "x")]
 
     def test_missing_kind_with_network_probes_as_tag(self, monkeypatch):
         # kind=None is cached under "" and probed with --tags, same fallthrough.
         calls = []
         monkeypatch.setattr(
-            check_refs, "ls_remote",
-            lambda repository, ref_filter, value: calls.append((repository, ref_filter, value)) or True,
+            check_refs,
+            "ls_remote",
+            lambda repository, ref_filter, value: calls.append((repository, ref_filter, value))
+            or True,
         )
         ref = {"value": "main"}
         cache = {}
-        assert check_refs.check_ref("f.yaml", "repo", "https://r", ref, network=True, resolve_cache=cache) == []
+        assert (
+            check_refs.check_ref(
+                "f.yaml", "repo", "https://r", ref, network=True, resolve_cache=cache
+            )
+            == []
+        )
         assert calls == [("https://r", "--tags", "main")]
         assert ("https://r", "", "main") in cache
 
@@ -265,13 +312,18 @@ class TestCheckRefBranchTagNetwork:
 
         monkeypatch.setattr(check_refs, "ls_remote", fake_ls_remote)
         ref = {"kind": "branch", "value": "main"}
-        assert check_refs.check_ref("f.yaml", "repo", "https://r", ref, network=True, resolve_cache={}) == []
+        assert (
+            check_refs.check_ref("f.yaml", "repo", "https://r", ref, network=True, resolve_cache={})
+            == []
+        )
         assert calls == [("https://r", "--heads", "main")]
 
     def test_branch_does_not_resolve(self, monkeypatch):
         monkeypatch.setattr(check_refs, "ls_remote", lambda *a, **k: False)
         ref = {"kind": "branch", "value": "ghost"}
-        errors = check_refs.check_ref("f.yaml", "repo", "https://r", ref, network=True, resolve_cache={})
+        errors = check_refs.check_ref(
+            "f.yaml", "repo", "https://r", ref, network=True, resolve_cache={}
+        )
         assert len(errors) == 1
         assert "branch ref 'ghost' does not resolve in https://r" in errors[0]
         assert "git ls-remote found no match" in errors[0]
@@ -285,13 +337,18 @@ class TestCheckRefBranchTagNetwork:
 
         monkeypatch.setattr(check_refs, "ls_remote", fake_ls_remote)
         ref = {"kind": "tag", "value": "1.0.0"}
-        assert check_refs.check_ref("f.yaml", "repo", "https://r", ref, network=True, resolve_cache={}) == []
+        assert (
+            check_refs.check_ref("f.yaml", "repo", "https://r", ref, network=True, resolve_cache={})
+            == []
+        )
         assert calls == [("https://r", "--tags", "1.0.0")]
 
     def test_tag_does_not_resolve(self, monkeypatch):
         monkeypatch.setattr(check_refs, "ls_remote", lambda *a, **k: False)
         ref = {"kind": "tag", "value": "0.2.1"}
-        errors = check_refs.check_ref("f.yaml", "repo", "https://r", ref, network=True, resolve_cache={})
+        errors = check_refs.check_ref(
+            "f.yaml", "repo", "https://r", ref, network=True, resolve_cache={}
+        )
         assert len(errors) == 1
         assert "tag ref '0.2.1' does not resolve in https://r" in errors[0]
 
@@ -299,6 +356,7 @@ class TestCheckRefBranchTagNetwork:
 # ===========================================================================
 # check_ref — ls-remote memoization through resolve_cache
 # ===========================================================================
+
 
 class TestCheckRefMemoization:
     def _counting_ls_remote(self, monkeypatch, result=True):
@@ -315,8 +373,18 @@ class TestCheckRefMemoization:
         calls = self._counting_ls_remote(monkeypatch)
         cache = {}
         ref = {"kind": "branch", "value": "main"}
-        assert check_refs.check_ref("a.yaml", "r1", "https://r", ref, network=True, resolve_cache=cache) == []
-        assert check_refs.check_ref("b.yaml", "r2", "https://r", ref, network=True, resolve_cache=cache) == []
+        assert (
+            check_refs.check_ref(
+                "a.yaml", "r1", "https://r", ref, network=True, resolve_cache=cache
+            )
+            == []
+        )
+        assert (
+            check_refs.check_ref(
+                "b.yaml", "r2", "https://r", ref, network=True, resolve_cache=cache
+            )
+            == []
+        )
         assert len(calls) == 1
         # cache is keyed on (url, kind, value) — independent of file/entry.
         assert cache == {("https://r", "branch", "main"): True}
@@ -325,8 +393,12 @@ class TestCheckRefMemoization:
         calls = self._counting_ls_remote(monkeypatch, result=False)
         cache = {}
         ref = {"kind": "tag", "value": "v9"}
-        e1 = check_refs.check_ref("a.yaml", "r1", "https://r", ref, network=True, resolve_cache=cache)
-        e2 = check_refs.check_ref("b.yaml", "r2", "https://r", ref, network=True, resolve_cache=cache)
+        e1 = check_refs.check_ref(
+            "a.yaml", "r1", "https://r", ref, network=True, resolve_cache=cache
+        )
+        e2 = check_refs.check_ref(
+            "b.yaml", "r2", "https://r", ref, network=True, resolve_cache=cache
+        )
         # both call sites report the failure, but the probe ran only once.
         assert len(e1) == 1 and len(e2) == 1
         assert len(calls) == 1
@@ -334,15 +406,22 @@ class TestCheckRefMemoization:
     def test_distinct_keys_probe_separately(self, monkeypatch):
         calls = self._counting_ls_remote(monkeypatch)
         cache = {}
-        check_refs.check_ref("f.yaml", "r", "https://r", {"kind": "branch", "value": "main"}, True, cache)
-        check_refs.check_ref("f.yaml", "r", "https://r", {"kind": "tag", "value": "main"}, True, cache)
-        check_refs.check_ref("f.yaml", "r", "https://other", {"kind": "branch", "value": "main"}, True, cache)
+        check_refs.check_ref(
+            "f.yaml", "r", "https://r", {"kind": "branch", "value": "main"}, True, cache
+        )
+        check_refs.check_ref(
+            "f.yaml", "r", "https://r", {"kind": "tag", "value": "main"}, True, cache
+        )
+        check_refs.check_ref(
+            "f.yaml", "r", "https://other", {"kind": "branch", "value": "main"}, True, cache
+        )
         assert len(calls) == 3
 
 
 # ===========================================================================
 # ls_remote — monkeypatch subprocess.run; never hit the network
 # ===========================================================================
+
 
 class TestLsRemote:
     def test_resolves_on_exact_ref_match(self, monkeypatch):
@@ -354,7 +433,14 @@ class TestLsRemote:
 
         monkeypatch.setattr(check_refs.subprocess, "run", fake_run)
         assert check_refs.ls_remote("https://r", "--heads", "main") is True
-        assert captured["cmd"] == ["git", "ls-remote", "--heads", "--end-of-options", "https://r", "main"]
+        assert captured["cmd"] == [
+            "git",
+            "ls-remote",
+            "--heads",
+            "--end-of-options",
+            "https://r",
+            "main",
+        ]
 
     def test_glob_pattern_match_is_not_an_exact_ref(self, monkeypatch):
         # `git ls-remote <repo> 'v1.*'` glob-matches v1.0.0 and returns output;
@@ -407,6 +493,7 @@ class TestLsRemote:
 # check_file — integration over a temp distributions yaml (schema_version 2)
 # ===========================================================================
 
+
 class TestCheckFile:
     def _clean_body(self):
         return """\
@@ -434,7 +521,8 @@ class TestCheckFile:
     def test_clean_file_no_errors_with_network_sha_only(self, tmp_path, monkeypatch):
         # sha ref needs no ls_remote; network=True must still pass without one.
         monkeypatch.setattr(
-            check_refs, "ls_remote",
+            check_refs,
+            "ls_remote",
             lambda *a, **k: pytest.fail("ls_remote should not run for a sha ref"),
         )
         p = write_yaml(tmp_path, self._clean_body())
@@ -567,7 +655,8 @@ class TestCheckFile:
         # registered but silently never swept), and check_ref must still not
         # probe the network for it.
         monkeypatch.setattr(
-            check_refs, "ls_remote",
+            check_refs,
+            "ls_remote",
             lambda *a, **k: pytest.fail("ls_remote should not run without a url"),
         )
         body = """\
@@ -777,7 +866,7 @@ class TestCheckFile:
         assert "expected a YAML mapping" in errors[0]
 
     def test_missing_repositories_key_errors(self, tmp_path):
-        p = write_yaml(tmp_path, "schema_version: \"2\"\nros_distro: jazzy\n")
+        p = write_yaml(tmp_path, 'schema_version: "2"\nros_distro: jazzy\n')
         errors = check_refs.check_file(p, network=False, resolve_cache={})
         assert len(errors) == 1
         assert "`repositories` must be a mapping" in errors[0]
@@ -845,6 +934,7 @@ class TestCheckFile:
 # main — exit codes + the process-wide shared resolve_cache
 # ===========================================================================
 
+
 class TestMain:
     def test_unsupported_schema_version_exits_nonzero(self, tmp_path, monkeypatch, capsys):
         body = """\
@@ -894,7 +984,8 @@ class TestMain:
 
     def test_no_network_flag_skips_ls_remote(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            check_refs, "ls_remote",
+            check_refs,
+            "ls_remote",
             lambda *a, **k: pytest.fail("ls_remote must not run with --no-network"),
         )
         body = """\
@@ -918,6 +1009,7 @@ class TestMain:
 # ===========================================================================
 # module-level constants sanity
 # ===========================================================================
+
 
 class TestConstants:
     def test_placeholder_names_set(self):

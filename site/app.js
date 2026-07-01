@@ -86,8 +86,8 @@ function versionTable(versions) {
       el("th", { text: "Status" }),
       el("th", { text: "Ref tested" }),
       el("th", { text: "Commit" }),
-      el("th", { text: "Tested" })
-    )
+      el("th", { text: "Tested" }),
+    ),
   );
 
   const body = el("tbody");
@@ -105,8 +105,8 @@ function versionTable(versions) {
         el("td", {}, statusPill(v.status || "unknown")),
         el("td", {}, el("code", { text: refText(v.ref_at_test) })),
         el("td", {}, el("code", {}, shaNode)),
-        el("td", { text: v.at ? v.at.slice(0, 10) : "—" })
-      )
+        el("td", { text: v.at ? v.at.slice(0, 10) : "—" }),
+      ),
     );
   }
   return el("table", { class: "versions" }, head, body);
@@ -121,7 +121,7 @@ function maintainers(list) {
     div.append(
       m.github
         ? el("a", { href: `https://github.com/${m.github}`, text: name })
-        : document.createTextNode(name)
+        : document.createTextNode(name),
     );
   });
   return div;
@@ -154,10 +154,12 @@ function card(pkg, siblingCount) {
     { class: "badges" },
     el("span", { class: "badge badge-distro", text: pkg.distro }),
     el("span", { class: "badge badge-gov", text: pkg.governance }),
-    statusPill(status)
+    statusPill(status),
   );
   if (status === "fail" && pkg.last_green) {
-    badges.append(el("span", { class: "muted", text: ` · last green: autoware ${pkg.last_green}` }));
+    badges.append(
+      el("span", { class: "muted", text: ` · last green: autoware ${pkg.last_green}` }),
+    );
   }
 
   const toggle = el("button", {
@@ -178,14 +180,14 @@ function card(pkg, siblingCount) {
     "div",
     { class: "meta" },
     el("a", { class: "repo", href: pkg.repository, text: pkg.repository }),
-    el("span", { class: "muted" }, " · registered ref: ", el("code", { text: refText(pkg.ref) }))
+    el("span", { class: "muted" }, " · registered ref: ", el("code", { text: refText(pkg.ref) })),
   );
   if (siblingCount > 1) {
     meta.append(
       el("span", {
         class: "muted",
         text: ` · one of ${siblingCount} registered packages from this repository`,
-      })
+      }),
     );
   }
 
@@ -193,7 +195,7 @@ function card(pkg, siblingCount) {
     "details",
     {},
     el("summary", { text: "Compatibility history" }),
-    versionTable(pkg.versions)
+    versionTable(pkg.versions),
   );
 
   return el(
@@ -206,12 +208,17 @@ function card(pkg, siblingCount) {
       "data-tags": (pkg.tags || []).join(" "),
       "data-search": searchBlob(pkg),
     },
-    el("header", {}, el("h2", { text: pkg.name }), el("div", { class: "card-head-actions" }, badges, toggle)),
+    el(
+      "header",
+      {},
+      el("h2", { text: pkg.name }),
+      el("div", { class: "card-head-actions" }, badges, toggle),
+    ),
     pkg.description ? el("p", { class: "description", text: pkg.description }) : null,
     tags,
     meta,
     maintainers(pkg.maintainers),
-    details
+    details,
   );
 }
 
@@ -224,7 +231,7 @@ function renderStats(stats, packages, builtAt) {
   stats.append(
     el("span", {}, el("b", { text: String(packages.length) }), " packages"),
     el("span", {}, el("b", { text: String(nDistros) }), " distributions"),
-    el("span", {}, "built ", el("b", { text: builtAt || "unknown" }))
+    el("span", {}, "built ", el("b", { text: builtAt || "unknown" })),
   );
 }
 
@@ -342,16 +349,14 @@ function syncToggle(btn) {
   btn.setAttribute("aria-pressed", inCart ? "true" : "false");
   btn.setAttribute(
     "aria-label",
-    inCart ? `Remove ${pkg} from the repos builder` : `Add ${pkg} to the repos builder`
+    inCart ? `Remove ${pkg} from the repos builder` : `Add ${pkg} to the repos builder`,
   );
   btn.setAttribute("title", inCart ? "Added (click to remove)" : "Add to repos");
   renderToggle(btn, inCart);
 }
 
 function syncCardToggle(distro, name) {
-  const btn = document.querySelector(
-    `.cart-toggle[data-distro="${distro}"][data-pkg="${name}"]`
-  );
+  const btn = document.querySelector(`.cart-toggle[data-distro="${distro}"][data-pkg="${name}"]`);
   if (btn) syncToggle(btn);
 }
 
@@ -366,8 +371,8 @@ function cartRepoBlock(group) {
       "div",
       { class: "cart-repo-head" },
       el("code", { class: "cart-repo-name", text: group.repo }),
-      el("span", { class: "muted cart-repo-ref", text: refText(group.ref) })
-    )
+      el("span", { class: "muted cart-repo-ref", text: refText(group.ref) }),
+    ),
   );
   for (const name of group.names) {
     block.append(
@@ -381,8 +386,8 @@ function cartRepoBlock(group) {
           "data-pkg": name,
           "aria-label": `Remove ${name}`,
           text: "Remove",
-        })
-      )
+        }),
+      ),
     );
   }
   if (group.siblingTotal > group.names.length) {
@@ -390,7 +395,7 @@ function cartRepoBlock(group) {
       el("p", {
         class: "cart-note",
         text: `Adds the whole ${group.repo} repository — ${group.siblingTotal} registered packages travel together (one clone).`,
-      })
+      }),
     );
   }
   return block;
@@ -583,7 +588,10 @@ async function main() {
   }
 
   options(document.getElementById("distro"), [...new Set(packages.map((p) => p.distro))].sort());
-  options(document.getElementById("tag"), [...new Set(packages.flatMap((p) => p.tags || []))].sort());
+  options(
+    document.getElementById("tag"),
+    [...new Set(packages.flatMap((p) => p.tags || []))].sort(),
+  );
 
   for (const pkg of packages) {
     cardsEl.append(card(pkg, state.siblings.get(repoKey(pkg)) || 1));

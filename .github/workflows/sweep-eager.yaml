@@ -24,7 +24,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'distributions/**.yaml'
+      - distributions/**.yaml
   workflow_dispatch:
 
 permissions:
@@ -93,8 +93,8 @@ jobs:
       group: data-branch-write
       cancel-in-progress: false
     permissions:
-      contents: write    # push to the data branch
-      actions: write     # trigger the pages workflow to rebuild the site
+      contents: write # push to the data branch
+      actions: write # trigger the pages workflow to rebuild the site
     steps:
       - uses: actions/checkout@v7
         with:

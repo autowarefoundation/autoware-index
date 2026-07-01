@@ -5,10 +5,8 @@
 missing key, non-dict body, or YAML parse error).
 """
 
-import pytest
-import yaml
-
 import check_distro_filename
+import yaml
 
 
 def _write(dir_path, name, content):

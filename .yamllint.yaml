@@ -1,15 +1,26 @@
-# yamllint configuration for autoware-index.
-# Defaults are too strict for GitHub Actions workflows (which use `on:` keys)
-# and for embedded examples; the overrides below relax those without losing
-# the catch-typo benefit of yamllint.
+# This file is automatically synced from:
+# https://github.com/autowarefoundation/sync-file-templates
+# To make changes, update the source repository and follow the guidelines in its README.
 
 extends: default
 
+ignore: |
+  *.param.yaml
+
 rules:
+  braces:
+    level: error
+    max-spaces-inside: 1 # To format with Prettier
+  comments:
+    level: error
+    min-spaces-from-content: 1 # To be compatible with C++ and Python
+  document-start:
+    level: error
+    present: false # Don't need document start markers
+  line-length: disable # Delegate to Prettier
   truthy:
-    # GitHub Actions uses `on:` as a top-level key; without this, yamllint
-    # flags it as a truthy value.
-    check-keys: false
-  document-start: disable
-  line-length: disable
-  comments-indentation: disable
+    level: error
+    check-keys: false # To allow 'on' of GitHub Actions
+  quoted-strings:
+    level: error
+    required: only-when-needed # To keep consistent style
