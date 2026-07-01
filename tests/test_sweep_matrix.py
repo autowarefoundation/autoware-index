@@ -60,12 +60,12 @@ def write_state(state_dir, distro, repo_name, url, kind, value, packages):
     )
 
 
-MATCHING_STATE = dict(
-    url="https://github.com/example-org/awesome_tools",
-    kind="tag",
-    value="1.2.0",
-    packages=["autoware_a_filter", "zz_planner_b"],
-)
+MATCHING_STATE = {
+    "url": "https://github.com/example-org/awesome_tools",
+    "kind": "tag",
+    "value": "1.2.0",
+    "packages": ["autoware_a_filter", "zz_planner_b"],
+}
 
 
 # --------------------------------------------------------------------------
@@ -119,11 +119,11 @@ def test_eager_matching_state_sweeps_nothing(tmp_path):
 @pytest.mark.parametrize(
     "delta",
     [
-        dict(value="1.3.0"),  # ref value bump
-        dict(kind="branch", value="main"),  # ref kind switch
-        dict(url="https://github.com/example-org/other_repo"),  # URL-only change
-        dict(packages=["autoware_a_filter"]),  # package added since
-        dict(packages=["autoware_a_filter", "zz_planner_b", "x"]),  # package removed since
+        {"value": "1.3.0"},  # ref value bump
+        {"kind": "branch", "value": "main"},  # ref kind switch
+        {"url": "https://github.com/example-org/other_repo"},  # URL-only change
+        {"packages": ["autoware_a_filter"]},  # package added since
+        {"packages": ["autoware_a_filter", "zz_planner_b", "x"]},  # package removed since
     ],
 )
 def test_eager_any_tuple_change_resweeps(tmp_path, delta):

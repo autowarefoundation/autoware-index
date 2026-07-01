@@ -3,15 +3,15 @@ name: validate
 on:
   pull_request:
     paths:
-      - "distributions/**.yaml"
-      - "schema/**.json"
-      - ".github/workflows/validate.yaml"
+      - distributions/**.yaml
+      - schema/**.json
+      - .github/workflows/validate.yaml
   push:
     branches: [main]
     paths:
-      - "distributions/**.yaml"
-      - "schema/**.json"
-      - ".github/workflows/validate.yaml"
+      - distributions/**.yaml
+      - schema/**.json
+      - .github/workflows/validate.yaml
 
 concurrency:
   group: validate-${{ github.ref }}

@@ -6,7 +6,6 @@ missing key, non-dict body, or YAML parse error).
 """
 
 import check_distro_filename
-import pytest
 import yaml
 
 

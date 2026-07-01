@@ -6,7 +6,7 @@ The Index layer complements the Core and Universe layers of the Autoware archite
 
 ## Repository layout
 
-```
+```text
 distributions/                          # one file per supported ROS distro
   jazzy.yaml
 schema/
@@ -91,7 +91,7 @@ Maintainers who want "always test my latest" should use a `branch` ref. Those wh
 
 Sweep workflows commit append-only NDJSON to the orphan `data` branch:
 
-```
+```text
 data:history/<distro>/<package>.ndjson
 ```
 
@@ -110,7 +110,7 @@ The Autoware version each sweep targets is resolved at runtime by [`latest-autow
 
 The repo reserves `ros2_ws/` at the root as a **gitignored scratch ROS 2 workspace** for experimentation:
 
-```
+```text
 ros2_ws/
   src/          # vcs import packages here
   build/  install/  log/   # colcon outputs

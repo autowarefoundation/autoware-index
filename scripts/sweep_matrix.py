@@ -62,7 +62,7 @@ MAX_ROWS_DEFAULT = 250
 
 
 def registered_state(spec: dict) -> dict:
-    """The (url, ref, package set) tuple a state file is diffed against."""
+    """Build the (url, ref, package set) tuple a state file is diffed against."""
     ref = spec.get("ref") or {}
     return {
         "url": spec.get("url", ""),

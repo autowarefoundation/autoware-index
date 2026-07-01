@@ -3,7 +3,7 @@
 A static front-end rendered client-side from a generated `data.json`. No build
 toolchain and no runtime dependencies beyond PyYAML.
 
-```
+```text
 site/
   build.py      # data exporter: load registry + history -> write data.json, copy the assets
   index.html    # static shell

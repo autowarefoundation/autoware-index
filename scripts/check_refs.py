@@ -58,7 +58,7 @@ PLACEHOLDER_NAMES = {"tbd", "todo", "n/a", "na", "none", "xxx", ""}
 
 
 def ls_remote(repository: str, ref_filter: str, value: str) -> bool:
-    """True if the EXACT ref `refs/{heads,tags}/<value>` exists upstream.
+    """Return True if the EXACT ref `refs/{heads,tags}/<value>` exists upstream.
 
     `git ls-remote <repo> <value>` treats the value as a glob pattern and
     returns success on ANY match — a typo like "v1.*" would false-pass while

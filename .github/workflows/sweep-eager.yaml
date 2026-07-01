@@ -24,7 +24,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "distributions/**.yaml"
+      - distributions/**.yaml
   workflow_dispatch:
 
 permissions:

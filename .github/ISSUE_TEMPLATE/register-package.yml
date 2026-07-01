@@ -1,7 +1,7 @@
 name: Register packages
 description: Propose a repository's community Autoware packages for the index (or request a change to an existing entry).
 title: "register: <repo_name>"
-labels: ["registration"]
+labels: [registration]
 body:
   - type: markdown
     attributes:
@@ -86,7 +86,7 @@ body:
     attributes:
       label: Ref value
       description: The tag name, 40-char SHA, or branch name. It MUST already exist upstream.
-      placeholder: "1.0.0"
+      placeholder: 1.0.0
     validations:
       required: true
   - type: textarea

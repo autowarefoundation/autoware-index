@@ -29,7 +29,7 @@ def repo_root() -> Path:
 
 @pytest.fixture
 def git_repo(tmp_path):
-    """A throwaway git repo with deterministic identity.
+    """Create a throwaway git repo with deterministic identity.
 
     Returns a SimpleNamespace with:
       .path   -> Path to the repo working tree

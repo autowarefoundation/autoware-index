@@ -45,6 +45,10 @@ repos:
     rev: 0.2.0
     hooks:
       - id: check-package-depends
+        # Upstream `files: package.xml` is an unanchored regex that also matches
+        # our cache_package_xml.py scripts; scope it off Python files. This repo
+        # tracks no real package.xml (the only one is in gitignored ros2_ws/).
+        exclude: \.py$
 
   - repo: https://github.com/tier4/pre-commit-hooks-ros
     rev: v0.10.2

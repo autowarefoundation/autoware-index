@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export the Autoware Index browse data and assemble the deployable site.
+r"""Export the Autoware Index browse data and assemble the deployable site.
 
 The browse site is a static front-end (index.html + styles.css + app.js) that
 renders client-side from a generated data.json. This script is just the data
@@ -22,8 +22,8 @@ fetches data.json, preview over an HTTP server (fetch is blocked over file://):
     python -m http.server -d _site     # then open http://localhost:8000
 
 Usage:
-    site/build.py --distributions-dir distributions \\
-                  --history-dir _data/history \\
+    site/build.py --distributions-dir distributions \
+                  --history-dir _data/history \
                   --out _site
 """
 
@@ -41,8 +41,8 @@ STATIC_ASSETS = ("index.html", "styles.css", "app.js", "compose.mjs")
 
 sys.path.insert(0, str(SITE_DIR.parent / "scripts"))
 from registry_load import RegistryError  # noqa: E402
-from registry_load import flatten_packages
-from registry_load import load_distributions_dir
+from registry_load import flatten_packages  # noqa: E402
+from registry_load import load_distributions_dir  # noqa: E402
 
 
 def semver_key(version: str) -> tuple:

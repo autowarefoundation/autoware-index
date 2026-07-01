@@ -14,7 +14,7 @@ name: sweep-nightly
 
 on:
   schedule:
-    - cron: "0 6 * * *" # daily UTC
+    - cron: 0 6 * * * # daily UTC
   workflow_dispatch:
 
 permissions:

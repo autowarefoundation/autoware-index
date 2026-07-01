@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write one sweep's outputs to the orphan data branch in a single commit.
+r"""Write one sweep's outputs to the orphan data branch in a single commit.
 
 Three trees land together, atomically per push:
 
@@ -45,7 +45,7 @@ displaced from the queue is harmless: its state files never advanced, so the
 level-triggered discover re-detects the work.)
 
 Usage:
-    scripts/append_history.py --records envelopes.json \\
+    scripts/append_history.py --records envelopes.json \
         [--states states.json] [--metadata-dir staged-metadata]
 """
 
@@ -70,7 +70,7 @@ def run(cmd: list[str], cwd: Path, check: bool = True) -> subprocess.CompletedPr
 
 
 def _existing_state_is_newer(target_file: Path, state: dict) -> bool:
-    """True when the on-branch cursor carries a strictly newer `at` timestamp."""
+    """Return True when the on-branch cursor carries a strictly newer `at` timestamp."""
     try:
         existing = json.loads(target_file.read_text(encoding="utf-8"))
         return str(existing.get("at", "")) > str(state.get("at", ""))
