@@ -36,9 +36,10 @@ body:
     attributes:
       label: Packages
       description: |
-        One line per registered ROS package: the package.xml <name>, then its
-        comma-separated tags (sensing, perception, planning, ...). Every name
-        must exist as a package in the repository at the registered ref.
+        One line per registered ROS package: the package.xml <name>, then 1-5
+        comma-separated tags from the closed vocabulary in schema/tags.yaml
+        (sensing, perception, planning, ...). Every name must exist as a
+        package in the repository at the registered ref.
       placeholder: |
         autoware_a_filter: sensing
         zz_planner_b: planning

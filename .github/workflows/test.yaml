@@ -44,6 +44,8 @@ jobs:
             site/**.py
             tests/**.py
             schema/**.json
+            schema/tags.yaml
+            distributions/**.yaml
             pytest.ini
             .github/workflows/test.yaml
 

@@ -171,3 +171,17 @@ repos:
         language: python
         additional_dependencies: [pyyaml]
         files: ^distributions/.*\.yaml$
+
+  # Mirrors CI: package tags come from the closed vocabulary. No filenames
+  # are passed: editing EITHER a distro file or schema/tags.yaml re-checks
+  # the whole registry (the script defaults to distributions/*.yaml), so a
+  # rename PR that forgets to migrate usages fails locally too.
+  - repo: local
+    hooks:
+      - id: check-tags
+        name: package tags come from the vocabulary
+        entry: python scripts/check_tags.py
+        language: python
+        additional_dependencies: [pyyaml]
+        pass_filenames: false
+        files: ^(distributions/.*\.yaml|schema/tags\.yaml)$

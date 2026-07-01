@@ -60,6 +60,9 @@ A PR cannot merge unless, for every changed entry:
 - no two entries register the same repository URL (spelling variants like a
   `.git` suffix or the ssh form count as the same URL);
 - every package name appears in exactly ONE repository entry per distro;
+- every package tag is a live id in [`schema/tags.yaml`](schema/tags.yaml)
+  (1–5 per package) — unknown and deprecated tags are rejected, with a
+  did-you-mean suggestion;
 - maintainers are real — `TBD` / `@example.com` placeholders are rejected.
 
 So please register a `ref` that exists upstream, and list real maintainers
@@ -68,7 +71,7 @@ So please register a `ref` that exists upstream, and list real maintainers
 ## Validate locally
 
 ```bash
-# 1. Schema + filename consistency + ref resolvability + maintainer checks,
+# 1. Schema + filename consistency + tag vocabulary + maintainer checks,
 #    exactly as CI runs them — via pre-commit:
 pipx install pre-commit        # or: pip install --user pre-commit
 pre-commit run --all-files
@@ -77,6 +80,7 @@ pre-commit run --all-files
 pipx install check-jsonschema
 check-jsonschema --schemafile schema/distribution.schema.json distributions/*.yaml
 python scripts/check_distro_filename.py distributions/*.yaml
+python scripts/check_tags.py distributions/*.yaml
 python scripts/check_refs.py distributions/*.yaml          # needs network
 ```
 

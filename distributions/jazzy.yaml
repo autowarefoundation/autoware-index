@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=../schema/distribution.schema.json
 # Autoware Index — jazzy distribution
 #
 # Repositories are first-class (schema_version 2): each entry owns one URL and

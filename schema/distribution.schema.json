@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/autowarefoundation/autoware-index/main/schema/distribution.schema.json",
   "title": "Autoware Index distribution file",
-  "description": "Schema for distributions/<distro>.yaml in the autoware-index registry. schema_version 2: repositories are first-class — each entry owns one URL and ONE ref, and nests the registered packages it hosts (lockstep: every package of a repository is validated and distributed at that single ref; per-package ref skew is unrepresentable). Cross-entry invariants the schema cannot express — globally unique package names per distro, canonical-URL uniqueness across repository entries — are enforced by scripts/check_refs.py.",
+  "description": "Schema for distributions/<distro>.yaml in the autoware-index registry. schema_version 2: repositories are first-class — each entry owns one URL and ONE ref, and nests the registered packages it hosts (lockstep: every package of a repository is validated and distributed at that single ref; per-package ref skew is unrepresentable). Cross-entry invariants the schema cannot express — globally unique package names per distro, canonical-URL uniqueness across repository entries — are enforced by scripts/check_refs.py; tag-vocabulary membership (schema/tags.yaml) by scripts/check_tags.py.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "ros_distro", "repositories"],
@@ -67,8 +67,10 @@
         "tags": {
           "type": "array",
           "minItems": 1,
+          "maxItems": 5,
           "items": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
-          "uniqueItems": true
+          "uniqueItems": true,
+          "description": "1-5 tags from the closed vocabulary in schema/tags.yaml. This schema checks shape and count only; membership and deprecation are enforced by scripts/check_tags.py."
         },
         "description": {
           "type": "string",

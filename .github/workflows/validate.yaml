@@ -5,12 +5,14 @@ on:
     paths:
       - distributions/**.yaml
       - schema/**.json
+      - schema/tags.yaml
       - .github/workflows/validate.yaml
   push:
     branches: [main]
     paths:
       - distributions/**.yaml
       - schema/**.json
+      - schema/tags.yaml
       - .github/workflows/validate.yaml
 
 concurrency:
@@ -52,6 +54,9 @@ jobs:
             fi
           done
           exit $fail
+
+      - name: package tags come from the vocabulary
+        run: python scripts/check_tags.py distributions/*.yaml
 
       - name: refs resolve and maintainers are real
         run: python scripts/check_refs.py distributions/*.yaml
