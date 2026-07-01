@@ -1,6 +1,8 @@
-# This file is automatically synced from:
-# https://github.com/autowarefoundation/sync-file-templates
-# To make changes, update the source repository and follow the guidelines in its README.
+# Pre-commit hooks for autoware-index.
+#
+# This file is repo-owned (NOT synced from sync-file-templates): on top of
+# the shared template hooks it carries the registry hooks that mirror
+# .github/workflows/validate.yaml, which a file sync would wipe.
 
 # https://pre-commit.ci/#configuration
 ci:
@@ -40,6 +42,11 @@ repos:
     rev: v1.38.0
     hooks:
       - id: yamllint
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
 
   - repo: https://github.com/autowarefoundation/autoware-guideline-check
     rev: 0.2.0
@@ -123,3 +130,44 @@ repos:
     hooks:
       - id: hadolint
         exclude: .svg$
+
+  # ------------------------------------------------------------------------
+  # Repo-specific registry hooks below — they mirror validate.yaml and are
+  # the reason this file is not synced.
+  # ------------------------------------------------------------------------
+
+  # Mirrors CI: distributions/*.yaml must conform to the registry schema.
+  # (check-metaschema again because the synced pattern above requires a
+  # nested */schema/ dir and never matches this repo's top-level schema/.)
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.37.2
+    hooks:
+      - id: check-metaschema
+        name: registry schemas are valid JSON Schema
+        files: ^schema/.*schema\.json$
+      - id: check-jsonschema
+        name: distributions conform to schema
+        files: ^distributions/.*\.yaml$
+        args: [--schemafile, schema/distribution.schema.json]
+
+  # Mirrors CI: each distributions/<distro>.yaml's ros_distro field equals filename stem.
+  - repo: local
+    hooks:
+      - id: ros-distro-filename
+        name: ros_distro field matches filename stem
+        entry: python scripts/check_distro_filename.py
+        language: python
+        additional_dependencies: [pyyaml]
+        files: ^distributions/.*\.yaml$
+
+  # Mirrors CI (offline subset): reject placeholder maintainers. Ref
+  # resolvability needs network (git ls-remote) and runs in CI only, so the
+  # local hook passes --no-network.
+  - repo: local
+    hooks:
+      - id: check-refs-offline
+        name: no placeholder maintainers
+        entry: python scripts/check_refs.py --no-network
+        language: python
+        additional_dependencies: [pyyaml]
+        files: ^distributions/.*\.yaml$

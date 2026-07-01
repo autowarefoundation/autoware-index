@@ -3,7 +3,8 @@
   files:
     - source: .github/workflows/semantic-pull-request.yaml
     - source: .github/workflows/sync-files.yaml
-    - source: .pre-commit-config.yaml
+    # .pre-commit-config.yaml is deliberately NOT synced: it carries the
+    # repo-specific registry hooks that mirror validate.yaml 1:1.
     - source: .yamllint.yaml
     - source: .markdownlint.yaml
     - source: .prettierrc.yaml
