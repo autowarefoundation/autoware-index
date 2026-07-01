@@ -20,8 +20,9 @@ permissions:
 
 env:
   # The aw-index-cli release site/compose.mjs is vendored from. Bump this in the
-  # same PR that re-syncs site/compose.mjs to a newer version.
-  COMPOSE_MJS_REF: v0.3.0
+  # same PR that re-syncs site/compose.mjs to a newer version. aw-index-cli tags
+  # releases as bare semver (e.g. 0.3.0), no leading "v".
+  COMPOSE_MJS_REF: "0.3.0"
 
 jobs:
   drift:
