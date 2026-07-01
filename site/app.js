@@ -44,6 +44,26 @@ function el(tag, attrs = {}, ...children) {
   return node;
 }
 
+// Inline SVG icon (plus / check) for the circular cart toggle. Built with
+// createElementNS so it stays in the SVG namespace; no innerHTML.
+const SVG_NS = "http://www.w3.org/2000/svg";
+function icon(name) {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("width", "15");
+  svg.setAttribute("height", "15");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(SVG_NS, "path");
+  path.setAttribute("d", name === "check" ? "M3.5 8.5l3 3 6-7" : "M8 3.25v9.5M3.25 8h9.5");
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "currentColor");
+  path.setAttribute("stroke-width", "2");
+  path.setAttribute("stroke-linecap", "round");
+  path.setAttribute("stroke-linejoin", "round");
+  svg.appendChild(path);
+  return svg;
+}
+
 function statusPill(status) {
   return el("span", { class: `pill pill-${status}`, text: STATUS_LABELS[status] || status });
 }
@@ -144,10 +164,12 @@ function card(pkg, siblingCount) {
     class: "cart-toggle",
     type: "button",
     "aria-pressed": "false",
+    "aria-label": `Add ${pkg.name} to the repos builder`,
+    title: "Add to repos",
     "data-pkg": pkg.name,
     "data-distro": pkg.distro,
-    text: "Add to repos",
   });
+  renderToggle(toggle, false);
 
   const tags = el("div", { class: "tags" });
   for (const t of pkg.tags || []) tags.append(el("span", { class: "tag", text: t }));
@@ -307,10 +329,23 @@ function distributionFor(distro) {
   return state.distributions.get(distro);
 }
 
+// Fixed-size icon button; the words live in the title tooltip + aria-label so
+// nothing reflows on hover.
+function renderToggle(btn, inCart) {
+  btn.textContent = "";
+  btn.append(icon(inCart ? "check" : "plus"));
+}
+
 function syncToggle(btn) {
   const inCart = getCart(btn.dataset.distro).has(btn.dataset.pkg);
+  const pkg = btn.dataset.pkg;
   btn.setAttribute("aria-pressed", inCart ? "true" : "false");
-  btn.textContent = inCart ? "Added" : "Add to repos";
+  btn.setAttribute(
+    "aria-label",
+    inCart ? `Remove ${pkg} from the repos builder` : `Add ${pkg} to the repos builder`
+  );
+  btn.setAttribute("title", inCart ? "Added (click to remove)" : "Add to repos");
+  renderToggle(btn, inCart);
 }
 
 function syncCardToggle(distro, name) {

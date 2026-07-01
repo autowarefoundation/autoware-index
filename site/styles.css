@@ -12,7 +12,9 @@ header.site p { margin:6px 0 0; color:var(--muted); max-width:64ch; }
 header.site a { color:var(--link); text-decoration:none; }
 .stats { display:flex; gap:24px; margin-top:14px; color:var(--muted); font-size:13px; }
 .stats b { color:var(--fg); border-bottom:2px solid var(--secondary); }
-.container { max-width:980px; margin:0 auto; padding:0 24px; }
+/* Match .wrap's max-width + padding so the header left edge aligns with the
+   packages column below it. */
+.container { max-width:1320px; margin:0 auto; padding:0 24px; }
 .wrap { max-width:1320px; margin:0 auto; padding:20px 24px 64px;
         display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:28px; align-items:start; }
 .browse { min-width:0; }
@@ -25,7 +27,10 @@ header.site a { color:var(--link); text-decoration:none; }
 .card { background:var(--panel); border:1px solid var(--border); border-radius:12px;
         padding:18px 20px; margin-bottom:14px; box-shadow:0 1px 3px rgba(27,35,51,.08);
         transition:border-color .15s ease, box-shadow .15s ease; }
-.card:hover { border-color:var(--secondary); box-shadow:0 2px 10px rgba(238,212,91,.35); }
+/* Golden glow on hover, and kept persistently while the package is selected
+   (its toggle is pressed) so chosen items stand out. */
+.card:hover,
+.card:has(.cart-toggle[aria-pressed="true"]) { border-color:var(--secondary); box-shadow:0 2px 10px rgba(238,212,91,.35); }
 .card header { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; }
 .card h2 { margin:0; font-size:18px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
 .badges { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
@@ -62,11 +67,20 @@ footer .sep { color:var(--border); }
 /* Repos builder (cart sidebar) */
 .card header { gap:12px; }
 .card-head-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
-.cart-toggle { font-size:12px; font-weight:600; padding:4px 11px; border-radius:20px; cursor:pointer;
-        border:1px solid var(--border); background:#fff; color:var(--link); white-space:nowrap;
-        transition:background .15s ease, border-color .15s ease, color .15s ease; }
-.cart-toggle:hover { border-color:var(--primary); }
-.cart-toggle[aria-pressed="true"] { background:var(--secondary); border-color:var(--secondary); color:#3a3208; }
+/* Fixed-size circular icon button (no size change on hover). Inactive = very
+   light gold fill with a normal-gold edge and a blue plus; active (in cart) =
+   gold fill with a black check. Words live in the title tooltip + aria-label so
+   nothing reflows. margin-left separates it from the static badges. */
+.cart-toggle { display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto;
+        width:30px; height:30px; padding:0; margin-left:10px; border-radius:50%; cursor:pointer;
+        border:1px solid var(--secondary); background:var(--secondary-soft); color:var(--fg);
+        box-shadow:0 1px 2px rgba(27,35,51,.15);
+        transition:background .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease; }
+.cart-toggle svg { display:block; }
+.cart-toggle:hover { box-shadow:0 2px 9px rgba(238,212,91,.6); }
+.cart-toggle:focus-visible { outline:2px solid var(--primary); outline-offset:2px; }
+.cart-toggle[aria-pressed="true"] { background:var(--secondary); border-color:var(--secondary); }
+.cart-toggle[aria-pressed="true"]:hover { box-shadow:0 2px 9px rgba(238,212,91,.6); }
 
 #cart { position:sticky; top:20px; align-self:start; background:var(--panel);
         border:1px solid var(--border); border-radius:12px; padding:16px 18px;
