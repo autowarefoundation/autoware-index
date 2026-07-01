@@ -97,6 +97,88 @@ without network; CI runs the full `check_refs.py` including ref resolvability.
 
 See [`README.md`](README.md#ref-kinds) for details.
 
+## Package tags
+
+Every registered package carries 1–5 tags from the closed vocabulary in
+[`schema/tags.yaml`](schema/tags.yaml). The vocabulary is the single source
+of truth: each id has a one-line `summary` (rendered as the browse site's
+tooltip) and, where a boundary is subtle, a `disambiguation` sentence.
+`scripts/check_tags.py` rejects unknown and deprecated tags at PR time with a
+did-you-mean suggestion.
+
+### Choosing tags
+
+- Put the package's **primary identity first** — the site renders tag chips
+  in registry order.
+- Tags are not mutually exclusive: a learned detector is
+  `[perception, ml]`; a calibration RViz plugin is
+  `[calibration, visualization]`.
+- `tool` should rarely be a package's only tag — add the domain it serves
+  (`[tool, map]`, not `[tool]`). CI emits a non-blocking warning otherwise.
+- Read the `disambiguation` lines for the close pairs: `driver` vs
+  `sensing`, `interface` vs `api`, `testing` vs `evaluation` vs `simulator`,
+  `tool` vs `common-library`, and what counts as `launch`.
+
+### Proposing a new tag
+
+A PR editing `schema/tags.yaml` must include, in its description:
+
+1. **Definition** — the one-line `summary` (plus a `disambiguation` if it
+   borders an existing tag).
+2. **Demand** — at least **two named, registerable ROS packages** (real
+   `package.xml`, resolvable repo) that would carry it — ideally the same or
+   a linked PR registers the first one. Vocabulary additions should trail
+   demand, never lead it.
+3. **Differentiation** — one sentence on why no existing tag _combination_
+   covers those packages.
+4. **Axis check** — the id is topical: not a maturity level (`stable`), not
+   a hardware requirement (`gpu`), not a vendor name. Genuinely orthogonal
+   axes become new typed schema fields, never tags.
+
+Id style: lowercase, hyphen-separated (`common-library`), ≤ 20 characters,
+singular, preferring the ecosystem's own noun (`simulator`, `launch`) and
+established abbreviations (`ml`, `api`, `v2x`).
+
+Deferred candidates and their adoption triggers (recorded so they are not
+re-litigated):
+
+| id              | adoption trigger                                                                                |
+| --------------- | ----------------------------------------------------------------------------------------------- |
+| `data`          | First registration of a `ros2bag_extensions`-class package; settle `data` vs `data-tools` then. |
+| `teleoperation` | Two registerable teleoperation packages (e.g. the TUM stack lands).                             |
+| `e2e`           | A second registerable end-to-end package (`ml` + `planning`/`control` cover it today).          |
+
+Previously rejected (with reasons): `racing`, `hmi`, `fleet-management`,
+`security`, `deployment` — no two registerable anchor packages exist;
+`gpu`/`cuda` — a hardware requirement, wrong axis; `profiling` — folded into
+`evaluation`'s definition.
+
+### Renaming, merging, or retiring a tag
+
+Tag ids are **never deleted or re-minted** once published — old provenance
+headers and pinned registry refs must stay interpretable forever. One atomic
+PR does all of:
+
+1. add the new id under `tags:` (renames/merges; normal criteria apply);
+2. move the old id under `deprecated:` with `replaced_by:` naming **live**
+   tags (no chains) and a dated `note`;
+3. retag **every** usage in `distributions/*.yaml`.
+
+CI makes partial versions of this PR unmergeable: a deprecated tag in any
+registry file is a hard error, and vocabulary edits re-run the check over
+every distribution file. Tag edits never trigger re-validation sweeps — the
+sweep diff tuple deliberately excludes tags — so a registry-wide migration
+is a pure metadata change.
+
+### When does `schema_version` bump?
+
+Rule of thumb: **bump when readers must change to parse** (a shape change —
+renamed fields, restructured values); **do not bump when the set of valid
+documents merely narrows** within the same shape (adding the vocabulary,
+`maxItems`, or a new semantic check). Narrowing keeps every deployed reader
+(`aw-index-cli`, the site, the sweeps) working unchanged; bumping hard-fails
+them all by design and demands a lockstep release.
+
 ## Repository conventions
 
 - Conventional commit messages (`type(scope): description`).
