@@ -11,9 +11,8 @@ The git/network parts (checkout / cache_group / push_metadata) are exercised
 with the side-effecting calls monkeypatched, so no real clones or pushes happen.
 """
 
-import pytest
-
 import cache_package_xml as m
+import pytest
 
 
 # --------------------------------------------------------------------------
@@ -452,7 +451,9 @@ def test_commit_message_multiple_rows_distros_sorted_and_unique():
 def _fake_completed(returncode=0, stdout="", stderr=""):
     import subprocess
 
-    return subprocess.CompletedProcess(args=["git"], returncode=returncode, stdout=stdout, stderr=stderr)
+    return subprocess.CompletedProcess(
+        args=["git"], returncode=returncode, stdout=stdout, stderr=stderr
+    )
 
 
 def test_checkout_branch_uses_shallow_clone(monkeypatch, tmp_path):
@@ -712,10 +713,14 @@ def test_push_metadata_merges_into_existing_tree(monkeypatch, tmp_path):
             # Pre-existing cache: a non-swept sibling in the same distro, a
             # package in another distro, and a stale copy of the swept file.
             (wt / "metadata" / "jazzy").mkdir(parents=True, exist_ok=True)
-            (wt / "metadata" / "jazzy" / "other.xml").write_text("<package><name>other</name></package>")
+            (wt / "metadata" / "jazzy" / "other.xml").write_text(
+                "<package><name>other</name></package>"
+            )
             (wt / "metadata" / "jazzy" / "swept.xml").write_text("STALE")
             (wt / "metadata" / "humble").mkdir(parents=True, exist_ok=True)
-            (wt / "metadata" / "humble" / "third.xml").write_text("<package><name>third</name></package>")
+            (wt / "metadata" / "humble" / "third.xml").write_text(
+                "<package><name>third</name></package>"
+            )
             worktree["path"] = wt
         if cmd[:2] == ["git", "status"]:
             return _fake_completed(0, stdout=" M metadata/jazzy/swept.xml\n")
@@ -726,7 +731,9 @@ def test_push_metadata_merges_into_existing_tree(monkeypatch, tmp_path):
 
     wt = worktree["path"]
     # Swept file refreshed, everything not in this sweep left untouched.
-    assert (wt / "metadata" / "jazzy" / "swept.xml").read_text() == "<package><name>swept</name></package>"
+    assert (
+        wt / "metadata" / "jazzy" / "swept.xml"
+    ).read_text() == "<package><name>swept</name></package>"
     assert (wt / "metadata" / "jazzy" / "other.xml").exists()
     assert (wt / "metadata" / "humble" / "third.xml").exists()
 
@@ -829,7 +836,8 @@ repositories:
 
     monkeypatch.setattr(m, "checkout", fake_checkout)
     monkeypatch.setattr(
-        m, "push_metadata",
+        m,
+        "push_metadata",
         lambda *a, **k: pytest.fail("push_metadata must not run without --push"),
     )
     out = tmp_path / "out"

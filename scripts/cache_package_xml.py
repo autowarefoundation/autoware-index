@@ -27,15 +27,16 @@ packages it hosts), picks each package's package.xml by matching the
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
 import xml.etree.ElementTree as ET
-from pathlib import Path
 
-from registry_load import RegistryError, load_distributions_dir
+from registry_load import RegistryError
+from registry_load import load_distributions_dir
 
 BOT_NAME = "github-actions[bot]"
 BOT_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
@@ -85,12 +86,25 @@ def checkout(repository: str, kind: str, value: str, dest: Path) -> bool:
     """Shallow-checkout `repository` at `value` into `dest`. True on success."""
     if kind in ("branch", "tag"):
         result = run(
-            ["git", "clone", "--depth", "1", "--filter=blob:none", "--branch", value, repository, str(dest)],
+            [
+                "git",
+                "clone",
+                "--depth",
+                "1",
+                "--filter=blob:none",
+                "--branch",
+                value,
+                repository,
+                str(dest),
+            ],
             check=False,
         )
         return result.returncode == 0
     # sha: blobless clone, then check out the exact commit.
-    if run(["git", "clone", "--filter=blob:none", repository, str(dest)], check=False).returncode != 0:
+    if (
+        run(["git", "clone", "--filter=blob:none", repository, str(dest)], check=False).returncode
+        != 0
+    ):
         return False
     return run(["git", "checkout", value], cwd=dest, check=False).returncode == 0
 
@@ -171,9 +185,13 @@ def push_metadata(staged: Path, rows: list[dict]) -> None:
             run(
                 [
                     "git",
-                    "-c", f"user.name={BOT_NAME}",
-                    "-c", f"user.email={BOT_EMAIL}",
-                    "commit", "-m", commit_message(rows),
+                    "-c",
+                    f"user.name={BOT_NAME}",
+                    "-c",
+                    f"user.email={BOT_EMAIL}",
+                    "commit",
+                    "-m",
+                    commit_message(rows),
                 ],
                 tmpdir,
             )
@@ -205,7 +223,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--distributions-dir", required=True, help="cache every registered package")
     parser.add_argument("--out", default="_metadata", help="local output dir for metadata/ files")
-    parser.add_argument("--push", action="store_true", help="commit + push the cache to the data branch")
+    parser.add_argument(
+        "--push", action="store_true", help="commit + push the cache to the data branch"
+    )
     args = parser.parse_args()
 
     groups = repo_groups_from_distributions(Path(args.distributions_dir))

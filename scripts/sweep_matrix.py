@@ -52,10 +52,11 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
+import sys
 
-from registry_load import RegistryError, load_distributions_dir
+from registry_load import RegistryError
+from registry_load import load_distributions_dir
 
 MAX_ROWS_DEFAULT = 250
 
@@ -96,7 +97,12 @@ def build_matrix(distributions_dir: Path, state_dir: Path, mode: str) -> list[di
             spec = spec or {}
             desired = registered_state(spec)
             ref = spec.get("ref") or {}
-            if not (desired["url"] and ref.get("kind") and desired["ref"]["value"] and desired["packages"]):
+            if not (
+                desired["url"]
+                and ref.get("kind")
+                and desired["ref"]["value"]
+                and desired["packages"]
+            ):
                 # A schema-valid file can never hit this (url/ref/packages are
                 # all required) — reaching it means something bypassed the PR
                 # gate. Soft-skipping would leave the entry registered but

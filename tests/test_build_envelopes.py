@@ -11,9 +11,8 @@ package.xml files, and it hard-fails when a non-empty matrix records nothing.
 
 import json
 
-import pytest
-
 import build_envelopes as m
+import pytest
 
 
 # --------------------------------------------------------------------------
@@ -41,18 +40,30 @@ def make_result(packages=None, **over):
         "repository": "https://github.com/example-org/awesome_tools",
         "ref": {"kind": "tag", "value": "1.2.0"},
         "resolved_sha": "a" * 40,
-        "packages": packages
-        if packages is not None
-        else {
-            "autoware_a_filter": {"present": True, "build_outcome": "success", "test_outcome": "success"},
-            "zz_planner_b": {"present": True, "build_outcome": "success", "test_outcome": "success"},
-        },
+        "packages": (
+            packages
+            if packages is not None
+            else {
+                "autoware_a_filter": {
+                    "present": True,
+                    "build_outcome": "success",
+                    "test_outcome": "success",
+                },
+                "zz_planner_b": {
+                    "present": True,
+                    "build_outcome": "success",
+                    "test_outcome": "success",
+                },
+            }
+        ),
     }
     result.update(over)
     return result
 
 
-def write_artifact(results_dir, result, xmls=None, subdir="validate-result-jazzy-awesome_tools-1.8.0"):
+def write_artifact(
+    results_dir, result, xmls=None, subdir="validate-result-jazzy-awesome_tools-1.8.0"
+):
     """Lay out one downloaded artifact: result.json + package-xmls/<pkg>.xml."""
     art = results_dir / subdir
     art.mkdir(parents=True, exist_ok=True)
@@ -153,8 +164,16 @@ def test_envelopes_for_row_happy_path_two_packages():
 def test_envelopes_for_row_sibling_statuses_independent():
     result = make_result(
         packages={
-            "autoware_a_filter": {"present": True, "build_outcome": "success", "test_outcome": "success"},
-            "zz_planner_b": {"present": True, "build_outcome": "success", "test_outcome": "failure"},
+            "autoware_a_filter": {
+                "present": True,
+                "build_outcome": "success",
+                "test_outcome": "success",
+            },
+            "zz_planner_b": {
+                "present": True,
+                "build_outcome": "success",
+                "test_outcome": "failure",
+            },
         }
     )
     envelopes, skips = m.envelopes_for_row(make_row(), result, "nightly", AT, URL)
@@ -166,7 +185,11 @@ def test_envelopes_for_row_sibling_statuses_independent():
 def test_envelopes_for_row_absent_package_skipped_loudly():
     result = make_result(
         packages={
-            "autoware_a_filter": {"present": True, "build_outcome": "success", "test_outcome": "success"},
+            "autoware_a_filter": {
+                "present": True,
+                "build_outcome": "success",
+                "test_outcome": "success",
+            },
             "zz_planner_b": {"present": False, "build_outcome": None, "test_outcome": None},
         }
     )
@@ -176,14 +199,24 @@ def test_envelopes_for_row_absent_package_skipped_loudly():
 
 
 def test_envelopes_for_row_package_missing_from_result():
-    result = make_result(packages={"autoware_a_filter": {"present": True, "build_outcome": "success", "test_outcome": "success"}})
+    result = make_result(
+        packages={
+            "autoware_a_filter": {
+                "present": True,
+                "build_outcome": "success",
+                "test_outcome": "success",
+            }
+        }
+    )
     envelopes, skips = m.envelopes_for_row(make_row(), result, "eager", AT, URL)
     assert len(envelopes) == 1
     assert len(skips) == 1 and "no outcome" in skips[0]
 
 
 def test_envelopes_for_row_no_autoware_version_skips_whole_row():
-    envelopes, skips = m.envelopes_for_row(make_row(), make_result(autoware_version=""), "eager", AT, URL)
+    envelopes, skips = m.envelopes_for_row(
+        make_row(), make_result(autoware_version=""), "eager", AT, URL
+    )
     assert envelopes == []
     assert len(skips) == 1 and "autoware_version" in skips[0]
 
@@ -193,7 +226,9 @@ def test_envelopes_for_row_invalid_sha_skips_whole_row(bad_sha):
     # No real sha = clone/resolve never completed = nothing validated.
     # Fabricating a sentinel sha inside conclusive records would be false
     # provenance; the whole row is an inconclusive loud skip.
-    envelopes, skips = m.envelopes_for_row(make_row(), make_result(resolved_sha=bad_sha), "eager", AT, URL)
+    envelopes, skips = m.envelopes_for_row(
+        make_row(), make_result(resolved_sha=bad_sha), "eager", AT, URL
+    )
     assert envelopes == []
     assert len(skips) == 1 and "resolved_sha" in skips[0]
 
@@ -233,13 +268,20 @@ def run_main(monkeypatch, tmp_path, rows, *, sweep_kind="eager"):
         "sys.argv",
         [
             "build_envelopes.py",
-            "--matrix-file", str(matrix_file),
-            "--results-dir", str(tmp_path / "results"),
-            "--sweep-kind", sweep_kind,
-            "--actions-run-url", URL,
-            "--output", str(out),
-            "--states-output", str(states),
-            "--metadata-output", str(metadata),
+            "--matrix-file",
+            str(matrix_file),
+            "--results-dir",
+            str(tmp_path / "results"),
+            "--sweep-kind",
+            sweep_kind,
+            "--actions-run-url",
+            URL,
+            "--output",
+            str(out),
+            "--states-output",
+            str(states),
+            "--metadata-output",
+            str(metadata),
         ],
     )
     m.main()
@@ -276,7 +318,11 @@ def test_main_partial_row_does_not_advance_state(monkeypatch, tmp_path, capsys):
         tmp_path / "results",
         make_result(
             packages={
-                "autoware_a_filter": {"present": True, "build_outcome": "success", "test_outcome": "success"},
+                "autoware_a_filter": {
+                    "present": True,
+                    "build_outcome": "success",
+                    "test_outcome": "success",
+                },
                 "zz_planner_b": {"present": False, "build_outcome": None, "test_outcome": None},
             }
         ),
@@ -296,8 +342,16 @@ def test_main_fail_records_still_advance_state(monkeypatch, tmp_path):
         tmp_path / "results",
         make_result(
             packages={
-                "autoware_a_filter": {"present": True, "build_outcome": "failure", "test_outcome": None},
-                "zz_planner_b": {"present": True, "build_outcome": "success", "test_outcome": "success"},
+                "autoware_a_filter": {
+                    "present": True,
+                    "build_outcome": "failure",
+                    "test_outcome": None,
+                },
+                "zz_planner_b": {
+                    "present": True,
+                    "build_outcome": "success",
+                    "test_outcome": "success",
+                },
             }
         ),
     )
@@ -308,7 +362,9 @@ def test_main_fail_records_still_advance_state(monkeypatch, tmp_path):
 
 def test_main_missing_artifact_skips_row_loudly(monkeypatch, tmp_path, capsys):
     write_artifact(tmp_path / "results", make_result())  # only awesome_tools
-    other = make_row(repo_name="other_repo", repository="https://github.com/x/other_repo", packages="p")
+    other = make_row(
+        repo_name="other_repo", repository="https://github.com/x/other_repo", packages="p"
+    )
     envelopes, states, _ = run_main(monkeypatch, tmp_path, [make_row(), other])
     assert len(envelopes) == 2  # awesome_tools' two packages
     assert len(states) == 1

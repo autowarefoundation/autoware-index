@@ -1,87 +1,121 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Autoware Index</title>
-<link rel="stylesheet" href="styles.css">
-</head>
-<body>
-<header class="site">
-  <div class="container">
-    <h1>Autoware <span>Index</span></h1>
-    <p>Federated registry of community Autoware packages. Each package is validated against the
-       latest published Autoware release; the compatibility history below is built from sweep records
-       on the <a href="https://github.com/autowarefoundation/autoware-index/tree/data">data branch</a>.</p>
-    <div class="stats" id="stats"></div>
-  </div>
-</header>
-<div class="wrap">
-  <main class="browse">
-    <div class="controls">
-      <input type="search" id="q" placeholder="Search packages, tags, maintainers…" autocomplete="off">
-      <select id="distro" aria-label="ROS distro" title="ROS distro"></select>
-      <select id="tag"><option value="">All tags</option></select>
-      <select id="status">
-        <option value="">Any status</option>
-        <option value="pass">Passing</option>
-        <option value="fail">Failing</option>
-        <option value="unknown">Not yet swept</option>
-      </select>
-    </div>
-    <div id="cards"></div>
-    <div id="empty" class="empty" hidden>No packages match your filters.</div>
-  </main>
-  <aside id="cart" aria-label="Repos builder">
-    <div class="cart-head">
-      <h2>Repos builder</h2>
-      <button id="cart-clear" type="button">Clear</button>
-    </div>
-    <p class="cart-scope">Distro: <span id="cart-distro"></span></p>
-    <p id="cart-empty" class="cart-empty">Add packages to build a <code>.repos</code> file.</p>
-    <div id="cart-items"></div>
-    <div id="export" class="export" hidden>
-      <div class="export-block">
-        <div class="export-head">
-          <h3>autoware-index.repos file</h3>
-          <span class="export-actions">
-            <button type="button" data-copy="repos">Copy</button>
-            <button type="button" id="download-repos">Download</button>
-          </span>
-        </div>
-        <pre class="export-out" id="repos-out"><code></code></pre>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Autoware Index</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site">
+      <div class="container">
+        <h1>Autoware <span>Index</span></h1>
+        <p>
+          Federated registry of community Autoware packages. Each package is validated against the
+          latest published Autoware release; the compatibility history below is built from sweep
+          records on the
+          <a href="https://github.com/autowarefoundation/autoware-index/tree/data">data branch</a>.
+        </p>
+        <div class="stats" id="stats"></div>
       </div>
-      <div class="export-block">
-        <div class="export-head">
-          <h3>Or run <a href="https://github.com/autowarefoundation/aw-index-cli#install" target="_blank" rel="noopener noreferrer">aw-index-cli</a></h3>
-          <span class="export-actions">
-            <button type="button" data-copy="cmd">Copy</button>
-          </span>
+    </header>
+    <div class="wrap">
+      <main class="browse">
+        <div class="controls">
+          <input
+            type="search"
+            id="q"
+            placeholder="Search packages, tags, maintainers…"
+            autocomplete="off"
+          />
+          <select id="distro" aria-label="ROS distro" title="ROS distro"></select>
+          <select id="tag">
+            <option value="">All tags</option>
+          </select>
+          <select id="status">
+            <option value="">Any status</option>
+            <option value="pass">Passing</option>
+            <option value="fail">Failing</option>
+            <option value="unknown">Not yet swept</option>
+          </select>
         </div>
-        <pre class="export-out" id="cmd-out"><code></code></pre>
-      </div>
-      <p class="copy-status" id="copy-status" aria-live="polite"></p>
+        <div id="cards"></div>
+        <div id="empty" class="empty" hidden>No packages match your filters.</div>
+      </main>
+      <aside id="cart" aria-label="Repos builder">
+        <div class="cart-head">
+          <h2>Repos builder</h2>
+          <button id="cart-clear" type="button">Clear</button>
+        </div>
+        <p class="cart-scope">Distro: <span id="cart-distro"></span></p>
+        <p id="cart-empty" class="cart-empty">Add packages to build a <code>.repos</code> file.</p>
+        <div id="cart-items"></div>
+        <div id="export" class="export" hidden>
+          <div class="export-block">
+            <div class="export-head">
+              <h3>autoware-index.repos file</h3>
+              <span class="export-actions">
+                <button type="button" data-copy="repos">Copy</button>
+                <button type="button" id="download-repos">Download</button>
+              </span>
+            </div>
+            <pre class="export-out" id="repos-out"><code></code></pre>
+          </div>
+          <div class="export-block">
+            <div class="export-head">
+              <h3>
+                Or run
+                <a
+                  href="https://github.com/autowarefoundation/aw-index-cli#install"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >aw-index-cli</a
+                >
+              </h3>
+              <span class="export-actions">
+                <button type="button" data-copy="cmd">Copy</button>
+              </span>
+            </div>
+            <pre class="export-out" id="cmd-out"><code></code></pre>
+          </div>
+          <p class="copy-status" id="copy-status" aria-live="polite"></p>
+        </div>
+      </aside>
     </div>
-  </aside>
-</div>
-<footer>
-  <div class="foundation"><a href="https://autoware.org">Autoware Foundation</a></div>
-  <div class="links">
-    <a href="https://github.com/autowarefoundation/autoware">
-      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-      autoware</a>
-    <span class="sep">·</span>
-    <a href="https://github.com/autowarefoundation/autoware-index">
-      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-      autoware-index</a>
-  </div>
-</footer>
-<noscript>
-  <div class="wrap"><p class="empty">This browse view renders the registry client-side and needs JavaScript enabled.
-  The raw data lives in <code>data.json</code>, the registrations in
-  <a href="https://github.com/autowarefoundation/autoware-index/tree/main/distributions">distributions/</a>,
-  and the validation history on the <a href="https://github.com/autowarefoundation/autoware-index/tree/data">data branch</a>.</p></div>
-</noscript>
-<script type="module" src="app.js"></script>
-</body>
+    <footer>
+      <div class="foundation"><a href="https://autoware.org">Autoware Foundation</a></div>
+      <div class="links">
+        <a href="https://github.com/autowarefoundation/autoware">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path
+              d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
+            />
+          </svg>
+          autoware</a
+        >
+        <span class="sep">·</span>
+        <a href="https://github.com/autowarefoundation/autoware-index">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path
+              d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
+            />
+          </svg>
+          autoware-index</a
+        >
+      </div>
+    </footer>
+    <noscript>
+      <div class="wrap">
+        <p class="empty">
+          This browse view renders the registry client-side and needs JavaScript enabled. The raw
+          data lives in <code>data.json</code>, the registrations in
+          <a href="https://github.com/autowarefoundation/autoware-index/tree/main/distributions"
+            >distributions/</a
+          >, and the validation history on the
+          <a href="https://github.com/autowarefoundation/autoware-index/tree/data">data branch</a>.
+        </p>
+      </div>
+    </noscript>
+    <script type="module" src="app.js"></script>
+  </body>
 </html>

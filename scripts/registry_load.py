@@ -32,8 +32,8 @@ sibling packages is unrepresentable by construction.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
+import re
 from urllib.parse import urlsplit
 
 import yaml
@@ -91,10 +91,7 @@ def load_distribution(path: Path) -> dict:
 
 def load_distributions_dir(distributions_dir: Path) -> list[tuple[Path, dict]]:
     """Load every *.yaml in a distributions dir, sorted by filename."""
-    return [
-        (path, load_distribution(path))
-        for path in sorted(distributions_dir.glob("*.yaml"))
-    ]
+    return [(path, load_distribution(path)) for path in sorted(distributions_dir.glob("*.yaml"))]
 
 
 def canonical_url(url: str) -> str:

@@ -6,9 +6,7 @@ a hard RegistryError everywhere, never a silently-empty result.
 """
 
 import pytest
-
 import registry_load as m
-
 
 # --------------------------------------------------------------------------
 # helpers
@@ -201,7 +199,11 @@ def test_flatten_packages_tolerates_sparse_specs():
     # Null repo spec / null package spec / missing packages: no crash, sane defaults.
     doc = {
         "ros_distro": "jazzy",
-        "repositories": {"bare": None, "nopkgs": {"url": "u"}, "r": {"url": "u2", "packages": {"p": None}}},
+        "repositories": {
+            "bare": None,
+            "nopkgs": {"url": "u"},
+            "r": {"url": "u2", "packages": {"p": None}},
+        },
     }
     records = m.flatten_packages(doc)
     assert [r["package"] for r in records] == ["p"]

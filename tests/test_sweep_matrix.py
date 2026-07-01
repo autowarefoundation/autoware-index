@@ -11,9 +11,8 @@ coverage here.
 import json
 
 import pytest
-
-import sweep_matrix as m
 from registry_load import RegistryError
+import sweep_matrix as m
 
 
 # --------------------------------------------------------------------------
@@ -21,15 +20,22 @@ from registry_load import RegistryError
 # --------------------------------------------------------------------------
 def write_distribution(dirpath, distro="jazzy", repositories=None):
     dirpath.mkdir(parents=True, exist_ok=True)
-    repos = repositories if repositories is not None else {
-        "awesome_tools": {
-            "url": "https://github.com/example-org/awesome_tools",
-            "ref": {"kind": "tag", "value": "1.2.0"},
-            "governance": "community",
-            "maintainers": [{"name": "J", "email": "j@x.dev", "github": "j"}],
-            "packages": {"autoware_a_filter": {"tags": ["sensing"]}, "zz_planner_b": {"tags": ["planning"]}},
+    repos = (
+        repositories
+        if repositories is not None
+        else {
+            "awesome_tools": {
+                "url": "https://github.com/example-org/awesome_tools",
+                "ref": {"kind": "tag", "value": "1.2.0"},
+                "governance": "community",
+                "maintainers": [{"name": "J", "email": "j@x.dev", "github": "j"}],
+                "packages": {
+                    "autoware_a_filter": {"tags": ["sensing"]},
+                    "zz_planner_b": {"tags": ["planning"]},
+                },
+            }
         }
-    }
+    )
     doc = {"schema_version": "2", "ros_distro": distro, "repositories": repos}
     import yaml
 
@@ -113,11 +119,11 @@ def test_eager_matching_state_sweeps_nothing(tmp_path):
 @pytest.mark.parametrize(
     "delta",
     [
-        dict(value="1.3.0"),                                       # ref value bump
-        dict(kind="branch", value="main"),                         # ref kind switch
-        dict(url="https://github.com/example-org/other_repo"),     # URL-only change
-        dict(packages=["autoware_a_filter"]),                      # package added since
-        dict(packages=["autoware_a_filter", "zz_planner_b", "x"]), # package removed since
+        dict(value="1.3.0"),  # ref value bump
+        dict(kind="branch", value="main"),  # ref kind switch
+        dict(url="https://github.com/example-org/other_repo"),  # URL-only change
+        dict(packages=["autoware_a_filter"]),  # package added since
+        dict(packages=["autoware_a_filter", "zz_planner_b", "x"]),  # package removed since
     ],
 )
 def test_eager_any_tuple_change_resweeps(tmp_path, delta):
@@ -134,7 +140,9 @@ def test_eager_state_package_order_is_insensitive(tmp_path):
     dist = write_distribution(tmp_path / "distributions")
     state = tmp_path / "state"
     write_state(
-        state, "jazzy", "awesome_tools",
+        state,
+        "jazzy",
+        "awesome_tools",
         **{**MATCHING_STATE, "packages": ["zz_planner_b", "autoware_a_filter"]},
     )
     assert m.build_matrix(dist, state, "eager") == []
@@ -175,11 +183,17 @@ def branch_repo(packages=None):
 
 
 def test_nightly_branch_repo_always_swept_even_with_fresh_state(tmp_path):
-    dist = write_distribution(tmp_path / "distributions", repositories={"rolling_repo": branch_repo()})
+    dist = write_distribution(
+        tmp_path / "distributions", repositories={"rolling_repo": branch_repo()}
+    )
     state = tmp_path / "state"
     write_state(
-        state, "jazzy", "rolling_repo",
-        url="https://github.com/example-org/rolling_repo", kind="branch", value="main",
+        state,
+        "jazzy",
+        "rolling_repo",
+        url="https://github.com/example-org/rolling_repo",
+        kind="branch",
+        value="main",
         packages=["rolling_pkg"],
     )
     rows = m.build_matrix(dist, state, "nightly")
@@ -202,7 +216,9 @@ def test_nightly_pinned_repo_with_stale_state_caught_up(tmp_path):
 
 
 def test_nightly_branch_and_stale_is_one_row(tmp_path):
-    dist = write_distribution(tmp_path / "distributions", repositories={"rolling_repo": branch_repo()})
+    dist = write_distribution(
+        tmp_path / "distributions", repositories={"rolling_repo": branch_repo()}
+    )
     rows = m.build_matrix(dist, tmp_path / "state", "nightly")
     assert len(rows) == 1
 
@@ -212,7 +228,9 @@ def test_nightly_branch_and_stale_is_one_row(tmp_path):
 # --------------------------------------------------------------------------
 def test_rows_sorted_by_distro_then_repo(tmp_path):
     dist = tmp_path / "distributions"
-    write_distribution(dist, distro="jazzy", repositories={"zzz": branch_repo(), "aaa": branch_repo()})
+    write_distribution(
+        dist, distro="jazzy", repositories={"zzz": branch_repo(), "aaa": branch_repo()}
+    )
     # Same-named repos in another distro file.
     write_distribution(dist, distro="humble", repositories={"mmm": branch_repo()})
     rows = m.build_matrix(dist, tmp_path / "state", "nightly")
@@ -268,7 +286,16 @@ def test_main_writes_output_file(tmp_path, monkeypatch):
     out = tmp_path / "matrix.json"
     run_main(
         monkeypatch,
-        ["--mode", "eager", "--distributions-dir", str(dist), "--state-dir", str(tmp_path / "state"), "--output", str(out)],
+        [
+            "--mode",
+            "eager",
+            "--distributions-dir",
+            str(dist),
+            "--state-dir",
+            str(tmp_path / "state"),
+            "--output",
+            str(out),
+        ],
     )
     payload = json.loads(out.read_text())
     assert len(payload["include"]) == 1
@@ -278,7 +305,14 @@ def test_main_stdout(tmp_path, monkeypatch, capsys):
     dist = write_distribution(tmp_path / "distributions")
     run_main(
         monkeypatch,
-        ["--mode", "eager", "--distributions-dir", str(dist), "--state-dir", str(tmp_path / "state")],
+        [
+            "--mode",
+            "eager",
+            "--distributions-dir",
+            str(dist),
+            "--state-dir",
+            str(tmp_path / "state"),
+        ],
     )
     payload = json.loads(capsys.readouterr().out)
     assert payload["include"][0]["repo_name"] == "awesome_tools"
@@ -290,7 +324,16 @@ def test_main_max_rows_guard_fails_loudly(tmp_path, monkeypatch):
     with pytest.raises(SystemExit) as exc:
         run_main(
             monkeypatch,
-            ["--mode", "nightly", "--distributions-dir", str(dist), "--state-dir", str(tmp_path / "state"), "--max-rows", "2"],
+            [
+                "--mode",
+                "nightly",
+                "--distributions-dir",
+                str(dist),
+                "--state-dir",
+                str(tmp_path / "state"),
+                "--max-rows",
+                "2",
+            ],
         )
     assert "3 rows" in str(exc.value)
     assert "::error::" in str(exc.value)
@@ -301,5 +344,15 @@ def test_main_v1_file_exits_with_error(tmp_path, monkeypatch):
     dist.mkdir()
     (dist / "jazzy.yaml").write_text('schema_version: "1"\nros_distro: jazzy\n')
     with pytest.raises(SystemExit) as exc:
-        run_main(monkeypatch, ["--mode", "eager", "--distributions-dir", str(dist), "--state-dir", str(tmp_path / "s")])
+        run_main(
+            monkeypatch,
+            [
+                "--mode",
+                "eager",
+                "--distributions-dir",
+                str(dist),
+                "--state-dir",
+                str(tmp_path / "s"),
+            ],
+        )
     assert "not supported" in str(exc.value)

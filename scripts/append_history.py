@@ -53,12 +53,12 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
-from pathlib import Path
 
 BOT_NAME = "github-actions[bot]"
 BOT_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
@@ -78,7 +78,9 @@ def _existing_state_is_newer(target_file: Path, state: dict) -> bool:
         return False
 
 
-def write_outputs(tmpdir: Path, envelopes: list[dict], states: list[dict], metadata_dir: Path | None) -> None:
+def write_outputs(
+    tmpdir: Path, envelopes: list[dict], states: list[dict], metadata_dir: Path | None
+) -> None:
     """Apply one attempt's writes onto a fresh data-branch worktree."""
     for env in envelopes:
         target_dir = tmpdir / "history" / env["ros_distro"]
@@ -139,9 +141,13 @@ def append_history(envelopes: list[dict], states: list[dict], metadata_dir: Path
             run(
                 [
                     "git",
-                    "-c", f"user.name={BOT_NAME}",
-                    "-c", f"user.email={BOT_EMAIL}",
-                    "commit", "-m", build_commit_message(envelopes),
+                    "-c",
+                    f"user.name={BOT_NAME}",
+                    "-c",
+                    f"user.email={BOT_EMAIL}",
+                    "commit",
+                    "-m",
+                    build_commit_message(envelopes),
                 ],
                 tmpdir,
             )

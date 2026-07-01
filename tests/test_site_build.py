@@ -11,10 +11,8 @@ Covers the real signatures verified by reading build.py:
 
 import json
 
-import pytest
-
 import build
-
+import pytest
 
 # --------------------------------------------------------------------------- #
 # semver_key
@@ -71,10 +69,7 @@ def test_parse_description_collapses_internal_whitespace_and_newlines():
 
 
 def test_parse_description_includes_nested_text_via_itertext():
-    xml = (
-        "<package><description>see <a href='x'>the link</a> here"
-        "</description></package>"
-    )
+    xml = "<package><description>see <a href='x'>the link</a> here" "</description></package>"
     assert build.parse_description(xml) == "see the link here"
 
 
@@ -232,11 +227,7 @@ def test_load_distributions_no_repositories_or_packages(tmp_path):
         'schema_version: "2"\nros_distro: humble\nrepositories: {}\n'
     )
     (tmp_path / "no_pkgs.yaml").write_text(
-        'schema_version: "2"\n'
-        "ros_distro: rolling\n"
-        "repositories:\n"
-        "  r:\n"
-        "    url: u\n"
+        'schema_version: "2"\n' "ros_distro: rolling\n" "repositories:\n" "  r:\n" "    url: u\n"
     )
     regs = build.load_distributions(tmp_path)
     assert regs == []
@@ -320,11 +311,7 @@ def test_load_history_skips_blank_lines(tmp_path):
     distro_dir = tmp_path / "humble"
     distro_dir.mkdir()
     (distro_dir / "pkg.ndjson").write_text(
-        "\n"
-        + json.dumps({"status": "pass"})
-        + "\n\n   \n"
-        + json.dumps({"status": "fail"})
-        + "\n"
+        "\n" + json.dumps({"status": "pass"}) + "\n\n   \n" + json.dumps({"status": "fail"}) + "\n"
     )
     records = build.load_history(tmp_path)[("humble", "pkg")]
     assert len(records) == 2
@@ -452,10 +439,8 @@ def test_summarize_last_green_by_time_not_version():
 def test_summarize_latest_per_version_most_recent_wins():
     # Two records for the same version; the later `at` should populate the cell.
     records = [
-        {"status": "fail", "at": "2024-01-01", "autoware_version": "1.6.0",
-         "resolved_sha": "old"},
-        {"status": "pass", "at": "2024-02-01", "autoware_version": "1.6.0",
-         "resolved_sha": "new"},
+        {"status": "fail", "at": "2024-01-01", "autoware_version": "1.6.0", "resolved_sha": "old"},
+        {"status": "pass", "at": "2024-02-01", "autoware_version": "1.6.0", "resolved_sha": "new"},
     ]
     result = build.summarize(records)
     assert len(result["versions"]) == 1
@@ -599,8 +584,11 @@ def test_build_packages_shared_repo_packages_join_independently():
     # Two registrations from ONE repository entry: the history join keys on
     # (distro, package), so each card gets its own status and versions even
     # though repository/repo_name/ref are shared.
-    shared = {"repo_name": "shared", "repository": "https://x/shared",
-              "ref": {"kind": "tag", "value": "1.0.0"}}
+    shared = {
+        "repo_name": "shared",
+        "repository": "https://x/shared",
+        "ref": {"kind": "tag", "value": "1.0.0"},
+    }
     regs = [
         _reg(name="pkg_a", description="A", **shared),
         _reg(name="pkg_b", description="B", **shared),
@@ -646,10 +634,7 @@ def test_main_writes_data_json_and_copies_assets(tmp_path, monkeypatch, capsys):
     history = tmp_path / "history"
     (history / "humble").mkdir(parents=True)
     (history / "humble" / "pkg_a.ndjson").write_text(
-        json.dumps(
-            {"status": "pass", "at": "2024-01-01", "autoware_version": "1.6.0"}
-        )
-        + "\n"
+        json.dumps({"status": "pass", "at": "2024-01-01", "autoware_version": "1.6.0"}) + "\n"
     )
 
     metadata = tmp_path / "metadata"

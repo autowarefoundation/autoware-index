@@ -31,16 +31,18 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 import shutil
 import sys
 import xml.etree.ElementTree as ET
-from pathlib import Path
 
 SITE_DIR = Path(__file__).resolve().parent
 STATIC_ASSETS = ("index.html", "styles.css", "app.js", "compose.mjs")
 
 sys.path.insert(0, str(SITE_DIR.parent / "scripts"))
-from registry_load import RegistryError, flatten_packages, load_distributions_dir  # noqa: E402
+from registry_load import RegistryError  # noqa: E402
+from registry_load import flatten_packages
+from registry_load import load_distributions_dir
 
 
 def semver_key(version: str) -> tuple:
@@ -104,9 +106,7 @@ def load_metadata(metadata_dir: Path) -> dict[tuple[str, str], str]:
     for package_xml in sorted(metadata_dir.glob("*/*.xml")):
         distro = package_xml.parent.name
         package = package_xml.stem
-        descriptions[(distro, package)] = parse_description(
-            package_xml.read_text(encoding="utf-8")
-        )
+        descriptions[(distro, package)] = parse_description(package_xml.read_text(encoding="utf-8"))
     return descriptions
 
 
@@ -130,7 +130,12 @@ def load_history(history_dir: Path) -> dict[tuple[str, str], list[dict]]:
 def summarize(records: list[dict]) -> dict:
     """Derive current status, last-green version, and a per-version latest cell."""
     if not records:
-        return {"current_status": "unknown", "last_green": None, "last_tested_at": None, "versions": []}
+        return {
+            "current_status": "unknown",
+            "last_green": None,
+            "last_tested_at": None,
+            "versions": [],
+        }
 
     by_time = sorted(records, key=lambda r: r.get("at", ""))
     latest_overall = by_time[-1]
@@ -152,7 +157,9 @@ def summarize(records: list[dict]) -> dict:
             "at": rec.get("at", ""),
             "actions_run_url": rec.get("actions_run_url", ""),
         }
-        for ver, rec in sorted(latest_per_version.items(), key=lambda kv: semver_key(kv[0]), reverse=True)
+        for ver, rec in sorted(
+            latest_per_version.items(), key=lambda kv: semver_key(kv[0]), reverse=True
+        )
     ]
 
     return {
@@ -184,7 +191,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--distributions-dir", default="distributions")
     parser.add_argument("--history-dir", default="", help="Path to the data branch's history/ dir")
-    parser.add_argument("--metadata-dir", default="", help="Path to the data branch's metadata/ dir")
+    parser.add_argument(
+        "--metadata-dir", default="", help="Path to the data branch's metadata/ dir"
+    )
     parser.add_argument("--out", default="_site")
     parser.add_argument("--built-at", default="", help="Build timestamp to stamp into data.json")
     args = parser.parse_args()

@@ -17,14 +17,13 @@ import io
 import json
 import subprocess
 
-import pytest
-
 import append_history as ah
-
+import pytest
 
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
+
 
 def make_record(
     sweep_kind="build",
@@ -67,6 +66,7 @@ def make_state(ros_distro="jazzy", repo_name="autoware_demo_repo", state=None):
 # ---------------------------------------------------------------------------
 # load_json
 # ---------------------------------------------------------------------------
+
 
 def test_load_json_from_file(tmp_path):
     envelopes = [make_envelope(package_name="pkg_a"), make_envelope(package_name="pkg_b")]
@@ -142,6 +142,7 @@ def test_load_json_invalid_json_raises(tmp_path):
 # build_commit_message
 # ---------------------------------------------------------------------------
 
+
 def test_build_commit_message_single():
     env = make_envelope(
         ros_distro="jazzy",
@@ -170,9 +171,15 @@ def test_build_commit_message_single_without_repo_name_falls_back():
 
 def test_build_commit_message_multiple_summarizes_and_sorts():
     envelopes = [
-        make_envelope(ros_distro="rolling", record=make_record(sweep_kind="release", repo_name="repo_b")),
-        make_envelope(ros_distro="humble", record=make_record(sweep_kind="build", repo_name="repo_a")),
-        make_envelope(ros_distro="humble", record=make_record(sweep_kind="build", repo_name="repo_a")),
+        make_envelope(
+            ros_distro="rolling", record=make_record(sweep_kind="release", repo_name="repo_b")
+        ),
+        make_envelope(
+            ros_distro="humble", record=make_record(sweep_kind="build", repo_name="repo_a")
+        ),
+        make_envelope(
+            ros_distro="humble", record=make_record(sweep_kind="build", repo_name="repo_a")
+        ),
     ]
     msg = ah.build_commit_message(envelopes)
     # count is total envelopes (3); kinds, repos, and distros deduped + sorted.
@@ -184,13 +191,15 @@ def test_build_commit_message_multiple_summarizes_and_sorts():
 
 def test_build_commit_message_multiple_dedupes_kinds_repos_and_distros():
     envelopes = [
-        make_envelope(ros_distro="jazzy", record=make_record(sweep_kind="build", repo_name="repo_a")),
-        make_envelope(ros_distro="jazzy", record=make_record(sweep_kind="build", repo_name="repo_a")),
+        make_envelope(
+            ros_distro="jazzy", record=make_record(sweep_kind="build", repo_name="repo_a")
+        ),
+        make_envelope(
+            ros_distro="jazzy", record=make_record(sweep_kind="build", repo_name="repo_a")
+        ),
     ]
     msg = ah.build_commit_message(envelopes)
-    assert msg == (
-        "chore(data): append 2 sweep result(s) [build] for repo_a across jazzy"
-    )
+    assert msg == ("chore(data): append 2 sweep result(s) [build] for repo_a across jazzy")
 
 
 def test_build_commit_message_multiple_repo_name_fallback():
@@ -207,6 +216,7 @@ def test_build_commit_message_multiple_repo_name_fallback():
 # ---------------------------------------------------------------------------
 # write_outputs -- pure file routing, exercised against a real tmp dir
 # ---------------------------------------------------------------------------
+
 
 def test_write_outputs_appends_one_history_line_per_envelope(tmp_path):
     envelopes = [
@@ -249,8 +259,11 @@ def test_write_outputs_appends_without_truncating(tmp_path):
 
 def test_write_outputs_writes_state_file_per_repo(tmp_path):
     states = [
-        make_state(ros_distro="jazzy", repo_name="repo_a",
-                   state={"url": "u", "ref": {"kind": "tag", "value": "1"}}),
+        make_state(
+            ros_distro="jazzy",
+            repo_name="repo_a",
+            state={"url": "u", "ref": {"kind": "tag", "value": "1"}},
+        ),
         make_state(ros_distro="humble", repo_name="repo_b", state={"url": "v"}),
     ]
     ah.write_outputs(tmp_path, [], states, None)
@@ -276,8 +289,12 @@ def test_write_outputs_never_regresses_a_newer_state_cursor(tmp_path, capsys):
     # append, but A must NOT roll the cursor back over B's — otherwise the
     # level-triggered discover would re-sweep the old ref and the site would
     # show stale state until the next sweep.
-    newer = make_state(state={"url": "u", "ref": {"kind": "tag", "value": "2.0"}, "at": "2026-06-11T12:00:00Z"})
-    older = make_state(state={"url": "u", "ref": {"kind": "tag", "value": "1.0"}, "at": "2026-06-11T11:00:00Z"})
+    newer = make_state(
+        state={"url": "u", "ref": {"kind": "tag", "value": "2.0"}, "at": "2026-06-11T12:00:00Z"}
+    )
+    older = make_state(
+        state={"url": "u", "ref": {"kind": "tag", "value": "1.0"}, "at": "2026-06-11T11:00:00Z"}
+    )
     ah.write_outputs(tmp_path, [], [newer], None)
     ah.write_outputs(tmp_path, [], [older], None)
 
@@ -330,6 +347,7 @@ def test_write_outputs_metadata_none_or_missing_dir_skipped(tmp_path):
 # ---------------------------------------------------------------------------
 # append_history -- side effects monkeypatched
 # ---------------------------------------------------------------------------
+
 
 def test_append_history_empty_is_noop(monkeypatch, capsys):
     calls = []
@@ -421,9 +439,7 @@ def test_append_history_stages_with_git_add_dash_a(monkeypatch, tmp_path):
     ah.append_history([make_envelope()], [make_state()], None)
 
     assert ["git", "add", "-A"] in fake_run.calls
-    assert not any(
-        c[:2] == ["git", "add"] and c != ["git", "add", "-A"] for c in fake_run.calls
-    )
+    assert not any(c[:2] == ["git", "add"] and c != ["git", "add", "-A"] for c in fake_run.calls)
 
 
 def test_append_history_writes_state_files_alongside_history(monkeypatch, tmp_path, capsys):
@@ -541,9 +557,7 @@ def test_append_history_worktree_cleanup_runs_on_success(monkeypatch, tmp_path):
     ah.append_history([make_envelope()], [], None)
 
     # the finally block must invoke `git worktree remove --force <dir>`
-    assert any(
-        c[:4] == ["git", "worktree", "remove", "--force"] for c in fake_run.calls
-    )
+    assert any(c[:4] == ["git", "worktree", "remove", "--force"] for c in fake_run.calls)
 
 
 def test_append_history_commit_uses_build_commit_message(monkeypatch, tmp_path):
@@ -558,8 +572,9 @@ def test_append_history_commit_uses_build_commit_message(monkeypatch, tmp_path):
 
     env = make_envelope(
         package_name="solo_pkg",
-        record=make_record(sweep_kind="build", status="pass", autoware_version="9.9.9",
-                           repo_name="solo_repo"),
+        record=make_record(
+            sweep_kind="build", status="pass", autoware_version="9.9.9", repo_name="solo_repo"
+        ),
     )
     ah.append_history([env], [], None)
 
@@ -579,8 +594,7 @@ def test_run_helper_invokes_subprocess(monkeypatch, tmp_path):
     captured = {}
 
     def fake_subprocess_run(cmd, cwd, check, capture_output, text):
-        captured.update(cmd=cmd, cwd=cwd, check=check,
-                        capture_output=capture_output, text=text)
+        captured.update(cmd=cmd, cwd=cwd, check=check, capture_output=capture_output, text=text)
         return subprocess.CompletedProcess(cmd, 0, "out", "")
 
     monkeypatch.setattr(ah.subprocess, "run", fake_subprocess_run)
@@ -598,6 +612,7 @@ def test_run_helper_invokes_subprocess(monkeypatch, tmp_path):
 # main -- CLI arg routing into append_history
 # ---------------------------------------------------------------------------
 
+
 def test_main_passes_records_states_and_metadata_dir(monkeypatch, tmp_path):
     records = tmp_path / "records.json"
     records.write_text(json.dumps([make_envelope()]), encoding="utf-8")
@@ -608,15 +623,23 @@ def test_main_passes_records_states_and_metadata_dir(monkeypatch, tmp_path):
 
     captured = {}
     monkeypatch.setattr(
-        ah, "append_history",
+        ah,
+        "append_history",
         lambda envelopes, st, md: captured.update(envelopes=envelopes, states=st, metadata=md),
     )
-    monkeypatch.setattr(ah.sys, "argv", [
-        "append_history.py",
-        "--records", str(records),
-        "--states", str(states),
-        "--metadata-dir", str(metadata),
-    ])
+    monkeypatch.setattr(
+        ah.sys,
+        "argv",
+        [
+            "append_history.py",
+            "--records",
+            str(records),
+            "--states",
+            str(states),
+            "--metadata-dir",
+            str(metadata),
+        ],
+    )
 
     ah.main()
 
@@ -631,7 +654,8 @@ def test_main_states_and_metadata_are_optional(monkeypatch, tmp_path):
 
     captured = {}
     monkeypatch.setattr(
-        ah, "append_history",
+        ah,
+        "append_history",
         lambda envelopes, st, md: captured.update(envelopes=envelopes, states=st, metadata=md),
     )
     monkeypatch.setattr(ah.sys, "argv", ["append_history.py", "--records", str(records)])

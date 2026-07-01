@@ -44,12 +44,14 @@ Usage:
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 import re
 import subprocess
 import sys
-from pathlib import Path
 
-from registry_load import RegistryError, canonical_url, load_distribution
+from registry_load import RegistryError
+from registry_load import canonical_url
+from registry_load import load_distribution
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 PLACEHOLDER_NAMES = {"tbd", "todo", "n/a", "na", "none", "xxx", ""}
@@ -190,7 +192,9 @@ def main() -> int:
     errors: list[str] = []
     resolve_cache: dict[tuple[str, str, str], bool] = {}
     for arg in args.paths:
-        errors.extend(check_file(Path(arg), network=not args.no_network, resolve_cache=resolve_cache))
+        errors.extend(
+            check_file(Path(arg), network=not args.no_network, resolve_cache=resolve_cache)
+        )
 
     for e in errors:
         print(e, file=sys.stderr)

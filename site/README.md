@@ -38,11 +38,11 @@ notes "one of N registered packages from this repository" on its card.
 
 The site joins data from two branches:
 
-| Source | Branch | Read by |
-|--------|--------|---------|
-| `distributions/<distro>.yaml` (what is registered) | `main` | `--distributions-dir` |
-| `history/<distro>/<package>.ndjson` (how it validated) | `data` (orphan) | `--history-dir` |
-| `metadata/<distro>/<package>.xml` (cached upstream `package.xml`) | `data` (orphan) | `--metadata-dir` |
+| Source                                                            | Branch          | Read by               |
+| ----------------------------------------------------------------- | --------------- | --------------------- |
+| `distributions/<distro>.yaml` (what is registered)                | `main`          | `--distributions-dir` |
+| `history/<distro>/<package>.ndjson` (how it validated)            | `data` (orphan) | `--history-dir`       |
+| `metadata/<distro>/<package>.xml` (cached upstream `package.xml`) | `data` (orphan) | `--metadata-dir`      |
 
 Each card's description is the registry-side `description:` override if set,
 otherwise the cached `package.xml` `<description>`.

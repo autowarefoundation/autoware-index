@@ -44,9 +44,9 @@ A repository hosting several ROS packages is **one** `repositories:` entry:
   aware that consumers clone the WHOLE repository, so unregistered sibling
   packages ship alongside registered ones without any validation claims.
   Consumers scope their builds with `colcon build --packages-up-to
-  <registered names>`.
+<registered names>`.
 - Each package gets its own independent history record per sweep: a sibling's
-  test failure never marks your package red (a broken in-repo *dependency*
+  test failure never marks your package red (a broken in-repo _dependency_
   does — your package would not build).
 
 ## What the validation enforces
@@ -85,11 +85,11 @@ without network; CI runs the full `check_refs.py` including ref resolvability.
 
 ## Choosing a `ref` kind
 
-| Kind | When to use |
-|------|-------------|
-| `tag` | Freeze a known-good release. Validated once; immutable history. |
-| `sha` | Pin an exact commit. Same semantics as `tag`. |
-| `branch` | "Always test my latest." Re-resolved and re-swept nightly. |
+| Kind     | When to use                                                     |
+| -------- | --------------------------------------------------------------- |
+| `tag`    | Freeze a known-good release. Validated once; immutable history. |
+| `sha`    | Pin an exact commit. Same semantics as `tag`.                   |
+| `branch` | "Always test my latest." Re-resolved and re-swept nightly.      |
 
 See [`README.md`](README.md#ref-kinds) for details.
 
