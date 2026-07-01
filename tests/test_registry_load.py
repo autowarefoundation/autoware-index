@@ -159,6 +159,163 @@ def test_canonical_url_distinct_repos_stay_distinct():
 
 
 # --------------------------------------------------------------------------
+# load_vocabulary — the closed tag vocabulary gate
+# --------------------------------------------------------------------------
+VOCAB_DOC = """
+groups:
+  pipeline: Autonomy pipeline
+  operations: Development & operations
+tags:
+  sensing:
+    group: pipeline
+    summary: Processes already-published sensor data.
+    disambiguation: Hardware access is `driver`.
+  planning:
+    group: pipeline
+    summary: Mission, behavior, and motion planning.
+  tool:
+    group: operations
+    summary: An executable developer utility you run.
+deprecated:
+  launcher:
+    replaced_by: [planning]
+    note: Renamed 2026-07.
+"""
+
+
+def write_vocab(tmp_path, content):
+    return write(tmp_path, "tags.yaml", content)
+
+
+def test_load_vocabulary_accepts_well_formed(tmp_path):
+    vocab = m.load_vocabulary(write_vocab(tmp_path, VOCAB_DOC))
+    assert set(vocab["tags"]) == {"sensing", "planning", "tool"}
+    assert vocab["tags"]["sensing"]["group"] == "pipeline"
+    assert vocab["deprecated"]["launcher"]["replaced_by"] == ["planning"]
+
+
+def test_load_vocabulary_defaults_deprecated_to_empty(tmp_path):
+    content = VOCAB_DOC[: VOCAB_DOC.index("deprecated:")]
+    vocab = m.load_vocabulary(write_vocab(tmp_path, content))
+    assert vocab["deprecated"] == {}
+
+
+def test_load_vocabulary_rejects_missing_file(tmp_path):
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_vocabulary(tmp_path / "tags.yaml")
+    assert "cannot parse" in str(exc.value)
+
+
+def test_load_vocabulary_rejects_non_mapping(tmp_path):
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_vocabulary(write_vocab(tmp_path, "- a\n- list\n"))
+    assert "mapping" in str(exc.value)
+
+
+def test_load_vocabulary_rejects_missing_groups(tmp_path):
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_vocabulary(write_vocab(tmp_path, "tags:\n  a:\n    summary: s\n"))
+    assert "`groups` must be a non-empty mapping" in str(exc.value)
+
+
+def test_load_vocabulary_rejects_missing_tags(tmp_path):
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_vocabulary(write_vocab(tmp_path, "groups:\n  g: Title\n"))
+    assert "`tags` must be a non-empty mapping" in str(exc.value)
+
+
+@pytest.mark.parametrize("bad_id", ["Sensing", "sen_sing", "-sensing", "9tag", "x" * 21])
+def test_load_vocabulary_rejects_bad_tag_id(tmp_path, bad_id):
+    content = f"groups:\n  g: Title\ntags:\n  {bad_id}:\n    group: g\n    summary: s\n"
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_vocabulary(write_vocab(tmp_path, content))
+    assert "tag id must match" in str(exc.value)
+
+
+def test_load_vocabulary_rejects_unknown_tag_key(tmp_path):
+    # Typo'd keys (`sumary:`) must not pass silently.
+    content = "groups:\n  g: Title\ntags:\n  a:\n    group: g\n    sumary: oops\n"
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_vocabulary(write_vocab(tmp_path, content))
+    assert "unknown key(s)" in str(exc.value)
+    assert "sumary" in str(exc.value)
+
+
+def test_load_vocabulary_rejects_unknown_group(tmp_path):
+    content = "groups:\n  g: Title\ntags:\n  a:\n    group: nope\n    summary: s\n"
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_vocabulary(write_vocab(tmp_path, content))
+    assert "not defined under `groups`" in str(exc.value)
+
+
+@pytest.mark.parametrize("summary", ["''", "|-\n      two\n      lines"])
+def test_load_vocabulary_rejects_bad_summary(tmp_path, summary):
+    content = f"groups:\n  g: Title\ntags:\n  a:\n    group: g\n    summary: {summary}\n"
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_vocabulary(write_vocab(tmp_path, content))
+    assert "`summary` must be a non-empty single-line string" in str(exc.value)
+
+
+def test_load_vocabulary_rejects_id_both_live_and_deprecated(tmp_path):
+    content = (
+        "groups:\n  g: Title\n"
+        "tags:\n  a:\n    group: g\n    summary: s\n"
+        "deprecated:\n  a:\n    replaced_by: []\n"
+    )
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_vocabulary(write_vocab(tmp_path, content))
+    assert "deprecated id is also a live tag" in str(exc.value)
+
+
+def test_load_vocabulary_rejects_missing_replaced_by(tmp_path):
+    content = (
+        "groups:\n  g: Title\n"
+        "tags:\n  a:\n    group: g\n    summary: s\n"
+        "deprecated:\n  b: {}\n"
+    )
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_vocabulary(write_vocab(tmp_path, content))
+    assert "`replaced_by` must be a list of live tag ids" in str(exc.value)
+
+
+def test_load_vocabulary_rejects_dangling_replaced_by_target(tmp_path):
+    content = (
+        "groups:\n  g: Title\n"
+        "tags:\n  a:\n    group: g\n    summary: s\n"
+        "deprecated:\n  b:\n    replaced_by: [ghost]\n"
+    )
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_vocabulary(write_vocab(tmp_path, content))
+    assert "`replaced_by` target 'ghost' is not a live tag" in str(exc.value)
+
+
+def test_load_vocabulary_rejects_deprecated_replaced_by_target(tmp_path):
+    # No deprecation chains: a replacement must be a LIVE tag, so a later
+    # deprecation of the replacement forces rewriting earlier entries to the
+    # final target.
+    content = (
+        "groups:\n  g: Title\n"
+        "tags:\n  a:\n    group: g\n    summary: s\n"
+        "deprecated:\n"
+        "  b:\n    replaced_by: [c]\n"
+        "  c:\n    replaced_by: [a]\n"
+    )
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_vocabulary(write_vocab(tmp_path, content))
+    assert "`replaced_by` target 'c' is not a live tag" in str(exc.value)
+
+
+def test_load_vocabulary_real_committed_file(repo_root):
+    # The committed vocabulary must always load: site/build.py and
+    # check_tags.py both hard-fail on a broken schema/tags.yaml.
+    vocab = m.load_vocabulary(repo_root / "schema" / "tags.yaml")
+    assert {"sensing", "launch", "system", "evaluation"} <= set(vocab["tags"])
+    assert "launcher" not in vocab["tags"]
+    for spec in vocab["tags"].values():
+        assert spec["group"] in vocab["groups"]
+
+
+# --------------------------------------------------------------------------
 # flatten_packages — the computed package -> repository inverse index
 # --------------------------------------------------------------------------
 def test_flatten_packages_one_record_per_package(tmp_path):

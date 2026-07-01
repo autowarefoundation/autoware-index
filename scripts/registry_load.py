@@ -21,7 +21,7 @@ Format (schema_version "2", see schema/distribution.schema.json):
         maintainers: [...]         # repo-level default
         packages:                  # >= 1 registered package hosted by the repo
           <package_name>:
-            tags: [...]            # required
+            tags: [...]            # required; live ids from schema/tags.yaml
             description: "..."     # optional card-description override
             maintainers: [...]     # optional per-package override
 
@@ -39,6 +39,12 @@ from urllib.parse import urlsplit
 import yaml
 
 SUPPORTED_SCHEMA_VERSION = "2"
+
+TAG_ID_PATTERN = re.compile(r"^[a-z][a-z0-9-]*$")
+TAG_ID_MAX_LENGTH = 20
+
+_TAG_KEYS = {"group", "summary", "disambiguation"}
+_DEPRECATED_KEYS = {"replaced_by", "note"}
 
 
 class RegistryError(Exception):
@@ -92,6 +98,109 @@ def load_distribution(path: Path) -> dict:
 def load_distributions_dir(distributions_dir: Path) -> list[tuple[Path, dict]]:
     """Load every *.yaml in a distributions dir, sorted by filename."""
     return [(path, load_distribution(path)) for path in sorted(distributions_dir.glob("*.yaml"))]
+
+
+def _check_tag_id(path: Path, tag_id: object) -> None:
+    if (
+        not isinstance(tag_id, str)
+        or not TAG_ID_PATTERN.match(tag_id)
+        or len(tag_id) > TAG_ID_MAX_LENGTH
+    ):
+        raise RegistryError(
+            f"{path}::{tag_id}: tag id must match {TAG_ID_PATTERN.pattern} "
+            f"and be at most {TAG_ID_MAX_LENGTH} characters"
+        )
+
+
+def load_vocabulary(path: Path) -> dict:
+    """Parse and self-check schema/tags.yaml (the closed tag vocabulary).
+
+    Returns ``{"groups": {...}, "tags": {...}, "deprecated": {...}}`` with
+    ``deprecated`` defaulting to an empty mapping. Raises RegistryError on the
+    first inconsistency: unparseable/non-mapping document, a malformed tag id,
+    an unknown key in a tag spec (catches ``sumary:``-style typos), a missing
+    or empty ``summary``, a ``group`` not declared under ``groups:``, an id
+    that is both live and deprecated, or a ``replaced_by`` target that is not
+    a live tag (deprecation chains are rejected — always point at the final
+    replacement). Every reader (check_tags.py, site/build.py) goes through
+    this gate, so a broken vocabulary is a hard, uniform failure — never a
+    vacuously-passing check or a silently ungrouped site.
+    """
+    try:
+        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        raise RegistryError(f"{path}: cannot parse: {exc}") from exc
+
+    if not isinstance(doc, dict):
+        raise RegistryError(f"{path}: expected a YAML mapping, got {type(doc).__name__}")
+
+    groups = doc.get("groups")
+    if not isinstance(groups, dict) or not groups:
+        raise RegistryError(f"{path}: `groups` must be a non-empty mapping of group id -> title")
+    for group_id, title in groups.items():
+        if not isinstance(title, str) or not title.strip():
+            raise RegistryError(f"{path}: group {group_id!r} title must be a non-empty string")
+
+    tags = doc.get("tags")
+    if not isinstance(tags, dict) or not tags:
+        raise RegistryError(f"{path}: `tags` must be a non-empty mapping of tag id -> spec")
+    for tag_id, spec in tags.items():
+        _check_tag_id(path, tag_id)
+        if not isinstance(spec, dict):
+            raise RegistryError(f"{path}::{tag_id}: tag spec must be a mapping")
+        unknown = set(spec) - _TAG_KEYS
+        if unknown:
+            raise RegistryError(
+                f"{path}::{tag_id}: unknown key(s) {sorted(unknown)!r} "
+                f"(allowed: {sorted(_TAG_KEYS)!r})"
+            )
+        group = spec.get("group")
+        if group not in groups:
+            raise RegistryError(
+                f"{path}::{tag_id}: `group` {group!r} is not defined under `groups`"
+            )
+        summary = spec.get("summary")
+        if not isinstance(summary, str) or not summary.strip() or "\n" in summary.strip():
+            raise RegistryError(
+                f"{path}::{tag_id}: `summary` must be a non-empty single-line string"
+            )
+        disambiguation = spec.get("disambiguation")
+        if disambiguation is not None and (
+            not isinstance(disambiguation, str) or not disambiguation.strip()
+        ):
+            raise RegistryError(f"{path}::{tag_id}: `disambiguation` must be a non-empty string")
+
+    deprecated = doc.get("deprecated") or {}
+    if not isinstance(deprecated, dict):
+        raise RegistryError(f"{path}: `deprecated` must be a mapping of tag id -> spec")
+    for tag_id, spec in deprecated.items():
+        _check_tag_id(path, tag_id)
+        if tag_id in tags:
+            raise RegistryError(f"{path}::{tag_id}: deprecated id is also a live tag")
+        if not isinstance(spec, dict):
+            raise RegistryError(f"{path}::{tag_id}: deprecated spec must be a mapping")
+        unknown = set(spec) - _DEPRECATED_KEYS
+        if unknown:
+            raise RegistryError(
+                f"{path}::{tag_id}: unknown key(s) {sorted(unknown)!r} "
+                f"(allowed: {sorted(_DEPRECATED_KEYS)!r})"
+            )
+        replaced_by = spec.get("replaced_by")
+        if not isinstance(replaced_by, list) or not all(isinstance(t, str) for t in replaced_by):
+            raise RegistryError(
+                f"{path}::{tag_id}: `replaced_by` must be a list of live tag ids "
+                f"(may be empty for retirement without replacement)"
+            )
+        for target in replaced_by:
+            if target not in tags:
+                raise RegistryError(
+                    f"{path}::{tag_id}: `replaced_by` target {target!r} is not a live tag"
+                )
+        note = spec.get("note")
+        if note is not None and (not isinstance(note, str) or not note.strip()):
+            raise RegistryError(f"{path}::{tag_id}: `note` must be a non-empty string")
+
+    return {"groups": groups, "tags": tags, "deprecated": deprecated}
 
 
 def canonical_url(url: str) -> str:
