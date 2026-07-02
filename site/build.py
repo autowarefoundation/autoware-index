@@ -43,6 +43,9 @@ sys.path.insert(0, str(SITE_DIR.parent / "scripts"))
 from registry_load import RegistryError  # noqa: E402
 from registry_load import flatten_packages  # noqa: E402
 from registry_load import load_distributions_dir  # noqa: E402
+from registry_load import load_vocabulary  # noqa: E402
+
+DEFAULT_TAGS_FILE = SITE_DIR.parent / "schema" / "tags.yaml"
 
 
 def semver_key(version: str) -> tuple:
@@ -80,6 +83,23 @@ def load_distributions(distributions_dir: Path) -> list[dict]:
                 }
             )
     return registrations
+
+
+def export_vocabulary(vocab: dict) -> dict:
+    """Shape the loaded tag vocabulary for data.json.
+
+    Groups and live tags are exported in vocabulary-file order (the display
+    order for the site's grouped filter); each tag carries its group and the
+    one-line summary app.js renders as the tooltip. Deprecated ids are not
+    exported — the gate keeps them out of the registry, so no card needs them.
+    """
+    return {
+        "groups": [{"id": gid, "title": title} for gid, title in vocab["groups"].items()],
+        "tags": [
+            {"id": tid, "group": spec["group"], "summary": spec["summary"]}
+            for tid, spec in vocab["tags"].items()
+        ],
+    }
 
 
 def parse_description(package_xml: str) -> str:
@@ -196,10 +216,18 @@ def main() -> None:
     )
     parser.add_argument("--out", default="_site")
     parser.add_argument("--built-at", default="", help="Build timestamp to stamp into data.json")
+    parser.add_argument(
+        "--tags-file",
+        default=str(DEFAULT_TAGS_FILE),
+        help="Tag vocabulary (schema/tags.yaml) exported into data.json for the grouped filter",
+    )
     args = parser.parse_args()
 
     try:
         registrations = load_distributions(Path(args.distributions_dir))
+        # A missing/broken vocabulary is a HARD build failure, same as an
+        # unsupported schema_version — never a silently ungrouped site.
+        vocabulary = load_vocabulary(Path(args.tags_file))
     except RegistryError as exc:
         sys.exit(f"error: {exc}")
     history = load_history(Path(args.history_dir)) if args.history_dir else {}
@@ -209,7 +237,11 @@ def main() -> None:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    data = {"built_at": args.built_at or "unknown", "packages": packages}
+    data = {
+        "built_at": args.built_at or "unknown",
+        "tag_vocabulary": export_vocabulary(vocabulary),
+        "packages": packages,
+    }
     (out_dir / "data.json").write_text(json.dumps(data, indent=2))
     for asset in STATIC_ASSETS:
         shutil.copy2(SITE_DIR / asset, out_dir / asset)

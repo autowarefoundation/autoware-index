@@ -836,3 +836,135 @@ def test_main_v1_distribution_exits_with_error(tmp_path, monkeypatch):
     assert str(excinfo.value).startswith("error:")
     assert "not supported" in str(excinfo.value)
     assert not (out_dir / "data.json").exists()  # nothing published
+
+
+# --------------------------------------------------------------------------- #
+# tag vocabulary export
+# --------------------------------------------------------------------------- #
+
+# Live tag order (tool before planning) is deliberately NON-alphabetical so
+# the file-order assertions below would catch an accidental sort.
+VOCAB_YAML = (
+    "groups:\n"
+    "  pipeline: Autonomy pipeline\n"
+    "  operations: Development & operations\n"
+    "tags:\n"
+    "  tool:\n"
+    "    group: operations\n"
+    "    summary: An executable developer utility you run.\n"
+    "  planning:\n"
+    "    group: pipeline\n"
+    "    summary: Mission, behavior, and motion planning.\n"
+    "deprecated:\n"
+    "  launcher:\n"
+    "    replaced_by: [planning]\n"
+)
+
+
+def write_minimal_registry(tmp_path):
+    distributions = tmp_path / "distributions"
+    distributions.mkdir()
+    (distributions / "humble.yaml").write_text(
+        'schema_version: "2"\n'
+        "ros_distro: humble\n"
+        "repositories:\n"
+        "  repo_a:\n"
+        "    url: https://example.com/a\n"
+        "    ref: {kind: branch, value: main}\n"
+        "    packages:\n"
+        "      pkg_a:\n"
+        "        tags: [planning]\n"
+    )
+    return distributions
+
+
+def test_export_vocabulary_preserves_file_order_and_drops_deprecated(tmp_path):
+    import registry_load
+
+    vocab_file = tmp_path / "tags.yaml"
+    vocab_file.write_text(VOCAB_YAML)
+    exported = build.export_vocabulary(registry_load.load_vocabulary(vocab_file))
+    assert exported == {
+        "groups": [
+            {"id": "pipeline", "title": "Autonomy pipeline"},
+            {"id": "operations", "title": "Development & operations"},
+        ],
+        "tags": [
+            {
+                "id": "tool",
+                "group": "operations",
+                "summary": "An executable developer utility you run.",
+            },
+            {
+                "id": "planning",
+                "group": "pipeline",
+                "summary": "Mission, behavior, and motion planning.",
+            },
+        ],
+    }
+    # Deprecated ids are gate-internal; the site never renders them.
+    assert "deprecated" not in exported
+
+
+def test_main_exports_tag_vocabulary(tmp_path, monkeypatch):
+    distributions = write_minimal_registry(tmp_path)
+    vocab_file = tmp_path / "tags.yaml"
+    vocab_file.write_text(VOCAB_YAML)
+    out_dir = tmp_path / "out"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "build.py",
+            "--distributions-dir",
+            str(distributions),
+            "--out",
+            str(out_dir),
+            "--tags-file",
+            str(vocab_file),
+        ],
+    )
+    build.main()
+    data = json.loads((out_dir / "data.json").read_text())
+    vocab = data["tag_vocabulary"]
+    assert [g["id"] for g in vocab["groups"]] == ["pipeline", "operations"]
+    assert [t["id"] for t in vocab["tags"]] == ["tool", "planning"]  # file order, not sorted
+    assert vocab["tags"][1]["summary"] == "Mission, behavior, and motion planning."
+
+
+def test_main_defaults_to_committed_vocabulary(tmp_path, monkeypatch):
+    # No --tags-file: the repo's real schema/tags.yaml is the default, so the
+    # pages workflow needs no new arguments.
+    distributions = write_minimal_registry(tmp_path)
+    out_dir = tmp_path / "out"
+    monkeypatch.setattr(
+        "sys.argv",
+        ["build.py", "--distributions-dir", str(distributions), "--out", str(out_dir)],
+    )
+    build.main()
+    data = json.loads((out_dir / "data.json").read_text())
+    ids = [t["id"] for t in data["tag_vocabulary"]["tags"]]
+    assert "sensing" in ids and "calibration" in ids
+
+
+def test_main_missing_vocabulary_is_a_hard_build_failure(tmp_path, monkeypatch):
+    # A typo'd --tags-file must abort the build, never publish a site with no
+    # grouped filter (same philosophy as the schema_version gate).
+    distributions = write_minimal_registry(tmp_path)
+    out_dir = tmp_path / "out"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "build.py",
+            "--distributions-dir",
+            str(distributions),
+            "--out",
+            str(out_dir),
+            "--tags-file",
+            str(tmp_path / "absent.yaml"),
+        ],
+    )
+    with pytest.raises(SystemExit) as excinfo:
+        build.main()
+    assert excinfo.value.code != 0
+    assert "cannot parse" in str(excinfo.value)
+    assert not (out_dir / "data.json").exists()  # nothing published

@@ -22,6 +22,8 @@ const state = {
   siblings: new Map(), // repoKey -> count (for the monorepo note)
   carts: new Map(), // distro -> Set<name>
   distributions: new Map(), // distro -> reconstructed distribution dict (memoized)
+  tagSummaries: new Map(), // tag id -> one-line summary (vocabulary tooltips)
+  vocabulary: null, // data.json's tag_vocabulary block (groups + live tags)
   active: "jazzy",
 };
 
@@ -174,7 +176,10 @@ function card(pkg, siblingCount) {
   renderToggle(toggle, false);
 
   const tags = el("div", { class: "tags" });
-  for (const t of pkg.tags || []) tags.append(el("span", { class: "tag", text: t }));
+  for (const t of pkg.tags || []) {
+    // The vocabulary summary doubles as the chip tooltip; el() skips null.
+    tags.append(el("span", { class: "tag", text: t, title: state.tagSummaries.get(t) }));
+  }
 
   const meta = el(
     "div",
@@ -224,6 +229,66 @@ function card(pkg, siblingCount) {
 
 function options(select, values) {
   for (const v of values) select.append(el("option", { value: v, text: v }));
+}
+
+// Grouped tag filter from the vocabulary in data.json: one <optgroup> per
+// group in vocabulary order, options only for tags actually in use, labeled
+// with live counts and carrying the summary as a tooltip. Option values stay
+// bare ids, so wireFilters' data-tags matching is unchanged. When the
+// vocabulary block is absent (a cached pre-vocabulary data.json served next
+// to a newer app.js), fall back to the flat observed-union dropdown.
+function tagOptions(select, packages, vocabulary) {
+  const counts = new Map();
+  for (const p of packages) {
+    for (const t of p.tags || []) counts.set(t, (counts.get(t) || 0) + 1);
+  }
+  if (!vocabulary || !Array.isArray(vocabulary.groups) || !Array.isArray(vocabulary.tags)) {
+    options(select, [...counts.keys()].sort());
+    return;
+  }
+  const known = new Set();
+  for (const group of vocabulary.groups) {
+    const inUse = vocabulary.tags.filter((t) => t.group === group.id && counts.has(t.id));
+    for (const t of inUse) known.add(t.id);
+    if (inUse.length === 0) continue;
+    const optgroup = el("optgroup", { label: group.title });
+    for (const t of inUse) {
+      optgroup.append(
+        el("option", {
+          value: t.id,
+          text: `${t.id} (${counts.get(t.id)})`,
+          title: t.summary,
+        }),
+      );
+    }
+    select.append(optgroup);
+  }
+  // In-use tags absent from the vocabulary (mismatched --tags-file build)
+  // must stay filterable — their chips render on cards regardless.
+  const leftovers = [...counts.keys()].filter((t) => !known.has(t)).sort();
+  if (leftovers.length) {
+    const optgroup = el("optgroup", { label: "Other" });
+    for (const t of leftovers) {
+      optgroup.append(el("option", { value: t, text: `${t} (${counts.get(t)})` }));
+    }
+    select.append(optgroup);
+  }
+}
+
+// (Re)build the #tag dropdown scoped to the ACTIVE distro. The card view is
+// always filtered to one distro, so global counts would overstate — counts
+// must be recomputed whenever the distro picker changes. Preserves the
+// current selection when the tag still exists in the new distro.
+function renderTagOptions() {
+  const select = document.getElementById("tag");
+  const previous = select.value;
+  for (const node of [...select.children]) {
+    if (!(node.tagName === "OPTION" && node.value === "")) node.remove();
+  }
+  const scoped = state.packages.filter((p) => p.distro === state.active);
+  tagOptions(select, scoped, state.vocabulary);
+  const values = new Set([...select.querySelectorAll("option")].map((o) => o.value));
+  select.value = values.has(previous) ? previous : "";
 }
 
 function renderStats(stats, packages, builtAt) {
@@ -518,9 +583,15 @@ function wireRosdistro() {
   state.active = distros.includes("jazzy") ? "jazzy" : distros[0] || "jazzy";
   distro.value = state.active;
   // Card visibility is already handled by wireFilters' own input listener on
-  // #distro; here we only swap which cart the sidebar shows.
+  // #distro; here we swap which cart the sidebar shows and rebuild the tag
+  // dropdown's per-distro counts. If the rebuild resets the tag selection,
+  // re-fire wireFilters' input listener so cards match the dropdown.
   distro.addEventListener("change", () => {
     state.active = distro.value;
+    const tag = document.getElementById("tag");
+    const before = tag.value;
+    renderTagOptions();
+    if (tag.value !== before) tag.dispatchEvent(new Event("input"));
     renderCart();
   });
 }
@@ -579,6 +650,9 @@ async function main() {
   state.packages = packages;
   for (const p of packages) state.pkgIndex.set(keyOf(p.distro, p.name), p);
   state.siblings = repoSiblingCounts(packages);
+  state.vocabulary = data.tag_vocabulary || null;
+  const vocabTags = Array.isArray(state.vocabulary?.tags) ? state.vocabulary.tags : [];
+  for (const t of vocabTags) state.tagSummaries.set(t.id, t.summary);
 
   renderStats(document.getElementById("stats"), packages, data.built_at);
 
@@ -588,10 +662,6 @@ async function main() {
   }
 
   options(document.getElementById("distro"), [...new Set(packages.map((p) => p.distro))].sort());
-  options(
-    document.getElementById("tag"),
-    [...new Set(packages.flatMap((p) => p.tags || []))].sort(),
-  );
 
   for (const pkg of packages) {
     cardsEl.append(card(pkg, state.siblings.get(repoKey(pkg)) || 1));
@@ -599,6 +669,7 @@ async function main() {
 
   hydrateCart();
   wireRosdistro(); // sets the default distro before wireFilters paints
+  renderTagOptions(); // needs state.active, so after wireRosdistro
   wireFilters();
   wireCart();
   syncAllToggles();
