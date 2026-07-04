@@ -25,7 +25,16 @@ const state = {
   tagSummaries: new Map(), // tag id -> one-line summary (vocabulary tooltips)
   vocabulary: null, // data.json's tag_vocabulary block (groups + live tags)
   active: "jazzy",
+  // Tag rail selection. Multiple tags combine as OR (union): that is the
+  // faceted-browsing convention, and with 1-5 tags per package an AND
+  // intersection would usually be empty in a registry this size. Empty set
+  // = all packages.
+  activeTags: new Set(),
 };
+
+// wireFilters installs the real filter pass here so the tag rail and the
+// distro picker can re-apply it without synthesizing input events.
+let applyFilters = () => {};
 
 // Package/distro names are `^[a-z][a-z0-9_]*$`, so "/" is a safe separator.
 const keyOf = (distro, name) => `${distro}/${name}`;
@@ -231,64 +240,99 @@ function options(select, values) {
   for (const v of values) select.append(el("option", { value: v, text: v }));
 }
 
-// Grouped tag filter from the vocabulary in data.json: one <optgroup> per
-// group in vocabulary order, options only for tags actually in use, labeled
-// with live counts and carrying the summary as a tooltip. Option values stay
-// bare ids, so wireFilters' data-tags matching is unchanged. When the
-// vocabulary block is absent (a cached pre-vocabulary data.json served next
-// to a newer app.js), fall back to the flat observed-union dropdown.
-function tagOptions(select, packages, vocabulary) {
+// Grouped tag facets from the vocabulary in data.json: one entry per group
+// in vocabulary order, holding only the tags actually in use with their live
+// counts and summaries. When the vocabulary block is absent (a cached
+// pre-vocabulary data.json served next to a newer app.js), fall back to one
+// flat untitled group of the observed union.
+function tagGroups(packages, vocabulary) {
   const counts = new Map();
   for (const p of packages) {
     for (const t of p.tags || []) counts.set(t, (counts.get(t) || 0) + 1);
   }
+  const asTag = (id, summary) => ({ id, count: counts.get(id), summary });
   if (!vocabulary || !Array.isArray(vocabulary.groups) || !Array.isArray(vocabulary.tags)) {
-    options(select, [...counts.keys()].sort());
-    return;
+    const ids = [...counts.keys()].sort();
+    return ids.length ? [{ title: null, tags: ids.map((id) => asTag(id, null)) }] : [];
   }
+  const groups = [];
   const known = new Set();
   for (const group of vocabulary.groups) {
     const inUse = vocabulary.tags.filter((t) => t.group === group.id && counts.has(t.id));
     for (const t of inUse) known.add(t.id);
     if (inUse.length === 0) continue;
-    const optgroup = el("optgroup", { label: group.title });
-    for (const t of inUse) {
-      optgroup.append(
-        el("option", {
-          value: t.id,
-          text: `${t.id} (${counts.get(t.id)})`,
-          title: t.summary,
-        }),
-      );
-    }
-    select.append(optgroup);
+    groups.push({ title: group.title, tags: inUse.map((t) => asTag(t.id, t.summary)) });
   }
   // In-use tags absent from the vocabulary (mismatched --tags-file build)
   // must stay filterable — their chips render on cards regardless.
   const leftovers = [...counts.keys()].filter((t) => !known.has(t)).sort();
   if (leftovers.length) {
-    const optgroup = el("optgroup", { label: "Other" });
-    for (const t of leftovers) {
-      optgroup.append(el("option", { value: t, text: `${t} (${counts.get(t)})` }));
-    }
-    select.append(optgroup);
+    groups.push({ title: "Other", tags: leftovers.map((id) => asTag(id, null)) });
+  }
+  return groups;
+}
+
+// The "all packages" row uses the empty id; it reads as pressed exactly when
+// no tag is selected, and clicking it clears the whole selection.
+function tagPressed(id) {
+  return id === "" ? state.activeTags.size === 0 : state.activeTags.has(id);
+}
+
+// One rail row: tag name left, package count right.
+function tagRow({ id, label, count, summary }) {
+  return el(
+    "button",
+    {
+      class: "tagbar-tag",
+      type: "button",
+      "data-tag": id,
+      "aria-pressed": tagPressed(id) ? "true" : "false",
+      title: summary, // el() skips null
+    },
+    el("span", { class: "tagbar-name", text: label }),
+    el("span", { class: "tagbar-count", text: String(count) }),
+  );
+}
+
+// (Re)build the tag rail scoped to the ACTIVE distro. The card view is
+// always filtered to one distro, so global counts would overstate — counts
+// must be recomputed whenever the distro picker changes. Selected tags
+// still in use in the new distro are kept; the rest are dropped (the
+// caller re-applies filters when that changed the selection).
+function renderTagRail() {
+  // The rail ships hidden so the no-JS/failed-fetch/empty-registry states
+  // show no dead panel; the first successful render reveals it (and the
+  // .wrap grid gains its rail column via the :has() rule in styles.css).
+  document.getElementById("tagbar").hidden = false;
+  const rail = document.getElementById("tagbar-groups");
+  rail.textContent = "";
+  const scoped = state.packages.filter((p) => p.distro === state.active);
+  const groups = tagGroups(scoped, state.vocabulary);
+  const available = new Set(groups.flatMap((g) => g.tags.map((t) => t.id)));
+  for (const t of [...state.activeTags]) {
+    if (!available.has(t)) state.activeTags.delete(t);
+  }
+
+  rail.append(tagRow({ id: "", label: "all packages", count: scoped.length, summary: null }));
+  for (const group of groups) {
+    if (group.title) rail.append(el("h3", { class: "tagbar-group", text: group.title }));
+    for (const t of group.tags) rail.append(tagRow({ ...t, label: t.id }));
   }
 }
 
-// (Re)build the #tag dropdown scoped to the ACTIVE distro. The card view is
-// always filtered to one distro, so global counts would overstate — counts
-// must be recomputed whenever the distro picker changes. Preserves the
-// current selection when the tag still exists in the new distro.
-function renderTagOptions() {
-  const select = document.getElementById("tag");
-  const previous = select.value;
-  for (const node of [...select.children]) {
-    if (!(node.tagName === "OPTION" && node.value === "")) node.remove();
-  }
-  const scoped = state.packages.filter((p) => p.distro === state.active);
-  tagOptions(select, scoped, state.vocabulary);
-  const values = new Set([...select.querySelectorAll("option")].map((o) => o.value));
-  select.value = values.has(previous) ? previous : "";
+function wireTagRail() {
+  document.getElementById("tagbar").addEventListener("click", (e) => {
+    const btn = e.target.closest(".tagbar-tag");
+    if (!btn) return;
+    const id = btn.dataset.tag;
+    if (id === "") state.activeTags.clear();
+    else if (state.activeTags.has(id)) state.activeTags.delete(id);
+    else state.activeTags.add(id);
+    for (const b of document.querySelectorAll(".tagbar-tag")) {
+      b.setAttribute("aria-pressed", tagPressed(b.dataset.tag) ? "true" : "false");
+    }
+    applyFilters();
+  });
 }
 
 function renderStats(stats, packages, builtAt) {
@@ -303,32 +347,31 @@ function renderStats(stats, packages, builtAt) {
 function wireFilters() {
   const q = document.getElementById("q");
   const distro = document.getElementById("distro");
-  const tag = document.getElementById("tag");
   const status = document.getElementById("status");
   const empty = document.getElementById("empty");
   const cards = [...document.querySelectorAll(".card")];
 
-  function apply() {
+  applyFilters = function apply() {
     const t = q.value.trim().toLowerCase();
     const d = distro.value,
-      g = tag.value,
+      g = state.activeTags,
       s = status.value;
     let visible = 0;
     for (const c of cards) {
       const ok =
         (!t || c.dataset.search.includes(t)) &&
         (!d || c.dataset.distro === d) &&
-        (!g || c.dataset.tags.split(" ").includes(g)) &&
+        (!g.size || c.dataset.tags.split(" ").some((tag) => g.has(tag))) &&
         (!s || c.dataset.status === s);
       c.hidden = !ok;
       visible += ok ? 1 : 0;
     }
     empty.hidden = visible !== 0;
-  }
-  for (const elm of [q, distro, tag, status]) elm.addEventListener("input", apply);
+  };
+  for (const elm of [q, distro, status]) elm.addEventListener("input", applyFilters);
   // Paint the initial (rosdistro-scoped) view; the picker now defaults to a
   // single distro instead of "All distros", so the first render must filter.
-  apply();
+  applyFilters();
 }
 
 // --- Cart -----------------------------------------------------------------
@@ -584,14 +627,13 @@ function wireRosdistro() {
   distro.value = state.active;
   // Card visibility is already handled by wireFilters' own input listener on
   // #distro; here we swap which cart the sidebar shows and rebuild the tag
-  // dropdown's per-distro counts. If the rebuild resets the tag selection,
-  // re-fire wireFilters' input listener so cards match the dropdown.
+  // rail's per-distro counts. If the rebuild resets the tag selection,
+  // re-apply the filters so cards match the rail.
   distro.addEventListener("change", () => {
     state.active = distro.value;
-    const tag = document.getElementById("tag");
-    const before = tag.value;
-    renderTagOptions();
-    if (tag.value !== before) tag.dispatchEvent(new Event("input"));
+    const before = [...state.activeTags].sort().join(" ");
+    renderTagRail();
+    if ([...state.activeTags].sort().join(" ") !== before) applyFilters();
     renderCart();
   });
 }
@@ -669,8 +711,9 @@ async function main() {
 
   hydrateCart();
   wireRosdistro(); // sets the default distro before wireFilters paints
-  renderTagOptions(); // needs state.active, so after wireRosdistro
+  renderTagRail(); // needs state.active, so after wireRosdistro
   wireFilters();
+  wireTagRail();
   wireCart();
   syncAllToggles();
   renderCart();

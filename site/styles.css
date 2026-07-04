@@ -93,12 +93,95 @@ header.site a.register-cta:hover {
   margin: 0 auto;
   padding: 20px 24px 64px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: 210px minmax(0, 1fr) 340px;
   gap: 28px;
   align-items: start;
 }
+/* The tag rail ships hidden until app.js renders it (no-JS, failed fetch,
+   empty registry): without its column the cards must not fall into the
+   210px rail track. */
+.wrap:has(> #tagbar[hidden]) {
+  grid-template-columns: minmax(0, 1fr) 340px;
+}
+/* The noscript fallback reuses .wrap for width/padding only (both pages);
+   as a grid its lone paragraph would be crushed into the first track. */
+noscript .wrap {
+  display: block;
+}
 .browse {
   min-width: 0;
+}
+
+/* Tag rail (left facet panel; counts are per active distro) */
+#tagbar {
+  position: sticky;
+  top: 20px;
+  align-self: start;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 12px;
+  box-shadow: 0 1px 3px rgba(27, 35, 51, 0.08);
+}
+#tagbar h2 {
+  margin: 0 4px 8px;
+  font-size: 16px;
+}
+.tagbar-group {
+  margin: 12px 4px 3px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.tagbar-tag {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+.tagbar-tag:hover {
+  background: var(--secondary-soft);
+  border-color: var(--secondary);
+}
+.tagbar-tag:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 0;
+}
+.tagbar-tag[aria-pressed="true"] {
+  background: var(--secondary);
+  border-color: var(--secondary);
+  font-weight: 600;
+}
+.tagbar-name {
+  overflow-wrap: anywhere;
+}
+.tagbar-count {
+  flex: 0 0 auto;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: var(--fg);
+  color: #fff;
+  border-radius: 20px;
+  padding: 1px 8px;
+  min-width: 26px;
+  text-align: center;
 }
 .controls {
   display: flex;
@@ -522,6 +605,33 @@ footer .sep {
   color: var(--muted);
 }
 
+/* Mid width: fold the tag rail into a wrapped chip row spanning above the
+   cards; the group eyebrows would read oddly interleaved between chips, so
+   they hide and the chips speak for themselves. */
+@media (max-width: 1150px) {
+  .wrap {
+    grid-template-columns: minmax(0, 1fr) 340px;
+  }
+  #tagbar {
+    grid-column: 1 / -1;
+    position: static;
+    max-height: none;
+  }
+  #tagbar-groups {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .tagbar-group {
+    display: none;
+  }
+  .tagbar-tag {
+    width: auto;
+    gap: 6px;
+    padding: 3px 9px;
+    border-color: var(--border);
+  }
+}
 @media (max-width: 920px) {
   .wrap {
     grid-template-columns: 1fr;
