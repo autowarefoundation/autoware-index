@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 r"""Export the Autoware Index browse data and assemble the deployable site.
 
-The browse site is a static front-end (index.html + styles.css + app.js) that
-renders client-side from a generated data.json. This script is just the data
-exporter + assembler: it joins the two branches the data lives on —
+The browse site is a static front-end (index.html + styles.css + app.js, plus
+the register.* registration page) that renders client-side from a generated
+data.json. This script is just the data exporter + assembler: it joins the two
+branches the data lives on —
 
   - main:  distributions/<distro>.yaml          (what is registered)
   - data:  history/<distro>/<package>.ndjson    (how it has validated)
@@ -37,7 +38,15 @@ import sys
 import xml.etree.ElementTree as ET
 
 SITE_DIR = Path(__file__).resolve().parent
-STATIC_ASSETS = ("index.html", "styles.css", "app.js", "compose.mjs")
+STATIC_ASSETS = (
+    "index.html",
+    "styles.css",
+    "app.js",
+    "compose.mjs",
+    "register.html",
+    "register.css",
+    "register.js",
+)
 
 sys.path.insert(0, str(SITE_DIR.parent / "scripts"))
 from registry_load import RegistryError  # noqa: E402
@@ -89,16 +98,21 @@ def export_vocabulary(vocab: dict) -> dict:
     """Shape the loaded tag vocabulary for data.json.
 
     Groups and live tags are exported in vocabulary-file order (the display
-    order for the site's grouped filter); each tag carries its group and the
-    one-line summary app.js renders as the tooltip. Deprecated ids are not
-    exported — the gate keeps them out of the registry, so no card needs them.
+    order for the site's grouped filter); each tag carries its group, the
+    one-line summary app.js renders as the tooltip, and — when present — the
+    disambiguation sentence the register page's tag picker appends to it.
+    Deprecated ids are not exported — the gate keeps them out of the registry,
+    so no card needs them.
     """
+    tags = []
+    for tid, spec in vocab["tags"].items():
+        tag = {"id": tid, "group": spec["group"], "summary": spec["summary"]}
+        if spec.get("disambiguation"):
+            tag["disambiguation"] = spec["disambiguation"]
+        tags.append(tag)
     return {
         "groups": [{"id": gid, "title": title} for gid, title in vocab["groups"].items()],
-        "tags": [
-            {"id": tid, "group": spec["group"], "summary": spec["summary"]}
-            for tid, spec in vocab["tags"].items()
-        ],
+        "tags": tags,
     }
 
 
@@ -237,8 +251,14 @@ def main() -> None:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # The register page needs every distro file, including ones with no
+    # packages yet — derive from the filenames (ros_distro == stem is
+    # enforced repo-wide), not from the flattened registrations.
+    distros = sorted(p.stem for p in Path(args.distributions_dir).glob("*.yaml"))
+
     data = {
         "built_at": args.built_at or "unknown",
+        "distros": distros,
         "tag_vocabulary": export_vocabulary(vocabulary),
         "packages": packages,
     }

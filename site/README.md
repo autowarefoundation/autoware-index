@@ -6,10 +6,13 @@ toolchain and no runtime dependencies beyond PyYAML.
 ```text
 site/
   build.py      # data exporter: load registry + history -> write data.json, copy the assets
-  index.html    # static shell
+  index.html    # static shell (browse)
   styles.css    # styling (brand: white bg, primary #7290E5, secondary #EED45B)
   app.js        # fetch data.json -> render cards + compatibility tables, filters + repos builder
   compose.mjs   # aw-index-cli's registry->.repos composer, reused by the repos builder (see below)
+  register.html # registration page shell (linked from the browse header)
+  register.css  # registration page styles (shares the brand tokens from styles.css)
+  register.js   # registration wizard: live YAML entry + client-side mirror of the PR gates
   sample-data/  # local-preview history + metadata fixtures (CI never reads it)
 ```
 
@@ -19,10 +22,10 @@ Pages deploy **fetches the latest aw-index-cli release** and bakes it in (see
 Deployment), so it stays current without manual updates. The committed copy is
 only a local/offline fallback.
 
-`build.py` only loads the data and writes `data.json` next to copies of
-`index.html` / `styles.css` / `app.js` in `--out`; everything you see is rendered
-in the browser by `app.js`. To change the look or behaviour, edit those three
-static files directly — no Python involved.
+`build.py` only loads the data and writes `data.json` next to copies of the
+static assets (`STATIC_ASSETS`) in `--out`; everything you see is rendered in
+the browser by `app.js` / `register.js`. To change the look or behaviour, edit
+the static files directly — no Python involved.
 
 ## What it shows
 
@@ -33,6 +36,36 @@ Autoware version each ref was tested against, pass/fail, the resolved commit,
 and a link to the Actions run. Failing packages surface their last-green
 Autoware version, and a package sharing its repository with registered siblings
 notes "one of N registered packages from this repository" on its card.
+
+## The registration page
+
+`register.html` (linked from the browse header) turns "fork, hand-edit YAML,
+hope CI passes" into a guided flow. Four stations — repository, ref, packages,
+maintainers — write the `repositories:` entry live into a YAML preview, while a
+"PR pre-flight" panel mirrors the same checks the `validate` workflow runs on
+the pull request: schema shape (`check-jsonschema`), tag vocabulary
+(`check_tags`), and uniqueness / placeholder-maintainer / ref-resolution rules
+(`check_refs`). Registrations that already exist in `data.json` are rejected
+client-side exactly like `check_refs.py` would (canonical-URL folding included).
+
+For github.com repositories the page also auto-discovers through the public
+GitHub API (no token, 60 requests/hour): repository metadata, branches and tags
+for the ref picker, and a tree scan that finds and parses `package.xml` files to
+prefill package names, descriptions, and maintainer suggestions (GitHub handles
+are resolved from the maintainer emails via the repo's commit history,
+noreply-address parsing, or public-profile search, where possible). Everything
+degrades to manual entry — the API is a convenience; CI remains the authority.
+
+There is no backend, so the handoff goes through GitHub: the primary action
+opens the `register-request.yml` issue form pre-filled with the entry —
+submitting it makes the `register` workflow apply the entry programmatically
+(`scripts/apply_registration.py`), run the offline gates, and open a pull
+request authored and signed off as the requester. The manual fallback copies
+the whole updated registry file (the current `distributions/<distro>.yaml`
+fetched from `main` with the entry appended — replacing the full file survives
+web editors that re-indent pasted YAML fragments; copying just the entry
+remains available) and deep-links to editing the file on GitHub, with a
+conventional-commit PR title suggested.
 
 ## The two-branch join
 

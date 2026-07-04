@@ -1,0 +1,45 @@
+name: Register packages (automatic PR)
+description: >-
+  Submit a ready-made registry entry — a workflow validates it and opens the
+  pull request for you. No forking, no editing.
+title: "feat: register packages"
+labels: [registration]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        The easiest way to fill this form is the
+        [register page](https://autowarefoundation.github.io/autoware-index/register.html)
+        on the browse site — its "Open a registration request" button arrives
+        here with everything pre-filled and pre-validated. On submit, the
+        `register` workflow checks the entry and opens a pull request
+        crediting you; a maintainer reviews and merges it.
+  - type: dropdown
+    id: distro
+    attributes:
+      label: ROS distro
+      description: Which distribution file to register into.
+      options:
+        - jazzy
+    validations:
+      required: true
+  - type: textarea
+    id: entry
+    attributes:
+      label: Registry entry
+      description: >-
+        Exactly one `repositories:` entry, as produced by the register page
+        (any consistent indentation is fine — the workflow re-indents it).
+      render: yaml
+    validations:
+      required: true
+  - type: checkboxes
+    id: dco
+    attributes:
+      label: Developer Certificate of Origin
+      options:
+        - label: >-
+            I certify that I have the right to submit this registration under
+            the Developer Certificate of Origin 1.1, and I sign off on the
+            commit the workflow creates on my behalf.
+          required: true
