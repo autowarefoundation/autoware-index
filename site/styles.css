@@ -233,12 +233,10 @@ noscript .wrap {
   box-shadow: 0 2px 10px rgba(238, 212, 91, 0.35);
 }
 .card header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-  flex-wrap: wrap;
-  /* Keep long package names and wrapped badges clear of the pinned toggle. */
+  /* Two fixed lines — the package name, then the classification band
+     (registry badges + domain tag chips in .card-head-actions) — so no
+     chip ever shares the title line or crowds the pinned toggle. Padding
+     keeps long names clear of the toggle. */
   padding-right: 42px;
 }
 .card h2 {
@@ -293,7 +291,6 @@ noscript .wrap {
   max-width: 78ch;
 }
 .tags {
-  margin: 10px 0 6px;
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
@@ -308,6 +305,7 @@ noscript .wrap {
 }
 .meta {
   font-size: 13px;
+  margin-top: 8px;
 }
 .repo {
   color: var(--link);
@@ -399,15 +397,13 @@ footer .sep {
 }
 
 /* Repos builder (cart sidebar) */
-.card header {
-  gap: 12px;
-}
 .card-head-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  /* A touch more air between the badge and tag groups than within them. */
+  gap: 8px 10px;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  margin-top: 8px;
 }
 /* Fixed-size circular icon button (no size change on hover). Inactive = very
    light gold fill with a normal-gold edge and a blue plus; active (in cart) =
