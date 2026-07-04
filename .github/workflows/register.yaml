@@ -152,12 +152,14 @@ jobs:
           set -euo pipefail
           BRANCH="register/issue-${ISSUE_NUMBER}"
           if ! PR_URL=$(gh pr view "$BRANCH" --json url --jq .url 2>/dev/null); then
+            # A bullet list on purpose: GitHub renders #N issue references in
+            # list items with the rich title-and-state treatment that plain
+            # paragraphs don't get. "Closes #N" keeps its closing effect in a
+            # list item.
             {
-              echo "Registers \`${NAME}\` in \`${DISTRO}\` on behalf of @${ISSUE_AUTHOR}."
-              echo
-              echo "Opened automatically by the register workflow from #${ISSUE_NUMBER}."
-              echo
-              echo "Closes #${ISSUE_NUMBER}."
+              echo "- Registers \`${NAME}\` in \`${DISTRO}\` on behalf of @${ISSUE_AUTHOR}."
+              echo "- Opened automatically by the register workflow from #${ISSUE_NUMBER}."
+              echo "- Closes #${ISSUE_NUMBER}."
             } > /tmp/pr-body.md
             PR_URL=$(gh pr create \
               --head "$BRANCH" \
