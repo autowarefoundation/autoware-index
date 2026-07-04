@@ -214,6 +214,7 @@ noscript .wrap {
   min-width: 200px;
 }
 .card {
+  position: relative; /* anchors the absolutely-pinned cart toggle */
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -237,11 +238,18 @@ noscript .wrap {
   align-items: flex-start;
   gap: 12px;
   flex-wrap: wrap;
+  /* Keep long package names and wrapped badges clear of the pinned toggle. */
+  padding-right: 42px;
 }
 .card h2 {
   margin: 0;
   font-size: 18px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Package names are single unbreakable words; without a break opportunity
+     the flex item's min-content width would overflow narrow cards (and run
+     under the pinned toggle). */
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .badges {
   display: flex;
@@ -404,8 +412,12 @@ footer .sep {
 /* Fixed-size circular icon button (no size change on hover). Inactive = very
    light gold fill with a normal-gold edge and a blue plus; active (in cart) =
    gold fill with a black check. Words live in the title tooltip + aria-label so
-   nothing reflows. margin-left separates it from the static badges. */
+   nothing reflows. Pinned to the card's top-right corner, out of the header's
+   wrapping flow, so a long package name can never push it to a second line. */
 .cart-toggle {
+  position: absolute;
+  top: 16px;
+  right: 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -413,7 +425,6 @@ footer .sep {
   width: 30px;
   height: 30px;
   padding: 0;
-  margin-left: 10px;
   border-radius: 50%;
   cursor: pointer;
   border: 1px solid var(--secondary);
