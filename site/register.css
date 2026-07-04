@@ -106,6 +106,11 @@
   padding: 8px 10px;
   font-size: 14px;
   font-family: inherit;
+  /* Ubuntu Mono (the usual Linux `monospace` fallback) draws underscores on
+     the clipped bottom row of a single-line editor at line-height: normal —
+     package_name underscores become invisible. A taller line box keeps the
+     glyph inside the visible area. */
+  line-height: 1.6;
 }
 .field select {
   width: auto;
@@ -144,7 +149,9 @@
 }
 .field input.mono,
 .mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* DejaVu Sans Mono before the generic fallback: its underscore sits above
+     the editor clip line, unlike Ubuntu Mono's. */
+  font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace;
 }
 .field input[aria-invalid="true"] {
   border-color: var(--fail);
@@ -308,6 +315,18 @@
 .pkg-head input {
   flex: 1;
   min-width: 0;
+  background: #fff;
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px 10px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.pkg-head input:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 0;
+  border-color: var(--primary);
 }
 .pkg-remove {
   flex: 0 0 auto;
@@ -432,6 +451,7 @@
   border-radius: 7px;
   padding: 7px 9px;
   font-size: 13.5px;
+  line-height: 1.6;
   min-width: 0;
 }
 .maint-row input:focus {
@@ -533,7 +553,7 @@
   line-height: 1.55;
 }
 .buffer-out code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace;
   font-size: 12.5px;
   color: var(--tok-val);
   white-space: pre;
