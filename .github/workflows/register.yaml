@@ -12,12 +12,14 @@
 #        signed off as the requester (their noreply address; the form's DCO
 #        checkbox is required), PR opened/updated, link posted on the issue.
 #
-# Token: prefers the REGISTRATION_TOKEN secret (a fine-grained PAT or GitHub
-# App token with contents+pull-requests write). With the default
-# github.token, GitHub does NOT trigger workflows on the created PR — the
-# validate gate would not run until a maintainer closes/reopens it — and the
-# repo setting "Allow GitHub Actions to create and approve pull requests"
-# must be enabled.
+# Token: minted from the org's GitHub App (the APP_ID / PRIVATE_KEY org
+# secrets, same as sync-files.yaml), so the created PRs trigger the validate
+# workflow like any human-opened PR. The app installation must cover this
+# repository with contents + pull-requests write (issues write for the
+# feedback comments). Where those secrets are absent (forks), the workflow
+# falls back to github.token — GitHub then does NOT trigger workflows on the
+# created PR (a maintainer closes/reopens it to run CI) and the repo setting
+# "Allow GitHub Actions to create and approve pull requests" must be enabled.
 
 name: register
 
@@ -41,14 +43,30 @@ jobs:
     if: contains(github.event.issue.body, '### Registry entry')
     runs-on: ubuntu-latest
     env:
-      GH_TOKEN: ${{ secrets.REGISTRATION_TOKEN || github.token }}
+      HAS_APP_ID: ${{ secrets.APP_ID != '' }}
       ISSUE_NUMBER: ${{ github.event.issue.number }}
       ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
       ISSUE_AUTHOR_ID: ${{ github.event.issue.user.id }}
     steps:
+      - name: Generate token
+        id: generate-token
+        if: env.HAS_APP_ID == 'true'
+        uses: tibdex/github-app-token@v2
+        with:
+          app_id: ${{ secrets.APP_ID }}
+          private_key: ${{ secrets.PRIVATE_KEY }}
+
+      # Every later step (gh, git push) authenticates through GH_TOKEN: the
+      # app token when available, the workflow token otherwise.
+      - name: Select token
+        env:
+          APP_TOKEN: ${{ steps.generate-token.outputs.token }}
+          FALLBACK_TOKEN: ${{ github.token }}
+        run: echo "GH_TOKEN=${APP_TOKEN:-$FALLBACK_TOKEN}" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v7
         with:
-          token: ${{ secrets.REGISTRATION_TOKEN || github.token }}
+          token: ${{ steps.generate-token.outputs.token || github.token }}
 
       - uses: actions/setup-python@v6
         with:
