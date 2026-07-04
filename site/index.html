@@ -23,6 +23,13 @@
       </div>
     </header>
     <div class="wrap">
+      <!-- Ships hidden: renderTagRail unhides it once there are tags to show,
+           so the no-JS view, a failed data.json fetch, and an empty registry
+           never present a dead empty panel. -->
+      <aside id="tagbar" aria-label="Filter packages by tag" hidden>
+        <h2>Package tags</h2>
+        <div id="tagbar-groups"></div>
+      </aside>
       <main class="browse">
         <div class="controls">
           <input
@@ -32,9 +39,6 @@
             autocomplete="off"
           />
           <select id="distro" aria-label="ROS distro" title="ROS distro"></select>
-          <select id="tag">
-            <option value="">All tags</option>
-          </select>
           <select id="status">
             <option value="">Any status</option>
             <option value="pass">Passing</option>
