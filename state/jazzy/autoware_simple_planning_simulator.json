@@ -1,0 +1,14 @@
+{
+  "url": "https://github.com/autowarefoundation/autoware_simple_planning_simulator",
+  "ref": {
+    "kind": "branch",
+    "value": "main"
+  },
+  "packages": [
+    "autoware_dummy_perception_publisher",
+    "autoware_learning_based_vehicle_model",
+    "autoware_simple_planning_simulator"
+  ],
+  "last_run_url": "https://github.com/autowarefoundation/autoware-index/actions/runs/28716941702",
+  "at": "2026-07-04T19:25:53Z"
+}
