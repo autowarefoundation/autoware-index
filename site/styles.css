@@ -232,20 +232,14 @@ noscript .wrap {
   border-color: var(--secondary);
   box-shadow: 0 2px 10px rgba(238, 212, 91, 0.35);
 }
-.card header {
-  /* Two fixed lines — the package name, then the classification band
-     (registry badges + domain tag chips in .card-head-actions) — so no
-     chip ever shares the title line or crowds the pinned toggle. Padding
-     keeps long names clear of the toggle. */
-  padding-right: 42px;
-}
 .card h2 {
   margin: 0;
   font-size: 18px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  /* Package names are single unbreakable words; without a break opportunity
-     the flex item's min-content width would overflow narrow cards (and run
-     under the pinned toggle). */
+  /* Padding keeps the name clear of the pinned toggle; and package names
+     are single unbreakable words, so without a break opportunity the
+     min-content width would overflow narrow cards (and run under it). */
+  padding-right: 42px;
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -397,13 +391,23 @@ footer .sep {
 }
 
 /* Repos builder (cart sidebar) */
+/* The classification band: always the card's second line. Tag chips hold
+   the left side and keep wrapping onto the following lines; the registry
+   pills sit pinned at the band's right edge (they drop to their own
+   right-aligned line only when a narrow card leaves the tags no room). */
 .card-head-actions {
   display: flex;
-  align-items: center;
-  /* A touch more air between the badge and tag groups than within them. */
+  align-items: flex-start;
   gap: 8px 10px;
   flex-wrap: wrap;
   margin-top: 8px;
+}
+.card-head-actions .tags {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.card-head-actions .badges {
+  margin-left: auto;
 }
 /* Fixed-size circular icon button (no size change on hover). Inactive = very
    light gold fill with a normal-gold edge and a blue plus; active (in cart) =

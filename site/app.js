@@ -226,10 +226,10 @@ function card(pkg, siblingCount) {
       "header",
       {},
       el("h2", { text: pkg.name }),
-      // One classification band under the name: registry badges (distro,
-      // governance, status), then the domain tag chips — the two families
-      // stay distinguishable by shape (rounded pills vs squared chips).
-      el("div", { class: "card-head-actions" }, badges, tags, toggle),
+      // One classification band under the name: the domain tag chips on
+      // the left (wrapping onto further lines when there are many), the
+      // registry pills (distro, governance, status) pinned at the right.
+      el("div", { class: "card-head-actions" }, tags, badges, toggle),
     ),
     pkg.description ? el("p", { class: "description", text: pkg.description }) : null,
     meta,
