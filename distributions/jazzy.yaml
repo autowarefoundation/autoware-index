@@ -35,3 +35,27 @@ repositories:
           Removes noise from a Livox lidar point cloud by dropping points whose
           Livox tag (spatial-position confidence, intensity confidence, and
           return number) is in a configurable ignore list.
+  autoware_simple_planning_simulator:
+    url: https://github.com/autowarefoundation/autoware_simple_planning_simulator
+    ref:
+      kind: branch
+      value: main
+    governance: foundation
+    maintainers:
+      - name: Junya Sasaki
+        email: junya.sasaki@tier4.jp
+        github: sasakisasaki
+    packages:
+      autoware_dummy_perception_publisher:
+        tags:
+          - planning
+          - perception
+          - simulator
+      autoware_learning_based_vehicle_model:
+        tags:
+          - planning
+          - simulator
+      autoware_simple_planning_simulator:
+        tags:
+          - planning
+          - simulator
