@@ -16,6 +16,7 @@ scripts/                                # validation + sweep + site helpers (Pyt
 site/                                   # browse-site generator (site/build.py)
 .github/workflows/
   validate.yaml                         # PR-time schema + filename + ref/uniqueness checks
+  build-check.yaml                      # PR-time build+test of added/changed entries (advisory)
   sweep-eager.yaml                      # level-triggered sweep of changed repository entries
   sweep-nightly.yaml                    # daily re-validation of kind:branch repositories
   pages.yaml                            # build + deploy the browse site to GitHub Pages
@@ -29,7 +30,7 @@ The quickest path is the [guided register page](https://autowarefoundation.githu
 
 1. Fork this repo.
 2. Edit `distributions/<distro>.yaml` for each ROS distro you support. Add ONE entry under `repositories:` for your repository, and list every ROS package you are registering under its `packages:` map — each key must equal the package's `package.xml` `<name>`, **never** the repository name (unless they genuinely coincide).
-3. Open a pull request. The `validate` workflow automatically checks schema conformance, `ros_distro`/filename consistency, that your `ref` resolves upstream, that no other entry already registers your repository URL or package names, and that maintainers are real (no placeholders).
+3. Open a pull request. The `validate` workflow automatically checks schema conformance, `ros_distro`/filename consistency, that your `ref` resolves upstream, that no other entry already registers your repository URL or package names, and that maintainers are real (no placeholders). The `build-check` workflow additionally clones every entry whose url, ref, or package set the PR adds or changes and builds + tests its registered packages against the current Autoware release (metadata-only edits — tags, descriptions, maintainers, governance — skip the build) — an advisory verdict for the reviewer, not a merge blocker.
 4. A maintainer reviews and merges.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full walkthrough and local validation.

@@ -23,8 +23,12 @@ author). The manual flow it automates:
    machine-checkable contract is
    [`schema/distribution.schema.json`](schema/distribution.schema.json).
 3. **Validate locally** before opening a PR (see below).
-4. Open a pull request. The `validate` workflow runs automatically. A maintainer
-   reviews and merges.
+4. Open a pull request. The `validate` workflow runs automatically, and the
+   `build-check` workflow builds + tests the packages of every entry whose
+   url, ref, or package set your PR adds or changes against the current
+   Autoware release; metadata-only edits (tags, descriptions, maintainers,
+   governance) skip the build. It is advisory — it informs the review rather
+   than hard-blocking the merge. A maintainer reviews and merges.
 
 After merge, the **eager sweep** clones your repository once at its registered
 `ref`, validates every registered package against the current latest published
