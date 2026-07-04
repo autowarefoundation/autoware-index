@@ -42,9 +42,10 @@ header.site h1 span {
   color: var(--primary);
 }
 header.site p {
+  /* One sentence per paragraph; no measure cap so each stays a single
+     line on desktop (the .container width still bounds them). */
   margin: 6px 0 0;
   color: var(--muted);
-  max-width: 64ch;
 }
 header.site a {
   color: var(--link);
