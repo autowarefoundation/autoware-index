@@ -1,0 +1,145 @@
+# Turns a "Register packages (automatic PR)" issue (the register-request.yml
+# issue form, normally pre-filled by the browse site's register page) into a
+# pull request editing distributions/<distro>.yaml — programmatically, so the
+# indentation accidents of pasting nested YAML into web editors cannot
+# happen. Flow:
+#
+#   issue opened/edited
+#     -> scripts/apply_registration.py applies the entry (structural checks)
+#     -> the offline registry gates run on the result
+#     -> on failure: the errors are posted back on the issue, no PR
+#     -> on success: branch register/issue-<n>, one commit authored and
+#        signed off as the requester (their noreply address; the form's DCO
+#        checkbox is required), PR opened/updated, link posted on the issue.
+#
+# Token: prefers the REGISTRATION_TOKEN secret (a fine-grained PAT or GitHub
+# App token with contents+pull-requests write). With the default
+# github.token, GitHub does NOT trigger workflows on the created PR — the
+# validate gate would not run until a maintainer closes/reopens it — and the
+# repo setting "Allow GitHub Actions to create and approve pull requests"
+# must be enabled.
+
+name: register
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: register-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  create-pr:
+    # Only issues from the automatic-PR form carry this section heading; the
+    # older free-form registration template does not.
+    if: contains(github.event.issue.body, '### Registry entry')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.REGISTRATION_TOKEN || github.token }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+      ISSUE_AUTHOR_ID: ${{ github.event.issue.user.id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.REGISTRATION_TOKEN || github.token }}
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: install validators
+        run: python -m pip install --upgrade pyyaml check-jsonschema
+
+      - name: save the issue body
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: printf '%s' "$ISSUE_BODY" > /tmp/issue-body.md
+
+      - name: apply the registration to the registry
+        id: apply
+        run: |
+          set -euo pipefail
+          if ! python scripts/apply_registration.py \
+              --issue-body /tmp/issue-body.md \
+              --distributions-dir distributions \
+              >/tmp/outputs.txt 2>/tmp/apply-errors.txt; then
+            {
+              echo "The registration could not be applied:"
+              echo '```'
+              cat /tmp/apply-errors.txt
+              echo '```'
+              echo "Edit the issue to fix it — this workflow reruns automatically."
+            } > /tmp/comment.md
+            gh issue comment "$ISSUE_NUMBER" --body-file /tmp/comment.md
+            exit 1
+          fi
+          cat /tmp/outputs.txt >> "$GITHUB_OUTPUT"
+
+      - name: run the registry gates (offline)
+        run: |
+          set -euo pipefail
+          if ! {
+            check-jsonschema \
+              --schemafile schema/distribution.schema.json \
+              distributions/*.yaml &&
+            python scripts/check_distro_filename.py distributions/*.yaml &&
+            python scripts/check_tags.py distributions/*.yaml &&
+            python scripts/check_refs.py --no-network distributions/*.yaml
+          } >/tmp/gates.log 2>&1; then
+            {
+              echo "The entry was applied cleanly but fails the registry gates:"
+              echo '```'
+              cat /tmp/gates.log
+              echo '```'
+              echo "Edit the issue to fix it — this workflow reruns automatically."
+            } > /tmp/comment.md
+            gh issue comment "$ISSUE_NUMBER" --body-file /tmp/comment.md
+            exit 1
+          fi
+
+      - name: commit as the requester and push
+        env:
+          DISTRO: ${{ steps.apply.outputs.distro }}
+          NAME: ${{ steps.apply.outputs.name }}
+        run: |
+          set -euo pipefail
+          BRANCH="register/issue-${ISSUE_NUMBER}"
+          EMAIL="${ISSUE_AUTHOR_ID}+${ISSUE_AUTHOR}@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git -c user.name="$ISSUE_AUTHOR" -c user.email="$EMAIL" \
+            commit -a --signoff \
+            -m "feat(${DISTRO}): register ${NAME}" \
+            -m "Requested by @${ISSUE_AUTHOR} in #${ISSUE_NUMBER} (DCO certified in the issue form)."
+          # The branch belongs to this issue alone; edits re-run the workflow
+          # and refresh it.
+          git push --force origin "HEAD:refs/heads/$BRANCH"
+
+      - name: open or update the pull request
+        env:
+          DISTRO: ${{ steps.apply.outputs.distro }}
+          NAME: ${{ steps.apply.outputs.name }}
+        run: |
+          set -euo pipefail
+          BRANCH="register/issue-${ISSUE_NUMBER}"
+          if ! PR_URL=$(gh pr view "$BRANCH" --json url --jq .url 2>/dev/null); then
+            {
+              echo "Registers \`${NAME}\` in \`${DISTRO}\` on behalf of @${ISSUE_AUTHOR}."
+              echo
+              echo "Opened automatically by the register workflow from #${ISSUE_NUMBER}."
+              echo
+              echo "Closes #${ISSUE_NUMBER}."
+            } > /tmp/pr-body.md
+            PR_URL=$(gh pr create \
+              --head "$BRANCH" \
+              --title "feat(${DISTRO}): register ${NAME}" \
+              --body-file /tmp/pr-body.md)
+          fi
+          gh issue comment "$ISSUE_NUMBER" \
+            --body "Pull request ready: ${PR_URL} — the \`validate\` workflow checks it like any registration PR, and it closes this issue when merged."

@@ -25,6 +25,8 @@ The orphan [`data`](https://github.com/autowarefoundation/autoware-index/tree/da
 
 ## How to register your packages
 
+The quickest path is the [guided register page](https://autowarefoundation.github.io/autoware-index/register.html) on the browse site: it writes the registry entry for you (auto-discovering packages from GitHub-hosted repositories), runs the same checks as the PR gate client-side, and hands you a pre-filled registration request — submit it and the `register` workflow opens the pull request on your behalf. Or by hand:
+
 1. Fork this repo.
 2. Edit `distributions/<distro>.yaml` for each ROS distro you support. Add ONE entry under `repositories:` for your repository, and list every ROS package you are registering under its `packages:` map — each key must equal the package's `package.xml` `<name>`, **never** the repository name (unless they genuinely coincide).
 3. Open a pull request. The `validate` workflow automatically checks schema conformance, `ros_distro`/filename consistency, that your `ref` resolves upstream, that no other entry already registers your repository URL or package names, and that maintainers are real (no placeholders).

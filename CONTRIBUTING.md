@@ -8,6 +8,13 @@ Autoware contribution guidelines apply too — see
 
 ## Registering or updating packages
 
+The [register page](https://autowarefoundation.github.io/autoware-index/register.html)
+on the browse site walks you through this: it writes the entry, checks it
+against the same rules the `validate` workflow enforces, and hands you a
+pre-filled registration request whose submission opens the pull request for
+you (the `register` workflow applies the entry and credits you as the
+author). The manual flow it automates:
+
 1. **Fork** this repository.
 2. Edit `distributions/<distro>.yaml` for each ROS distro you support — add or
    update ONE entry under `repositories:` for your repository, listing every
