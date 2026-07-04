@@ -1,0 +1,115 @@
+# Pre-merge compile check for registration PRs: every repository entry the
+# PR adds or changes is cloned at its registered ref and its registered
+# packages are built + tested against the current Autoware Core release,
+# through the SAME reusable sweep-repository.yaml the post-merge sweeps use.
+# Flow:
+#
+#   pull_request touching distributions/
+#     -> discover: scripts/diff_matrix.py diffs the PR's test-merge checkout
+#        against that merge's own base parent (HEAD^1) and emits one matrix
+#        row per added/changed sweep tuple
+#        (url, ref, registered package set) — metadata-only edits (tags,
+#        descriptions, maintainers, governance) emit nothing and skip the
+#        build, and entries the PR does not touch are never rebuilt (unlike
+#        sweep_matrix.py --mode eager, which diffs ALL entries against the
+#        data-branch cursors and would blame unrelated staleness on the PR)
+#     -> validate: matrix fan-out into sweep-repository.yaml@main, exactly
+#        like sweep-eager.yaml's validate job
+#     -> and nothing else: NO record job. The verdict is advisory, for the
+#        reviewing maintainer; history stays append-only from post-merge
+#        sweeps (the eager sweep re-detects the entry after merge anyway,
+#        since its state cursor never advanced), and unmerged PRs never
+#        touch the data branch.
+#
+# Semantics footnote: for `kind: branch` entries this builds the branch tip
+# at review time; the post-merge sweep may resolve a newer commit. That is
+# inherent to branch refs and matches sweep semantics.
+#
+# Security: this workflow builds third-party code named by the PR inside the
+# runner's container. That is the exposure the post-merge sweep already
+# accepts, but on the pull_request trigger it is load-bearing that the
+# permissions stay `contents: read` and that NO secrets are referenced here
+# (sweep-repository.yaml needs none). Never mint the org app token in this
+# workflow.
+#
+# This check is deliberately NOT a required status: upstream repo health and
+# GHCR image availability should inform the reviewing maintainer, not hard-
+# block registry-metadata merges.
+
+name: build-check
+
+on:
+  pull_request:
+    paths:
+      - distributions/**.yaml
+      - scripts/diff_matrix.py
+      - .github/workflows/build-check.yaml
+
+permissions:
+  contents: read
+
+# One run per PR: a new push supersedes the previous build.
+concurrency:
+  group: build-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  discover:
+    name: discover changed entries
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      has-changes: ${{ steps.matrix.outputs.has-changes }}
+    steps:
+      # Default pull_request checkout: the ephemeral test merge of the PR
+      # head into the base tip. fetch-depth 2 brings in its parents, so the
+      # exact base state this merge was computed against is HEAD^1.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      # NOT `github.event.pull_request.base.sha`: that payload field is a
+      # lazily-refreshed snapshot that can lag the merge checkout's actual
+      # base parent once main moves — diffing against it would blame this PR
+      # for entries other PRs merged in the meantime. HEAD^1 is the merge
+      # commit's first parent, the right base by construction.
+      - name: Check out the merge parent
+        run: git worktree add --detach _base "$(git rev-parse 'HEAD^1')"
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install pyyaml
+
+      - name: Compute changed-entry matrix
+        id: matrix
+        run: |
+          set -euo pipefail
+          matrix=$(scripts/diff_matrix.py \
+            --base-dir _base/distributions --head-dir distributions)
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          rows=$(printf '%s' "$matrix" | python -c "import json,sys; print(len(json.load(sys.stdin).get('include', [])))")
+          if [ "$rows" -gt 0 ]; then
+            echo "has-changes=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::build check dispatched for $rows changed repository row(s)"
+          else
+            echo "has-changes=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::no repository entry's (url, ref, package set) changed; nothing to build"
+          fi
+
+  validate:
+    needs: discover
+    if: needs.discover.outputs.has-changes == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
+    uses: autowarefoundation/autoware-index-github-actions/.github/workflows/sweep-repository.yaml@main
+    with:
+      ros_distro: ${{ matrix.ros_distro }}
+      repo_name: ${{ matrix.repo_name }}
+      repository: ${{ matrix.repository }}
+      ref_kind: ${{ matrix.ref_kind }}
+      ref_value: ${{ matrix.ref_value }}
+      packages: ${{ matrix.packages }}
