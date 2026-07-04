@@ -6,8 +6,6 @@ logic (block located anywhere in the file, `repositories: {}` opening, the
 round-trip tripwire), duplicate/DCO/distro rejections, and main().
 """
 
-from pathlib import Path
-
 import apply_registration as ar
 import pytest
 import yaml
@@ -98,7 +96,7 @@ def test_parse_entry_happy_path():
 
 
 def test_parse_entry_accepts_any_consistent_base_indent():
-    deeper = "\n".join("    " + l if l.strip() else "" for l in ENTRY.splitlines())
+    deeper = "\n".join("    " + line if line.strip() else "" for line in ENTRY.splitlines())
     name, _ = ar.parse_entry(deeper)
     assert name == "demo_repo"
 

@@ -98,13 +98,13 @@ def strip_fence(text: str) -> str:
 def dedent_common(text: str) -> str:
     """Strip the largest whitespace prefix shared by every non-empty line."""
     lines = text.splitlines()
-    indents = [len(l) - len(l.lstrip(" ")) for l in lines if l.strip()]
+    indents = [len(line) - len(line.lstrip(" ")) for line in lines if line.strip()]
     cut = min(indents) if indents else 0
-    return "\n".join(l[cut:] if l.strip() else "" for l in lines)
+    return "\n".join(line[cut:] if line.strip() else "" for line in lines)
 
 
 def parse_entry(text: str) -> tuple[str, dict]:
-    """The entry section -> (entry name, spec mapping), structurally checked."""
+    """Parse the entry section into (entry name, spec mapping), structurally checked."""
     cleaned = dedent_common(strip_fence(text)).strip("\n")
     if not cleaned.strip():
         raise RegistrationError("the registry entry is empty")
