@@ -1,7 +1,7 @@
 # Turns a "Register packages (automatic PR)" issue (the register-request.yml
 # issue form, normally pre-filled by the browse site's register page) into a
-# pull request editing distributions/<distro>.yaml — programmatically, so the
-# indentation accidents of pasting nested YAML into web editors cannot
+# pull request editing distributions/<distro>.yaml. The edit is programmatic,
+# so the indentation accidents of pasting nested YAML into web editors cannot
 # happen. Flow:
 #
 #   issue opened/edited
@@ -19,7 +19,7 @@
 # deliberately use the workflow's own token instead (the permissions block
 # grants it issues: write), so they never depend on the app's permission set.
 # Where the app secrets are absent (forks), everything falls back to
-# github.token — GitHub then does NOT trigger workflows on the created PR (a
+# github.token; GitHub then does NOT trigger workflows on the created PR (a
 # maintainer closes/reopens it to run CI) and the repo setting "Allow GitHub
 # Actions to create and approve pull requests" must be enabled.
 
@@ -98,7 +98,7 @@ jobs:
               echo '```'
               cat /tmp/apply-errors.txt
               echo '```'
-              echo "Edit the issue to fix it — this workflow reruns automatically."
+              echo "Edit the issue to fix it; this workflow reruns automatically."
             } > /tmp/comment.md
             GH_TOKEN="$COMMENT_TOKEN" gh issue comment "$ISSUE_NUMBER" --body-file /tmp/comment.md
             exit 1
@@ -121,7 +121,7 @@ jobs:
               echo '```'
               cat /tmp/gates.log
               echo '```'
-              echo "Edit the issue to fix it — this workflow reruns automatically."
+              echo "Edit the issue to fix it; this workflow reruns automatically."
             } > /tmp/comment.md
             GH_TOKEN="$COMMENT_TOKEN" gh issue comment "$ISSUE_NUMBER" --body-file /tmp/comment.md
             exit 1
@@ -167,4 +167,4 @@ jobs:
               --body-file /tmp/pr-body.md)
           fi
           GH_TOKEN="$COMMENT_TOKEN" gh issue comment "$ISSUE_NUMBER" \
-            --body "Pull request ready: ${PR_URL} — the \`validate\` workflow checks it like any registration PR, and it closes this issue when merged."
+            --body "Pull request ready: ${PR_URL}. The \`validate\` workflow checks it like any registration PR, and it closes this issue when merged."

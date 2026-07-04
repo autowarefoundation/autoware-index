@@ -93,7 +93,7 @@ const state = {
     repoNameTouched: false,
     refTouched: false,
     refAutofilled: false,
-    refCustom: false, // user chose "Other — type a name…" over the dropdown
+    refCustom: false, // user chose "Other: type a name…" over the dropdown
     governanceTouched: false,
     lastLines: [],
   },
@@ -132,7 +132,7 @@ function canonicalUrl(url) {
 }
 
 // {owner, repo} when the URL is exactly a github.com repository (clone URL,
-// not a /tree/... page URL — those would pass API checks here but fail CI's
+// not a /tree/... page URL; those would pass API checks here but fail CI's
 // git ls-remote, so they must NOT get the auto-discovery treatment).
 function parseGithub(url) {
   const canon = canonicalUrl(url);
@@ -147,7 +147,7 @@ function isGithubPageUrl(url) {
 }
 
 // github.com with no /owner/repo path (e.g. an org page). CI's git ls-remote
-// hard-fails on these, so they must be a hard fail here too — not the benign
+// hard-fails on these, so they must be a hard fail here too, not the benign
 // "non-GitHub host" note.
 function isGithubIncompleteUrl(url) {
   return /^(?:www\.)?github\.com(\/[^/]*)?$/.test(canonicalUrl(url));
@@ -164,7 +164,7 @@ function gitUrlProblem(url) {
   const scp = u.match(/^(?:[\w.-]+@)([\w.-]+):(?!\/\/)(.+)$/);
   if (scp) {
     return {
-      msg: "SSH remotes can't be cloned anonymously by the sweep or CI — use the https:// URL.",
+      msg: "SSH remotes can't be cloned anonymously by the sweep or CI; use the https:// URL.",
       fix: httpsEquivalent(scp[1], scp[2]),
     };
   }
@@ -172,17 +172,17 @@ function gitUrlProblem(url) {
   try {
     parsed = new URL(u);
   } catch {
-    return { msg: "This isn't a URL — paste the repository's https:// clone URL." };
+    return { msg: "This isn't a URL; paste the repository's https:// clone URL." };
   }
   const scheme = parsed.protocol.replace(/:$/, "").toLowerCase();
   if (scheme === "ssh" || scheme === "git+ssh") {
     return {
-      msg: "SSH remotes can't be cloned anonymously by the sweep or CI — use the https:// URL.",
+      msg: "SSH remotes can't be cloned anonymously by the sweep or CI; use the https:// URL.",
       fix: httpsEquivalent(parsed.hostname, parsed.pathname),
     };
   }
   if (!["http", "https", "git"].includes(scheme)) {
-    return { msg: `“${scheme}:” isn't a fetchable git remote — paste the https:// clone URL.` };
+    return { msg: `“${scheme}:” isn't a fetchable git remote; paste the https:// clone URL.` };
   }
   if (!/^[\w-]+(\.[\w-]+)+$/.test(parsed.hostname)) {
     return { msg: "The host doesn't look like a real domain." };
@@ -229,7 +229,7 @@ function maintainerEmpty(m) {
 // enforces quoted-strings: only-when-needed, so quoting happens EXACTLY when
 // the plain form would break: characters a block-context plain scalar can't
 // carry (leading indicators, ": ", " #", control whitespace, trailing
-// space/colon) — or values PyYAML's implicit resolvers would type as
+// space/colon), or values PyYAML's implicit resolvers would type as
 // something other than a string: bool/null words, every numeric form
 // (decimal, hex/octal/binary, underscore-grouped, sexagesimal like 12:30,
 // .inf/.nan), and timestamps. URLs and unicode names stay plain.
@@ -294,7 +294,7 @@ function maintainerLines(list, indent) {
 
 // The entry as YAML lines (2-space base indent, ready to append under
 // `repositories:`). Missing required values render as comment hints naming
-// the station that provides them — the buffer doubles as the progress view.
+// the station that provides them; the buffer doubles as the progress view.
 // Map KEYS are emitted only once they match their schema pattern (so pasted
 // or scanned garbage can never inject YAML structure through a key), and go
 // through yamlScalar so bool-word names like `no` stay strings.
@@ -305,9 +305,9 @@ function entryLines() {
   if (key && REPO_KEY_RE.test(key)) {
     lines.push(`  ${yamlScalar(key)}:`);
   } else if (key) {
-    lines.push(`  # entry name isn't valid yet — station 1`);
+    lines.push(`  # entry name isn't valid yet (station 1)`);
   } else {
-    lines.push(`  # <entry name>:  — station 1`);
+    lines.push(`  # <entry name>:  (station 1)`);
   }
 
   lines.push(f.url.trim() ? `    url: ${yamlScalar(f.url.trim())}` : `    url: # station 1`);
@@ -325,13 +325,13 @@ function entryLines() {
   lines.push(`    maintainers:`);
   const maintLines = maintainerLines(f.maintainers, "      ");
   if (maintLines.length) lines.push(...maintLines);
-  else lines.push(`      # add at least one maintainer — station 4`);
+  else lines.push(`      # add at least one maintainer (station 4)`);
 
   lines.push(`    packages:`);
   const named = f.packages.filter((p) => PKG_NAME_RE.test(p.name.trim()));
   const unnamed = f.packages.length - named.length;
   if (!f.packages.length) {
-    lines.push(`      # add at least one package — station 3`);
+    lines.push(`      # add at least one package (station 3)`);
   }
   for (const pkg of named) {
     lines.push(`      ${yamlScalar(pkg.name.trim())}:`);
@@ -339,7 +339,7 @@ function entryLines() {
     if (pkg.tags.length) {
       for (const t of pkg.tags) lines.push(`          - ${t}`);
     } else {
-      lines.push(`          # pick 1–5 tags — station 3`);
+      lines.push(`          # pick 1–5 tags (station 3)`);
     }
     lines.push(...descriptionLines(pkg.description, "        "));
     const overrides = maintainerLines(pkg.maintainers, "          ");
@@ -349,7 +349,7 @@ function entryLines() {
     }
   }
   if (unnamed > 0) {
-    lines.push(`      # ${unnamed} package(s) still need a valid name — station 3`);
+    lines.push(`      # ${unnamed} package(s) still need a valid name (station 3)`);
   }
   return lines;
 }
@@ -369,7 +369,7 @@ function validate() {
   const completeMaintainers = f.maintainers.filter(maintainerComplete);
   const gates = [];
 
-  // Gate 1 — check-jsonschema: required fields + patterns.
+  // Gate 1 (check-jsonschema): required fields + patterns.
   {
     const missing = [];
     const invalid = [];
@@ -408,7 +408,7 @@ function validate() {
     gates.push({ id: "shape", name: "check-jsonschema", status, msg });
   }
 
-  // Gate 2 — check_tags: 1–5 live tags per package; tool-only is a warning.
+  // Gate 2 (check_tags): 1–5 live tags per package; tool-only is a warning.
   {
     let status = "ok";
     let msg = "every package carries 1–5 tags from the vocabulary";
@@ -424,12 +424,12 @@ function validate() {
       msg = `pick tags for ${untagged[0].name.trim()}`;
     } else if (toolOnly.length) {
       status = "warn";
-      msg = `“tool” is ${toolOnly[0].name.trim()}'s only tag — add the domain it serves`;
+      msg = `“tool” is ${toolOnly[0].name.trim()}'s only tag; add the domain it serves`;
     }
     gates.push({ id: "tags", name: "check_tags", status, msg });
   }
 
-  // Gate 3 — check_refs · uniqueness: URL, entry name, and package names must
+  // Gate 3 (check_refs · uniqueness): URL, entry name, and package names must
   // be new to this distro (and package names unique within the entry).
   {
     let status = "ok";
@@ -438,7 +438,7 @@ function validate() {
     const canon = f.url.trim() ? canonicalUrl(f.url) : "";
     if (canon && registered.urls.has(canon)) {
       problems.push(
-        `this repository is already registered as “${registered.urls.get(canon)}” — update that entry instead`,
+        `this repository is already registered as “${registered.urls.get(canon)}”; update that entry instead`,
       );
     }
     const key = f.repoName.trim();
@@ -467,7 +467,7 @@ function validate() {
     gates.push({ id: "unique", name: "check_refs · uniqueness", status, msg });
   }
 
-  // Gate 4 — check_refs · maintainers: no placeholders, anywhere.
+  // Gate 4 (check_refs · maintainers): no placeholders, anywhere.
   {
     let status = "ok";
     let msg = "maintainers look real";
@@ -485,7 +485,7 @@ function validate() {
     gates.push({ id: "maintainers", name: "check_refs · maintainers", status, msg });
   }
 
-  // Gate 5 — check_refs · ref resolution. sha is format-only (like CI);
+  // Gate 5 (check_refs · ref resolution). sha is format-only (like CI);
   // tag/branch resolve through the GitHub API when possible, else CI verifies.
   {
     let status = "pending";
@@ -513,7 +513,7 @@ function validate() {
           msg = `${f.refKind} “${value}” exists upstream`;
         } else if (check.status === "missing") {
           status = "fail";
-          msg = `${f.refKind} “${value}” does not resolve upstream — git ls-remote will reject it`;
+          msg = `${f.refKind} “${value}” does not resolve upstream; git ls-remote will reject it`;
         }
       } else if (gh.status === "notfound") {
         status = "fail";
@@ -521,19 +521,20 @@ function validate() {
       } else if (gh.status === "ratelimited") {
         status = "info";
         const rl = rateLimitInfo();
-        msg = `GitHub API rate limit reached${rl ? ` (resets at ${rl.hhmm}, in ~${rl.mins} min)` : ""} — CI verifies the ref with git ls-remote`;
+        msg = `GitHub API rate limit reached${rl ? ` (resets at ${rl.hhmm}, in ~${rl.mins} min)` : ""}; CI verifies the ref with git ls-remote`;
       } else if (gh.status === "pageurl") {
         status = "fail";
-        msg = "that's a GitHub page URL — register the repository clone URL (no /tree/…)";
+        msg = "that's a GitHub page URL; register the repository clone URL (no /tree/…)";
       } else if (gh.status === "incomplete") {
         status = "fail";
-        msg = "the github.com URL is missing its /owner/repository path — git ls-remote will fail";
+        msg =
+          "the github.com URL is missing its /owner/repository path, so git ls-remote will fail";
       } else if (!gh.slug) {
         status = "info";
-        msg = "can't check from the browser — CI verifies the ref with git ls-remote";
+        msg = "can't check from the browser; CI verifies the ref with git ls-remote";
       } else if (gh.status === "error") {
         status = "info";
-        msg = "couldn't reach the GitHub API — CI verifies the ref with git ls-remote";
+        msg = "couldn't reach the GitHub API; CI verifies the ref with git ls-remote";
       } else {
         status = "pending";
         msg = "looking up the repository…";
@@ -615,8 +616,8 @@ function resetDiscovery(gh) {
 
 async function inspectRepo() {
   const gh = state.github;
-  // Bump FIRST: any newer invocation — including ones that resolve to a
-  // non-GitHub or empty URL — must invalidate in-flight API responses.
+  // Bump FIRST: any newer invocation, including ones that resolve to a
+  // non-GitHub or empty URL, must invalidate in-flight API responses.
   const seq = ++gh.inspectSeq;
   const slug = parseGithub(state.form.url);
   gh.slug = slug;
@@ -678,7 +679,7 @@ async function inspectRepo() {
   gh.listsMaybeTruncated = { tags: gh.tags.length === 100, branches: gh.branches.length === 100 };
 
   // First contact with a resolvable repo: suggest the ref the contributing
-  // guide would suggest — the latest tag when one exists, else the default
+  // guide would suggest: the latest tag when one exists, else the default
   // branch. Only while the user hasn't taken the wheel; a suggestion made
   // for a previous repository is re-made, never kept.
   if (!state.ui.refTouched && (!state.form.refValue.trim() || state.ui.refAutofilled)) {
@@ -742,9 +743,9 @@ async function checkRefUpstream() {
 //
 // package.xml carries name + email but no GitHub handle. Three tiers, in
 // cost order: (1) users.noreply.github.com addresses encode the login
-// directly; (2) the repo's commits filtered by author email — GitHub links
+// directly; (2) the repo's commits filtered by author email (GitHub links
 // commit emails to accounts, and maintainers usually have commits in their
-// own repo; (3) a public-profile email search, accepted only on an exact
+// own repo); (3) a public-profile email search, accepted only on an exact
 // single hit. (The global /search/commits endpoint would cover maintainers
 // whose linked commits live elsewhere, but it sends no CORS headers, so
 // browsers cannot call it.) Resolutions and definitive misses are cached
@@ -771,7 +772,7 @@ async function resolveGithubHandle(slug, email) {
   const commits = await ghJson(
     `/repos/${slug.owner}/${slug.repo}/commits?author=${encodeURIComponent(email)}&per_page=1`,
   );
-  if (commits.rateLimited || commits.status === 0) return null; // transient — don't cache
+  if (commits.rateLimited || commits.status === 0) return null; // transient; don't cache
   if (commits.ok && Array.isArray(commits.data) && commits.data[0]?.author?.login) {
     login = commits.data[0].author.login;
   }
@@ -881,7 +882,7 @@ async function scanPackages(force = false) {
     .sort((a, b) => a.split("/").length - b.split("/").length || a.localeCompare(b));
   const capped = paths.slice(0, MAX_SCAN_FILES);
   let note = "";
-  if (tree.data.truncated) note = "large repository — the file listing was truncated by GitHub";
+  if (tree.data.truncated) note = "large repository; the file listing was truncated by GitHub";
   else if (paths.length > MAX_SCAN_FILES)
     note = `showing the first ${MAX_SCAN_FILES} of ${paths.length} package.xml files`;
 
@@ -1014,7 +1015,7 @@ function renderGates(result) {
           "div",
           {},
           el("span", { class: "gate-name", text: gate.name }),
-          el("p", { class: "gate-msg", text: `${statusWord(gate.status)} — ${gate.msg}` }),
+          el("p", { class: "gate-msg", text: `${statusWord(gate.status)}: ${gate.msg}` }),
         ),
       ),
     );
@@ -1031,7 +1032,7 @@ function statusWord(status) {
 // Deep link to the register-request issue form with every field pre-filled
 // (params are the form's field ids; the required DCO checkbox cannot be
 // pre-ticked by design). Submitting it makes the register workflow open the
-// PR — no fork, no paste, no indentation to get wrong.
+// PR: no fork, no paste, no indentation to get wrong.
 function registrationIssueUrl() {
   const params = new URLSearchParams({
     template: "register-request.yml",
@@ -1045,7 +1046,7 @@ function registrationIssueUrl() {
 function renderHandoff(result) {
   const handoff = document.getElementById("handoff");
   handoff.dataset.ready = result.ready ? "true" : "false";
-  // inert removes the dimmed content from keyboard/AT interaction too — the
+  // inert removes the dimmed content from keyboard/AT interaction too; the
   // CSS pointer-events rule alone only locks out mouse users.
   const body = handoff.querySelector(".handoff-body");
   if (body) body.inert = !result.ready;
@@ -1059,7 +1060,7 @@ function renderHandoff(result) {
       blocked = el("p", { class: "handoff-blocked" });
       handoff.querySelector("h2").after(blocked);
     }
-    blocked.textContent = `Unlocks when the pre-flight is green — ${remaining} check(s) to go.`;
+    blocked.textContent = `Unlocks when the pre-flight is green: ${remaining} check(s) to go.`;
   } else if (blocked) {
     blocked.remove();
   }
@@ -1116,7 +1117,7 @@ function renderUrlStatus() {
   if (canon && registered.urls.has(canon)) {
     setStatus(
       node,
-      `Already registered in ${state.distro} as “${registered.urls.get(canon)}” — update that entry instead of adding a new one.`,
+      `Already registered in ${state.distro} as “${registered.urls.get(canon)}”; update that entry instead of adding a new one.`,
       "bad",
     );
     return;
@@ -1143,18 +1144,18 @@ function renderUrlStatus() {
     case "notfound":
       setStatus(
         node,
-        "Not found on GitHub — check the URL (private repositories can't be swept).",
+        "Not found on GitHub; check the URL (private repositories can't be swept).",
         "bad",
       );
       break;
     case "ratelimited": {
       const rl = rateLimitInfo();
       const detail = rl
-        ? ` (0/${rl.limit} requests left this hour for your IP — resets at ${rl.hhmm}, in ~${rl.mins} min)`
+        ? ` (0/${rl.limit} requests left this hour for your IP; resets at ${rl.hhmm}, in ~${rl.mins} min)`
         : "";
       setStatus(
         node,
-        `GitHub API rate limit reached${detail} — auto-discovery resumes automatically; manual entry works meanwhile and CI validates everything.`,
+        `GitHub API rate limit reached${detail}. Auto-discovery resumes automatically; manual entry works meanwhile and CI validates everything.`,
         "warn",
       );
       break;
@@ -1162,7 +1163,7 @@ function renderUrlStatus() {
     case "pageurl":
       setStatus(
         node,
-        "This looks like a GitHub page URL — register the repository clone URL (without /tree/…).",
+        "This looks like a GitHub page URL; register the repository clone URL (without /tree/…).",
         "bad",
       );
       break;
@@ -1172,12 +1173,12 @@ function renderUrlStatus() {
     case "nonGithub":
       setStatus(
         node,
-        "Not a github.com URL — auto-discovery is off; CI still verifies the ref with git ls-remote.",
+        "Not a github.com URL: auto-discovery is off; CI still verifies the ref with git ls-remote.",
         "",
       );
       break;
     case "error":
-      setStatus(node, "GitHub API error — try again, or continue manually.", "warn");
+      setStatus(node, "GitHub API error; try again, or continue manually.", "warn");
       break;
     default:
       setStatus(node, "", "");
@@ -1195,10 +1196,10 @@ function renderRepoNameStatus() {
     return;
   }
   if (!REPO_KEY_RE.test(key)) {
-    setStatus(node, "Lowercase letters, digits, _ or - — and it must start with a letter.", "bad");
+    setStatus(node, "Lowercase letters, digits, _ or - (it must start with a letter).", "bad");
     input.setAttribute("aria-invalid", "true");
   } else if (registered.repoNames.has(key)) {
-    setStatus(node, `“${key}” is already an entry in ${state.distro} — pick another name.`, "bad");
+    setStatus(node, `“${key}” is already an entry in ${state.distro}; pick another name.`, "bad");
     input.setAttribute("aria-invalid", "true");
   } else {
     setStatus(node, "", "");
@@ -1254,9 +1255,9 @@ function refListValues() {
 }
 
 // The ref value is a real dropdown of the fetched branches/tags whenever the
-// list is available, with an "Other — type a name…" escape hatch (needed for
-// refs beyond the first 100 anyway). No list — sha kind, non-GitHub host,
-// rate limit, API error — falls back to the free-text input. The swap never
+// list is available, with an "Other: type a name…" escape hatch (needed for
+// refs beyond the first 100 anyway). No list (sha kind, non-GitHub host,
+// rate limit, API error) falls back to the free-text input. The swap never
 // happens under the user's cursor: while the text input is focused it stays.
 function renderRefControl() {
   const f = state.form;
@@ -1283,7 +1284,7 @@ function renderRefControl() {
     );
   }
   for (const v of values) select.append(el("option", { value: v, text: v }));
-  select.append(el("option", { value: CUSTOM_REF, text: `Other — type a ${f.refKind} name…` }));
+  select.append(el("option", { value: CUSTOM_REF, text: `Other: type a ${f.refKind} name…` }));
   select.value = value;
 }
 
@@ -1319,7 +1320,7 @@ function renderRefStatus() {
           `/repos/${slugKey}/commits?per_page=1&sha=${encodeURIComponent(gh.info.default_branch)}`,
         );
         btn.disabled = false;
-        // The URL may have changed while the request was in flight — never
+        // The URL may have changed while the request was in flight; never
         // pin the new repository at the old repository's commit.
         const current = state.github.slug;
         if (!current || `${current.owner}/${current.repo}` !== slugKey) return;
@@ -1365,7 +1366,7 @@ function renderRefStatus() {
   if (f.refKind === "tag" && gh.status === "ok" && !gh.tags.length) {
     setStatus(
       node,
-      "This repository has no tags yet — register the default branch instead, and switch to a tag once you cut a release.",
+      "This repository has no tags yet; register the default branch instead, and switch to a tag once you cut a release.",
       "warn",
     );
     return;
@@ -1484,7 +1485,7 @@ function packageCard(pkg) {
   const desc = el("textarea", {
     id: `${pkg.id}-desc`,
     rows: "2",
-    placeholder: "Optional — overrides the package.xml description on the browse card.",
+    placeholder: "Optional; overrides the package.xml description on the browse card.",
   });
   desc.value = pkg.description;
   desc.addEventListener("input", () => {
@@ -1493,7 +1494,7 @@ function packageCard(pkg) {
   });
   const descHint = el("p", { class: "hint" });
   if (pkg.upstream?.description) {
-    descHint.textContent = `Upstream package.xml says: “${pkg.upstream.description}” — leave empty to use it.`;
+    descHint.textContent = `Upstream package.xml says: “${pkg.upstream.description}”; leave empty to use it.`;
   } else {
     descHint.textContent =
       "Leave empty to show the description the sweep caches from the upstream package.xml.";
@@ -1523,7 +1524,7 @@ function packageCard(pkg) {
       el("p", {
         class: "field-label",
         id: `${pkg.id}-tags-label`,
-        text: "Tags — the first one is the package's primary identity",
+        text: "Tags: the first one is the package's primary identity",
       }),
       picker.wrap,
     ),
@@ -1586,7 +1587,7 @@ function updatePackageCards() {
       !state.github.scan.note && // a truncated scan can't prove absence
       !state.github.scan.found.some((f) => f.name === name)
     ) {
-      msg = "Not among the package.xml names found at this ref — the sweep will fail on it.";
+      msg = "Not among the package.xml names found at this ref; the sweep will fail on it.";
       tone = "warn";
     }
     setStatus(nodes.nameStatus, msg, tone);
@@ -1630,17 +1631,17 @@ function renderFoundPackagesInto(status, list, scan) {
     return;
   }
   if (scan.status === "error") {
-    status.textContent = `Couldn't scan the repository${scan.note ? ` — ${scan.note}` : ""}. Add packages manually below.`;
+    status.textContent = `Couldn't scan the repository${scan.note ? ` (${scan.note})` : ""}. Add packages manually below.`;
     return;
   }
   if (scan.status !== "done") {
     status.textContent = "";
     return;
   }
-  // Results from a previous ref are stale, not wrong — say so while the
+  // Results from a previous ref are stale, not wrong; say so while the
   // debounced rescan is on its way.
   if (scan.key !== scanKey()) {
-    status.textContent = "Ref changed — rescanning…";
+    status.textContent = "Ref changed, rescanning…";
     return;
   }
 
@@ -1705,7 +1706,7 @@ function renderFoundPackagesInto(status, list, scan) {
           "div",
           { class: "found-text" },
           el("span", { class: "found-name", text: f.name }),
-          el("span", { class: "found-desc", text: f.description ? ` — ${f.description}` : "" }),
+          el("span", { class: "found-desc", text: f.description ? ` · ${f.description}` : "" }),
           el("br"),
           el("span", { class: "found-desc", text: f.path }),
         ),
@@ -1879,10 +1880,10 @@ function renderMaintainerSuggestionsInto(zone) {
       refresh();
     });
     const details = [
-      m.email ? ` — ${m.email}` : "",
+      m.email ? ` · ${m.email}` : "",
       m.github ? ` · @${m.github}` : "",
       " · from package.xml",
-      m.github ? "" : " — add their GitHub handle",
+      m.github ? "" : " (add their GitHub handle)",
     ].join("");
     zone.append(
       el(
@@ -1935,7 +1936,7 @@ function fallbackCopy(text) {
 // The primary handoff copy: the CURRENT distributions/<distro>.yaml from
 // main (raw.githubusercontent is CORS-open and doesn't touch the API rate
 // limit) with the entry appended. Pasting a whole file (select all, paste)
-// survives web editors that re-indent pasted blocks — pasting a nested
+// survives web editors that re-indent pasted blocks; pasting a nested
 // fragment into the middle of a YAML file does not. Falls back to the
 // entry-only copy when the file can't be fetched.
 async function copyUpdatedFile(statusEl) {
@@ -1953,7 +1954,7 @@ async function copyUpdatedFile(statusEl) {
   if (base === null || !base.includes("repositories:")) {
     await copyText(state.ui.entryText, statusEl, "Entry");
     statusEl.textContent +=
-      " — couldn't fetch the current file, so this is the entry alone; paste it at the end of repositories: and keep the indentation";
+      ". Couldn't fetch the current file, so this is the entry alone; paste it at the end of repositories: and keep the indentation";
     return;
   }
   await copyText(
@@ -1976,7 +1977,7 @@ async function copyText(text, statusEl, label) {
       fallbackCopy(text);
       statusEl.textContent = `${label} copied`;
     } catch {
-      statusEl.textContent = "Copy failed — select the text and copy manually";
+      statusEl.textContent = "Copy failed; select the text and copy manually";
     }
   }
 }
@@ -2041,7 +2042,7 @@ function wire() {
   const nameInput = document.getElementById("repo-name");
   nameInput.addEventListener("input", () => {
     state.form.repoName = nameInput.value;
-    // "Touched" means the user is keeping their own name here — an emptied
+    // "Touched" means the user is keeping their own name here; an emptied
     // field returns to auto-suggest ownership, so the next URL edit fills it
     // again instead of staying blank forever.
     state.ui.repoNameTouched = nameInput.value.trim() !== "";
@@ -2063,7 +2064,7 @@ function wire() {
       state.ui.refTouched = true;
       state.ui.refCustom = false;
       // A value from the previous kind (a tag name on the branch list, a
-      // branch on the tag list) is never right — preselect the obvious
+      // branch on the tag list) is never right; preselect the obvious
       // candidate from the new kind's list instead.
       const values = refListValues();
       if (values.length && !values.includes(state.form.refValue.trim())) {
@@ -2160,7 +2161,7 @@ async function main() {
     document
       .querySelector(".reg-form")
       .prepend(
-        el("p", { class: "empty", text: "Could not load data.json — serve the site over HTTP." }),
+        el("p", { class: "empty", text: "Could not load data.json; serve the site over HTTP." }),
       );
     return;
   }

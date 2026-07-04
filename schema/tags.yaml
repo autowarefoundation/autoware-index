@@ -1,13 +1,13 @@
-# Autoware Index — the closed tag vocabulary for `packages.<name>.tags`
+# Autoware Index: the closed tag vocabulary for `packages.<name>.tags`
 # in distributions/<distro>.yaml. SINGLE SOURCE OF TRUTH.
 #
 # Every tag used in the registry MUST be a live entry under `tags:` here;
 # scripts/check_tags.py enforces it (validate.yaml + the check-tags
-# pre-commit hook). Ids are flat lowercase hyphen-separated strings —
+# pre-commit hook). Ids are flat lowercase hyphen-separated strings;
 # the `group` field is display metadata for the browse site, never part
 # of the id.
 #
-# Adding a tag (full criteria: CONTRIBUTING.md#package-tags) — a PR
+# To add a tag (full criteria: CONTRIBUTING.md#package-tags), a PR
 # editing this file must include:
 #   1. a one-line `summary` a reviewer can apply without asking,
 #   2. at least two named, registerable ROS packages that would carry it,
@@ -28,20 +28,20 @@ tags:
   # --- Autonomy pipeline ---
   sensing:
     group: pipeline
-    summary: Processes already-published sensor data — filtering, preprocessing, distortion correction.
-    disambiguation: Talks to topics, not hardware — packages that talk to a device or vendor SDK are `driver`.
+    summary: Processes already-published sensor data (filtering, preprocessing, distortion correction).
+    disambiguation: Talks to topics, not hardware; packages that talk to a device or vendor SDK are `driver`.
   perception:
     group: pipeline
-    summary: Detection, tracking, prediction, and segmentation — turning sensor data into scene understanding.
+    summary: Detection, tracking, prediction, and segmentation, turning sensor data into scene understanding.
   localization:
     group: pipeline
-    summary: Ego-pose estimation — scan matching, pose fusion, GNSS integration, localization monitors.
+    summary: Ego-pose estimation (scan matching, pose fusion, GNSS integration, localization monitors).
   map:
     group: pipeline
     summary: Map loading, formats, projections, and map manipulation (lanelet2, point-cloud maps).
   planning:
     group: pipeline
-    summary: Mission, behavior, and motion planning — route and trajectory generation.
+    summary: Mission, behavior, and motion planning (route and trajectory generation).
   control:
     group: pipeline
     summary: Trajectory-following control and actuation command generation (MPC, pure pursuit).
@@ -50,47 +50,47 @@ tags:
     summary: Vehicle-interface nodes, vehicle descriptions, and individual-parameter packages.
   system:
     group: pipeline
-    summary: Runtime health — diagnostics aggregation, monitoring, MRM/fail-safe, command-mode arbitration.
+    summary: Runtime health (diagnostics aggregation, monitoring, MRM/fail-safe, command-mode arbitration).
   v2x:
     group: pipeline
-    summary: Vehicle-to-everything communication — ETSI ITS stacks, V2I bridges and mocks.
+    summary: Vehicle-to-everything communication (ETSI ITS stacks, V2I bridges and mocks).
 
   # --- Infrastructure & support ---
   common-library:
     group: infrastructure
-    summary: Code other packages link or import — shared utils, math, geometry, CMake helpers.
+    summary: Code other packages link or import (shared utils, math, geometry, CMake helpers).
     disambiguation: Executables you run are `tool`; IPC/executor infrastructure is `middleware`.
   middleware:
     group: infrastructure
-    summary: Execution and transport infrastructure — IPC, executors, GPU memory transport, TF buffering.
+    summary: Execution and transport infrastructure (IPC, executors, GPU memory transport, TF buffering).
   interface:
     group: infrastructure
-    summary: Message, service, and action definitions — contracts only, no logic.
+    summary: Message, service, and action definitions (contracts only, no logic).
     disambiguation: The bridge node exposing an external surface is `api` (`autoware_adapi_msgs` is `interface`; its adaptor node is `api`).
   api:
     group: infrastructure
-    summary: Adapter and bridge nodes exposing an external surface — AD API adaptors, REST/DDS bridges.
+    summary: Adapter and bridge nodes exposing an external surface (AD API adaptors, REST/DDS bridges).
   launch:
     group: infrastructure
     summary: Packages whose primary deliverable is launch/parameter composition (the `*_launch` convention).
-    disambiguation: Not for packages that merely ship a launch/ directory — nearly all do.
+    disambiguation: Not for packages that merely ship a launch/ directory (nearly all do).
   driver:
     group: infrastructure
-    summary: Talks to hardware or a vendor SDK — sensor/actuator drivers, CAN interfaces.
-    disambiguation: Publishes raw device data — downstream processing of already-published data is `sensing`.
+    summary: Talks to hardware or a vendor SDK (sensor/actuator drivers, CAN interfaces).
+    disambiguation: Publishes raw device data; downstream processing of already-published data is `sensing`.
   ml:
     group: infrastructure
-    summary: Learned-model inference — TensorRT/ONNX runtimes, model artifacts, GPU deployment.
-    disambiguation: Pairs with a pipeline tag — a learned detector is `perception` + `ml`.
+    summary: Learned-model inference (TensorRT/ONNX runtimes, model artifacts, GPU deployment).
+    disambiguation: Pairs with a pipeline tag; a learned detector is `perception` + `ml`.
 
   # --- Development & operations ---
   tool:
     group: operations
     summary: An executable developer utility you run.
-    disambiguation: Code you link is `common-library`; rarely a package's only tag — add the domain it serves.
+    disambiguation: Code you link is `common-library`; rarely a package's only tag, so add the domain it serves.
   testing:
     group: operations
-    summary: Software and scenario correctness checking — harnesses, scenario runners, fixtures.
+    summary: Software and scenario correctness checking (harnesses, scenario runners, fixtures).
     disambiguation: Metric/KPI computation is `evaluation`; the simulated world is `simulator`.
   simulator:
     group: operations
@@ -100,11 +100,11 @@ tags:
     summary: RViz plugins, viewers, and visual debugging displays.
   evaluation:
     group: operations
-    summary: Metric/KPI computation — driving-quality scoring, benchmarking, runtime-performance analysis.
+    summary: Metric/KPI computation (driving-quality scoring, benchmarking, runtime-performance analysis).
     disambiguation: "`testing` checks correctness; `simulator` provides the environment; `evaluation` scores the result."
   calibration:
     group: operations
-    summary: Sensor and vehicle calibration tools and managers — intrinsic/extrinsic, time-delay, dynamics.
+    summary: Sensor and vehicle calibration tools and managers (intrinsic/extrinsic, time-delay, dynamics).
 
 # Retired ids live here forever (append-only; never re-minted). Shape:
 #   launcher:

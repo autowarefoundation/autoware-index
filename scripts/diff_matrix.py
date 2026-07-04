@@ -3,9 +3,9 @@
 
 Diffs the HEAD registry (the PR's test-merge distributions/) against the BASE
 registry (the same merge's base parent, checked out by build-check.yaml)
-and emits one row per repository entry whose sweep tuple — (url, ref{kind,
-value}, sorted registered package names), imported from sweep_matrix so the
-two diffs can never drift — was added or changed by the PR. Metadata-only
+and emits one row per repository entry whose sweep tuple was added or changed
+by the PR. The tuple is (url, ref{kind, value}, sorted registered package
+names), imported from sweep_matrix so the two diffs can never drift. Metadata-only
 edits (tags, descriptions, maintainers, governance) emit nothing, and entries
 the PR does not touch are never blamed for being stale: that is what
 distinguishes this diff from `sweep_matrix.py --mode eager`, which compares
@@ -49,7 +49,7 @@ def base_states(base_dir: Path) -> dict[tuple[str, str], dict]:
 def build_matrix(base_dir: Path, head_dir: Path) -> list[dict]:
     if not base_dir.is_dir():
         # A missing base dir would silently classify every entry as "added"
-        # and build the whole registry — that is always a miswired checkout
+        # and build the whole registry; that is always a miswired checkout
         # path in the workflow, never a real registry state.
         raise RegistryError(f"base distributions dir not found: {base_dir}")
 
@@ -70,7 +70,7 @@ def build_matrix(base_dir: Path, head_dir: Path) -> list[dict]:
             ):
                 # Same loud policy as sweep_matrix: a schema-valid file can
                 # never hit this, and validate.yaml goes red on such a PR
-                # anyway — a green build check next to it would be a lie.
+                # anyway; a green build check next to it would be a lie.
                 malformed.append(f"{path}::{repo_name}: missing url/ref/packages")
                 continue
 
@@ -121,7 +121,7 @@ def main() -> None:
         # PRE-validation PR YAML into them: non-mapping garbage where the
         # schema promises mappings (`ref: main`, `packages: [a, b]`) throws
         # type errors deep inside. Keep that failure annotated instead of a
-        # raw traceback — validate.yaml's schema check names the exact
+        # raw traceback; validate.yaml's schema check names the exact
         # offending field on the same PR.
         sys.exit(
             f"::error::a registry entry has a schema-invalid shape ({exc}); "

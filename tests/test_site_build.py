@@ -1,4 +1,4 @@
-"""Tests for site/build.py — the browse-data exporter / site assembler.
+"""Tests for site/build.py: the browse-data exporter / site assembler.
 
 Imported as ``import build`` because conftest puts site/ on sys.path.
 
@@ -88,7 +88,7 @@ def test_parse_description_empty_description_returns_empty():
 
 
 # --------------------------------------------------------------------------- #
-# load_distributions — flattening the v2 repository-keyed format
+# load_distributions: flattening the v2 repository-keyed format
 # --------------------------------------------------------------------------- #
 
 
@@ -266,7 +266,7 @@ def test_load_distributions_ignores_non_yaml(tmp_path):
 
 
 def test_load_distributions_v1_file_raises_registry_error(tmp_path):
-    # The old flat-packages format hard-fails through the shared loader —
+    # The old flat-packages format hard-fails through the shared loader,
     # never a silently empty site.
     (tmp_path / "humble.yaml").write_text(
         'schema_version: "1"\n'
@@ -378,7 +378,7 @@ def test_load_metadata_ignores_top_level_xml(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# summarize — the last-green / current-status logic
+# summarize: the last-green / current-status logic
 # --------------------------------------------------------------------------- #
 
 
@@ -495,7 +495,7 @@ def test_summarize_missing_fields_use_defaults():
 
 
 # --------------------------------------------------------------------------- #
-# build_packages — the three-way join + description precedence
+# build_packages: the three-way join + description precedence
 # --------------------------------------------------------------------------- #
 
 
@@ -574,7 +574,7 @@ def test_build_packages_sorted_by_name_then_distro():
 
 def test_build_packages_summarize_overrides_description_key_order():
     # summarize() does not emit a "description" key, and the explicit
-    # description kwarg comes last in the dict merge — confirm it wins.
+    # description kwarg comes last in the dict merge; confirm it wins.
     reg = _reg(description="from registry")
     packages = build.build_packages([reg], history={}, metadata={})
     assert packages[0]["description"] == "from registry"
@@ -611,7 +611,7 @@ def test_build_packages_shared_repo_packages_join_independently():
 
 
 # --------------------------------------------------------------------------- #
-# main() — end-to-end assembly into --out
+# main(): end-to-end assembly into --out
 # --------------------------------------------------------------------------- #
 
 
@@ -754,7 +754,7 @@ def test_main_without_history_or_metadata(tmp_path, monkeypatch):
 
 def test_main_exports_distros_from_filenames(tmp_path, monkeypatch):
     # The register page offers every distro file, including a just-created one
-    # with no repositories yet — so `distros` derives from the filenames
+    # with no repositories yet, so `distros` derives from the filenames
     # (ros_distro == stem is enforced repo-wide), not from the package list.
     distributions = write_minimal_registry(tmp_path)  # humble.yaml, one package
     (distributions / "jazzy.yaml").write_text(

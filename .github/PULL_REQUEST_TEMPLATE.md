@@ -16,7 +16,7 @@ Run `pre-commit run --all-files` locally to catch issues first.
 - [ ] Edited `distributions/<distro>.yaml` (one repository entry per supported distro).
 - [ ] Every `packages:` key equals the package's `package.xml` `<name>` at the registered ref.
 - [ ] The registered `ref` already exists upstream (`git ls-remote` resolves it).
-- [ ] Maintainers are real — no `TBD` / `@example.com` placeholders.
+- [ ] Maintainers are real: no `TBD` / `@example.com` placeholders.
 - [ ] `pre-commit run --all-files` passes locally.
 
 ## Notes for reviewers

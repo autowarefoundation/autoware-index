@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/autowarefoundation/autoware-index/main/schema/distribution.schema.json",
   "title": "Autoware Index distribution file",
-  "description": "Schema for distributions/<distro>.yaml in the autoware-index registry. schema_version 2: repositories are first-class — each entry owns one URL and ONE ref, and nests the registered packages it hosts (lockstep: every package of a repository is validated and distributed at that single ref; per-package ref skew is unrepresentable). Cross-entry invariants the schema cannot express — globally unique package names per distro, canonical-URL uniqueness across repository entries — are enforced by scripts/check_refs.py; tag-vocabulary membership (schema/tags.yaml) by scripts/check_tags.py.",
+  "description": "Schema for distributions/<distro>.yaml in the autoware-index registry. schema_version 2: repositories are first-class. Each entry owns one URL and ONE ref, and nests the registered packages it hosts (lockstep: every package of a repository is validated and distributed at that single ref; per-package ref skew is unrepresentable). Cross-entry invariants the schema cannot express (globally unique package names per distro, canonical-URL uniqueness across repository entries) are enforced by scripts/check_refs.py; tag-vocabulary membership (schema/tags.yaml) by scripts/check_tags.py.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "ros_distro", "repositories"],
@@ -51,7 +51,7 @@
         "packages": {
           "type": "object",
           "minProperties": 1,
-          "description": "Registered ROS packages this repository hosts, keyed by ROS package name (always explicit — the key must equal the package.xml <name>). Unlisted sibling packages in the same repository are not registered: the index makes no claims about them.",
+          "description": "Registered ROS packages this repository hosts, keyed by ROS package name (always explicit: the key must equal the package.xml <name>). Unlisted sibling packages in the same repository are not registered: the index makes no claims about them.",
           "additionalProperties": { "$ref": "#/$defs/package" },
           "propertyNames": {
             "pattern": "^[a-z][a-z0-9_]*$"

@@ -6,7 +6,7 @@ Four classes of defect the schema cannot catch:
   1. Unresolvable ref. A repository registered with a ref that does not exist
      (e.g. tag "0.2.1" on a repo with no tags). The sweep does a literal
      `git checkout <ref>`, so an unresolvable ref turns the first sweep into a
-     hard failure. We verify resolvability with `git ls-remote` — once per
+     hard failure. We verify resolvability with `git ls-remote`, once per
      repository entry (and memoized across distro files), not per package.
 
   2. Placeholder maintainers. `name: TBD`, `github: TBD`, or an `@example.com`
@@ -32,7 +32,7 @@ check.
   ---------|-------------------------------------------------------------
   branch   | `git ls-remote --heads <repo> <value>` returns refs/heads/<value>
   tag      | `git ls-remote --tags  <repo> <value>` returns refs/tags/<value>
-  sha      | 40 lowercase hex chars (reachability is not probed — ls-remote
+  sha      | 40 lowercase hex chars (reachability is not probed: ls-remote
            |   cannot list an arbitrary commit; the sweep's checkout is the
            |   backstop)
 
@@ -61,7 +61,7 @@ def ls_remote(repository: str, ref_filter: str, value: str) -> bool:
     """Return True if the EXACT ref `refs/{heads,tags}/<value>` exists upstream.
 
     `git ls-remote <repo> <value>` treats the value as a glob pattern and
-    returns success on ANY match — a typo like "v1.*" would false-pass while
+    returns success on ANY match: a typo like "v1.*" would false-pass while
     the sweep's literal `git checkout 'v1.*'` later hard-fails. So the output
     is parsed and the exact ref name (tags also appear peeled as `...^{}`)
     must be present. `--end-of-options` keeps a dash-prefixed value from
@@ -145,7 +145,7 @@ def check_file(path: Path, network: bool, resolve_cache: dict) -> list[str]:
         if not url:
             # An empty url would pass schema `format: uri` (annotation-only in
             # most validators) and then be silently green-skipped by every
-            # sweep — registered but never validated. Reject it here too.
+            # sweep: registered but never validated. Reject it here too.
             errors.append(f"{path}::{repo_name}: repository url is empty")
         else:
             canon = canonical_url(url)

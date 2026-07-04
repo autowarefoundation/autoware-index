@@ -8,13 +8,13 @@ RECORDED state (state/<distro>/<repo_name>.json on the data branch, written by
 append_history.py in the same commit as the history records):
 
   --mode eager     rows for every repository entry whose (url, ref, registered
-                   package set) differs from its state file — or that has no
+                   package set) differs from its state file, or that has no
                    state file yet. A run that was cancelled, lost to
                    concurrency, or interrupted before recording leaves its
                    state stale, so the NEXT eager or nightly run re-detects
                    the same delta: lost sweeps self-heal instead of silently
                    never producing a record. URL-only changes (the classic
-                   monorepo-consolidation edit) trigger too — the old ref-only
+                   monorepo-consolidation edit) trigger too; the old ref-only
                    git diff missed them.
 
   --mode nightly   every `kind: branch` repository (tips move under a fixed
@@ -25,7 +25,7 @@ neither mode: re-testing the same immutable ref adds nothing (a new Autoware
 release is picked up when the ref next changes, or nightly for branch refs).
 
 Row shape (consumed by sweep-repository.yaml in the actions repo and by
-scripts/build_envelopes.py — `packages` is space-separated for workflow_call
+scripts/build_envelopes.py; `packages` is space-separated for workflow_call
 string inputs):
 
     {
@@ -104,7 +104,7 @@ def build_matrix(distributions_dir: Path, state_dir: Path, mode: str) -> list[di
                 and desired["packages"]
             ):
                 # A schema-valid file can never hit this (url/ref/packages are
-                # all required) — reaching it means something bypassed the PR
+                # all required); reaching it means something bypassed the PR
                 # gate. Soft-skipping would leave the entry registered but
                 # silently never swept, with every job green; collect it and
                 # fail discover loudly instead (raised after the loop so all

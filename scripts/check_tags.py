@@ -2,7 +2,7 @@
 """Tag-vocabulary check for distributions/<distro>.yaml.
 
 Every `tags:` value of every registered package must be a LIVE id in
-schema/tags.yaml — the closed vocabulary the browse site's filters and the
+schema/tags.yaml, the closed vocabulary the browse site's filters and the
 aw-index-cli `--tags` selection (its own repo) are built on. Two classes of
 defect beyond JSON-schema shape (which only checks count/pattern/uniqueness):
 
@@ -13,7 +13,7 @@ defect beyond JSON-schema shape (which only checks count/pattern/uniqueness):
   2. Deprecated tag. A retired id may never (re)enter the registry; the error
      names its replacement. Because this is a hard error and vocabulary edits
      re-run this check over every distro file, a PR deprecating a tag cannot
-     merge without migrating every usage in the same commit — deprecation and
+     merge without migrating every usage in the same commit: deprecation and
      migration are atomic by construction.
 
 The vocabulary itself is self-checked by registry_load.load_vocabulary (bad
@@ -30,7 +30,7 @@ sweep, and this script imports nothing from the sweep modules.
 Usage:
     scripts/check_tags.py [distributions/*.yaml] [--vocabulary schema/tags.yaml]
 
-With no positional paths it checks every distributions/*.yaml — that is what
+With no positional paths it checks every distributions/*.yaml; that is what
 the pass_filenames:false pre-commit hook runs, so editing EITHER a distro
 file or the vocabulary re-checks the whole registry.
 """
@@ -107,8 +107,8 @@ def check_file(path: Path, vocabulary: dict) -> tuple[list[str], list[str]]:
         owner = f"{record['repo_name']}.{record['package']}"
         tags = record["tags"]
         if not isinstance(tags, list):
-            # `tags: sensing` (a bare string would iterate per character) or
-            # `tags: 5` — reject the shape instead of misdiagnosing items.
+            # For `tags: sensing` (a bare string would iterate per character)
+            # or `tags: 5`, reject the shape instead of misdiagnosing items.
             errors.append(
                 f"{path}::{owner}: `tags` must be a list of tag ids, " f"got {type(tags).__name__}"
             )
@@ -116,7 +116,7 @@ def check_file(path: Path, vocabulary: dict) -> tuple[list[str], list[str]]:
         errors.extend(check_package_tags(str(path), owner, tags, vocabulary))
         if tags == ["tool"]:
             warnings.append(
-                f"::warning::{path}::{owner}: 'tool' is the only tag — "
+                f"::warning::{path}::{owner}: 'tool' is the only tag; "
                 f"add the domain it serves (e.g. calibration, map, planning)"
             )
     return errors, warnings

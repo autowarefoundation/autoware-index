@@ -1,7 +1,7 @@
 name: sweep-nightly
 
 # Daily re-validation of every `kind: branch` repository (tips move under a
-# fixed ref value), UNION the level-triggered state-diff as catch-up — any
+# fixed ref value), UNION the level-triggered state-diff as catch-up: any
 # repository whose entry doesn't match its last conclusively-recorded
 # data:state/ cursor (e.g. an eager run lost to cancellation) is swept here
 # too. Pinned tag/sha repositories with an up-to-date cursor are not re-swept:
@@ -76,7 +76,7 @@ jobs:
   record:
     name: record history
     needs: [discover, validate]
-    # Run even if some validate matrix rows failed — we record failures too.
+    # Run even if some validate matrix rows failed; we record failures too.
     if: always() && needs.discover.outputs.has-changes == 'true'
     runs-on: ubuntu-24.04
     concurrency:

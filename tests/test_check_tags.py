@@ -1,10 +1,10 @@
-"""Tests for scripts/check_tags.py — the tag-vocabulary gate.
+"""Tests for scripts/check_tags.py: the tag-vocabulary gate.
 
 Focus: membership against the live vocabulary (did-you-mean suggestions,
 no-close-match wording), deprecated-tag rejection naming the replacement, the
 non-blocking tool-only ::warning:: nudge, the {file}::{repo}.{package} owner
 format, the default distributions/*.yaml glob (what the pass_filenames:false
-pre-commit hook relies on), exit codes and summary lines — plus the
+pre-commit hook relies on), exit codes and summary lines, plus the
 real-committed-files test that pins vocabulary x registry consistency on
 every PR regardless of validate.yaml's paths filters.
 """
@@ -320,7 +320,7 @@ class TestMain:
 class TestRealCommittedFiles:
     def test_registry_conforms_to_vocabulary(self, repo_root, monkeypatch, capsys):
         # The every-PR drift net: validate.yaml's paths filter can be dodged,
-        # but plain pytest runs everywhere — the committed registry must
+        # but plain pytest runs everywhere; the committed registry must
         # always pass against the committed vocabulary.
         distros = sorted((repo_root / "distributions").glob("*.yaml"))
         assert distros, "no distribution files found"

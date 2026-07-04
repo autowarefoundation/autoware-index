@@ -1,6 +1,6 @@
 blank_issues_enabled: true
 contact_links:
-  - name: Autoware Index — how it works
+  - name: How the Autoware Index works
     url: https://github.com/autowarefoundation/autoware-index#readme
     about: Registration model, schema reference, sweep + validation-history design.
   - name: Autoware documentation & general help

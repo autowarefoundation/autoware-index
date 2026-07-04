@@ -1,6 +1,6 @@
 /* Registration page. Shares the brand tokens from styles.css; everything here
-   is page-specific. The one deliberate contrast: the entry "buffer" — a dark
-   editor pane where the registry entry writes itself — on an otherwise light
+   is page-specific. The one deliberate contrast: the entry "buffer", a dark
+   editor pane where the registry entry writes itself, on an otherwise light
    page. Class prefixes: .reg- (layout), .station (form), .buffer/.gate/.handoff
    (rail). */
 
@@ -107,9 +107,9 @@
   font-size: 14px;
   font-family: inherit;
   /* Ubuntu Mono (the usual Linux `monospace` fallback) draws underscores on
-     the clipped bottom row of a single-line editor at line-height: normal —
-     package_name underscores become invisible. A taller line box keeps the
-     glyph inside the visible area. */
+     the clipped bottom row of a single-line editor at line-height: normal,
+     so package_name underscores become invisible. A taller line box keeps
+     the glyph inside the visible area. */
   line-height: 1.6;
 }
 .field select {

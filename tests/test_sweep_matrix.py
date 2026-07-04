@@ -2,7 +2,7 @@
 
 The matrix builder diffs the registry's DESIRED per-repository state
 (url, ref, registered package set) against the LAST CONCLUSIVELY RECORDED
-state (data:state/<distro>/<repo>.json) — eager sweeps rows that differ,
+state (data:state/<distro>/<repo>.json): eager sweeps rows that differ,
 nightly sweeps every branch repo plus the same diff as catch-up. The diff
 semantics are what make lost sweeps self-healing, so they get exhaustive
 coverage here.
@@ -93,7 +93,7 @@ def test_recorded_state_sorts_packages(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# eager mode — sweep iff (url, ref, package set) differs from state
+# eager mode: sweep iff (url, ref, package set) differs from state
 # --------------------------------------------------------------------------
 def test_eager_no_state_sweeps_everything(tmp_path):
     dist = write_distribution(tmp_path / "distributions")
@@ -127,8 +127,8 @@ def test_eager_matching_state_sweeps_nothing(tmp_path):
     ],
 )
 def test_eager_any_tuple_change_resweeps(tmp_path, delta):
-    # The state file records something OTHER than what the registry now says
-    # — including a URL-only change, which the old ref-diff missed entirely.
+    # The state file records something OTHER than what the registry now says,
+    # including a URL-only change, which the old ref-diff missed entirely.
     dist = write_distribution(tmp_path / "distributions")
     state = tmp_path / "state"
     write_state(state, "jazzy", "awesome_tools", **{**MATCHING_STATE, **delta})
@@ -170,7 +170,7 @@ def test_eager_metadata_only_changes_do_not_trigger(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# nightly mode — every branch repo, plus the state-diff as catch-up
+# nightly mode: every branch repo, plus the state-diff as catch-up
 # --------------------------------------------------------------------------
 def branch_repo(packages=None):
     return {
@@ -274,7 +274,7 @@ def test_v1_distribution_raises_registry_error(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# main() — CLI surface, max-rows guard, output modes
+# main(): CLI surface, max-rows guard, output modes
 # --------------------------------------------------------------------------
 def run_main(monkeypatch, argv):
     monkeypatch.setattr("sys.argv", ["sweep_matrix.py", *argv])

@@ -5,7 +5,7 @@ Three trees land together, atomically per push:
 
   history/<distro>/<package>.ndjson   append-only validation records (one
                                       line per envelope; never rewritten)
-  state/<distro>/<repo_name>.json     mutable per-repository cursor — the
+  state/<distro>/<repo_name>.json     mutable per-repository cursor: the
                                       (url, ref, package set) that was last
                                       CONCLUSIVELY recorded. sweep_matrix.py
                                       diffs the registry against these to
@@ -30,10 +30,10 @@ States likewise: {"ros_distro", "repo_name", "state": {...}}.
 
 The script creates a temporary git worktree on the data branch, writes,
 commits, and pushes. On push conflict (someone else wrote to data between our
-fetch and push) it retries with a fresh fetch — every write step is
+fetch and push) it retries with a fresh fetch; every write step is
 re-applied per attempt on top of the fresh tip, so the normal retry path is
-exactly-once. (Known residual edge: a "phantom" push — the server applies the
-update but the client sees an error — would re-append the same lines on the
+exactly-once. (Known residual edge: a "phantom" push, where the server applies
+the update but the client sees an error, would re-append the same lines on the
 next attempt. Accepted: rare, and the duplicate lines are self-describing and
 harmless to the site's latest-by-timestamp summarize.)
 
@@ -96,7 +96,7 @@ def write_outputs(
         if _existing_state_is_newer(target_file, entry["state"]):
             # Out-of-order record jobs: a slower run that swept an OLDER
             # registration must not roll the cursor back over a fresher one
-            # (its history lines still append — history is append-only and
+            # (its history lines still append: history is append-only and
             # per-line self-describing; only the cursor keeps the newest).
             print(
                 f"state {entry['ros_distro']}/{entry['repo_name']} already newer; not regressing it",
@@ -106,7 +106,7 @@ def write_outputs(
         target_file.write_text(json.dumps(entry["state"], indent=2) + "\n", encoding="utf-8")
 
     if metadata_dir is not None and metadata_dir.is_dir():
-        # Merge over the existing cache — a sweep stages only what it swept;
+        # Merge over the existing cache: a sweep stages only what it swept;
         # replacing the tree would delete every non-swept package's file.
         shutil.copytree(metadata_dir, tmpdir / "metadata", dirs_exist_ok=True)
 
@@ -136,7 +136,7 @@ def append_history(envelopes: list[dict], states: list[dict], metadata_dir: Path
                 return
 
             # Per-command identity: `git config user.*` in a linked worktree
-            # writes the SHARED repo config — a local run would leave the
+            # writes the SHARED repo config; a local run would leave the
             # operator's clone authoring everything as the bot.
             run(
                 [

@@ -1,4 +1,4 @@
-// aw-index-cli — canonical registry→`.repos` composition, as an ES module.
+// aw-index-cli: canonical registry→`.repos` composition, as an ES module.
 //
 // This mirrors `src/aw_index_cli/compose.py` 1:1 so a JavaScript consumer (the
 // autoware-index browse site's "repos builder") can reuse the SAME transform
@@ -143,7 +143,7 @@ export function toReposEntries(repositories) {
 
 /**
  * Build the `# …` comment lines that precede the rendered `.repos`.
- * Mirrors `compose.provenance_header` — same order and the same conditional
+ * Mirrors `compose.provenance_header`: same order and the same conditional
  * gates (`autoware`/`generatedAt` on `!= null`; the rest on truthiness).
  */
 export function provenanceHeader({
@@ -167,7 +167,7 @@ export function provenanceHeader({
   if (repository && repository.length) lines.push(`# repository: ${repository.join(", ")}`);
   if (autoware != null) {
     lines.push(
-      `# autoware: ${autoware} (informational only — not a ref selector; the registry tracks one ref per repository)`,
+      `# autoware: ${autoware} (informational only, not a ref selector; the registry tracks one ref per repository)`,
     );
   }
   if (generatedAt != null) lines.push(`# generated_at: ${generatedAt}`);
@@ -175,7 +175,7 @@ export function provenanceHeader({
     lines.push("# selected packages by repository:");
     for (const [key, names] of selection) lines.push(`#   ${key}: ${names.join(", ")}`);
   }
-  lines.push("# Generated file — re-run 'aw-index-cli compose …' to update; do not edit by hand.");
+  lines.push("# Generated file. Re-run 'aw-index-cli compose …' to update; do not edit by hand.");
   return lines;
 }
 
@@ -250,13 +250,13 @@ export function composeCommand({ rosDistro, packages = [] } = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// YAML emission — block-style YAML whose parsed *content* matches PyYAML 6.x
+// YAML emission: block-style YAML whose parsed *content* matches PyYAML 6.x
 // `safe_dump(default_flow_style=False)`. The contract is content, not bytes
 // (see `tests/test_conformance.py`), so the one thing that must hold is that
 // every scalar round-trips to the same string: `yamlScalar` quotes a value
 // exactly when a plain rendering would reload as a non-string (e.g. `1.20`,
-// `on`). Formatting PyYAML does differently — escaping non-ASCII, folding long
-// lines, the explicit `? key` form for long keys — is left to differ freely,
+// `on`). Formatting PyYAML does differently (escaping non-ASCII, folding long
+// lines, the explicit `? key` form for long keys) is left to differ freely,
 // since it reparses to the same content.
 // ---------------------------------------------------------------------------
 
@@ -314,7 +314,7 @@ function needsPlainQuoting(s) {
 /**
  * Render one scalar for block-style YAML: plain when that round-trips as the
  * same string, otherwise single-quoted (with `'` doubled). This is the one
- * subtle piece — e.g. a numeric-looking tag `1.20`, or a branch `on`/`no`, must
+ * subtle piece: e.g. a numeric-looking tag `1.20`, or a branch `on`/`no`, must
  * be quoted so it reloads as a string rather than a float/bool. Exported for
  * unit testing.
  */

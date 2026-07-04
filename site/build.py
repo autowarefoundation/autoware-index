@@ -4,13 +4,13 @@ r"""Export the Autoware Index browse data and assemble the deployable site.
 The browse site is a static front-end (index.html + styles.css + app.js, plus
 the register.* registration page) that renders client-side from a generated
 data.json. This script is just the data exporter + assembler: it joins the two
-branches the data lives on —
+branches the data lives on,
 
   - main:  distributions/<distro>.yaml          (what is registered)
   - data:  history/<distro>/<package>.ndjson    (how it has validated)
   - data:  metadata/<distro>/<package>.xml      (cached upstream package.xml)
 
-— summarizes each package, resolves its card description (registry override, or
+then summarizes each package, resolves its card description (registry override, or
 else the cached package.xml <description>), writes data.json, and copies the
 static assets next to it so --out is a complete, deployable directory.
 
@@ -99,9 +99,9 @@ def export_vocabulary(vocab: dict) -> dict:
 
     Groups and live tags are exported in vocabulary-file order (the display
     order for the site's grouped filter); each tag carries its group, the
-    one-line summary app.js renders as the tooltip, and — when present — the
+    one-line summary app.js renders as the tooltip, and, when present, the
     disambiguation sentence the register page's tag picker appends to it.
-    Deprecated ids are not exported — the gate keeps them out of the registry,
+    Deprecated ids are not exported: the gate keeps them out of the registry,
     so no card needs them.
     """
     tags = []
@@ -240,7 +240,7 @@ def main() -> None:
     try:
         registrations = load_distributions(Path(args.distributions_dir))
         # A missing/broken vocabulary is a HARD build failure, same as an
-        # unsupported schema_version — never a silently ungrouped site.
+        # unsupported schema_version, never a silently ungrouped site.
         vocabulary = load_vocabulary(Path(args.tags_file))
     except RegistryError as exc:
         sys.exit(f"error: {exc}")
@@ -252,7 +252,7 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # The register page needs every distro file, including ones with no
-    # packages yet — derive from the filenames (ros_distro == stem is
+    # packages yet, so derive from the filenames (ros_distro == stem is
     # enforced repo-wide), not from the flattened registrations.
     distros = sorted(p.stem for p in Path(args.distributions_dir).glob("*.yaml"))
 
