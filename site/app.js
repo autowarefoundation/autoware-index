@@ -165,13 +165,18 @@ function card(pkg, siblingCount) {
     { class: "badges" },
     el("span", { class: "badge badge-distro", text: pkg.distro }),
     el("span", { class: "badge badge-gov", text: pkg.governance }),
+    // A quiet outline pill (same family as the governance badge), not loose
+    // text — a dangling fragment would break the band's pill row. It leads
+    // into the status verdict, which always closes the row. el() skips null.
+    status === "fail" && pkg.last_green
+      ? el("span", {
+          class: "badge",
+          text: `last green ${pkg.last_green}`,
+          title: `Last passing validation was against Autoware ${pkg.last_green}`,
+        })
+      : null,
     statusPill(status),
   );
-  if (status === "fail" && pkg.last_green) {
-    badges.append(
-      el("span", { class: "muted", text: ` · last green: autoware ${pkg.last_green}` }),
-    );
-  }
 
   const toggle = el("button", {
     class: "cart-toggle",
