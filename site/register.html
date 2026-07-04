@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Register · Autoware Index</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="register.css" />
+  </head>
+  <body>
+    <header class="site">
+      <div class="container">
+        <p class="crumb"><a href="./">← Autoware Index</a></p>
+        <h1>Register <span>your packages</span></h1>
+        <p>
+          Registration is one entry in
+          <code id="head-file">distributions/jazzy.yaml</code> — and this page writes it for you.
+          Work through the four stations below; the entry grows on the right, and the same checks CI
+          runs on your pull request go green as you complete it.
+        </p>
+      </div>
+    </header>
+
+    <div class="wrap reg-wrap">
+      <main class="reg-form">
+        <!-- Station 1 — repository -->
+        <section class="station" id="station-repo" aria-labelledby="station-repo-h">
+          <h2 id="station-repo-h"><span class="station-no">#&nbsp;1</span> repository</h2>
+          <p class="station-lead">Where does the code live? One entry registers one repository.</p>
+
+          <div class="field">
+            <label for="distro-select">ROS distro</label>
+            <select id="distro-select"></select>
+            <p class="hint">Each distro is its own registry file. Register once per distro you support.</p>
+          </div>
+
+          <div class="field">
+            <label for="repo-url">Git repository URL</label>
+            <input
+              type="url"
+              id="repo-url"
+              placeholder="https://github.com/your-org/your_repo"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <p class="status" id="url-status" aria-live="polite"></p>
+          </div>
+
+          <div class="field">
+            <label for="repo-name">Registry entry name</label>
+            <input
+              type="text"
+              id="repo-name"
+              placeholder="your_repo"
+              autocomplete="off"
+              spellcheck="false"
+              class="mono"
+            />
+            <p class="hint">
+              The entry's key in the registry — lowercase letters, digits, <code>_</code> or
+              <code>-</code>. Suggested from the URL; it never has to match a package name.
+            </p>
+            <p class="status" id="repo-name-status" aria-live="polite"></p>
+          </div>
+
+          <fieldset class="field choice-set">
+            <legend>Governance</legend>
+            <label class="choice">
+              <input type="radio" name="governance" value="community" checked />
+              <span class="choice-body">
+                <span class="choice-title">community</span>
+                <span class="choice-desc">Maintained by you or your organization.</span>
+              </span>
+            </label>
+            <label class="choice">
+              <input type="radio" name="governance" value="foundation" />
+              <span class="choice-body">
+                <span class="choice-title">foundation</span>
+                <span class="choice-desc">Maintained under the Autoware Foundation.</span>
+              </span>
+            </label>
+          </fieldset>
+        </section>
+
+        <!-- Station 2 — ref -->
+        <section class="station" id="station-ref" aria-labelledby="station-ref-h">
+          <h2 id="station-ref-h"><span class="station-no">#&nbsp;2</span> ref</h2>
+          <p class="station-lead">
+            Which state of the repository should Autoware validate? One ref per entry — every
+            registered package is built and tested at it, in lockstep.
+          </p>
+
+          <fieldset class="field choice-set" id="ref-kinds">
+            <legend>Ref kind</legend>
+            <label class="choice">
+              <input type="radio" name="refkind" value="tag" checked />
+              <span class="choice-body">
+                <span class="choice-title">tag</span>
+                <span class="choice-desc">Freeze a known-good release. Validated once; immutable history.</span>
+              </span>
+            </label>
+            <label class="choice">
+              <input type="radio" name="refkind" value="branch" />
+              <span class="choice-body">
+                <span class="choice-title">branch</span>
+                <span class="choice-desc">“Always test my latest.” Re-resolved and re-swept nightly.</span>
+              </span>
+            </label>
+            <label class="choice">
+              <input type="radio" name="refkind" value="sha" />
+              <span class="choice-body">
+                <span class="choice-title">sha</span>
+                <span class="choice-desc">Pin an exact commit. Same semantics as a tag.</span>
+              </span>
+            </label>
+          </fieldset>
+
+          <div class="field">
+            <label for="ref-value" id="ref-value-label">Tag</label>
+            <select id="ref-select" class="mono" aria-labelledby="ref-value-label" hidden></select>
+            <input
+              type="text"
+              id="ref-value"
+              class="mono"
+              autocomplete="off"
+              spellcheck="false"
+              list="ref-options"
+            />
+            <datalist id="ref-options"></datalist>
+            <p class="status" id="ref-status" aria-live="polite"></p>
+            <div id="ref-extra"></div>
+          </div>
+        </section>
+
+        <!-- Station 3 — packages -->
+        <section class="station" id="station-packages" aria-labelledby="station-packages-h">
+          <h2 id="station-packages-h">
+            <span class="station-no">#&nbsp;3</span> packages
+          </h2>
+          <p class="station-lead">
+            Which ROS packages are you registering? Each name must equal a real
+            <code>package.xml</code> <code>&lt;name&gt;</code> at the ref above — the sweep resolves
+            every one with <code>colcon list</code> and fails loudly when a name is absent.
+          </p>
+
+          <div id="scan-zone" class="scan-zone" hidden>
+            <p class="status" id="scan-status" aria-live="polite"></p>
+            <div id="found-list" class="found-list"></div>
+          </div>
+
+          <div id="pkg-list"></div>
+          <button type="button" id="add-package" class="btn-secondary">+ Add a package by name</button>
+        </section>
+
+        <!-- Station 4 — maintainers -->
+        <section class="station" id="station-maintainers" aria-labelledby="station-maintainers-h">
+          <h2 id="station-maintainers-h">
+            <span class="station-no">#&nbsp;4</span> maintainers
+          </h2>
+          <p class="station-lead">
+            Who can a reviewer talk to about this repository? At least one real person — CI rejects
+            <code>TBD</code> and <code>@example.com</code> placeholders.
+          </p>
+
+          <div id="maint-suggestions" class="found-list"></div>
+          <div id="maint-rows"></div>
+          <button type="button" id="add-maintainer" class="btn-secondary">+ Add a maintainer</button>
+        </section>
+      </main>
+
+      <aside class="reg-rail" aria-label="Registry entry preview and pre-flight checks">
+        <div class="buffer">
+          <div class="buffer-bar">
+            <span class="buffer-file mono" id="buffer-file">distributions/jazzy.yaml</span>
+            <span class="buffer-note">append under <code>repositories:</code></span>
+            <button
+              type="button"
+              id="copy-entry"
+              class="buffer-copy"
+              aria-label="Copy the registry entry"
+            >
+              Copy
+            </button>
+          </div>
+          <pre
+            class="buffer-out"
+            id="buffer-out"
+            tabindex="0"
+            role="region"
+            aria-label="Registry entry YAML"
+          ><code id="buffer-code"></code></pre>
+        </div>
+        <p class="copy-status" id="copy-status" aria-live="polite"></p>
+
+        <div class="gates">
+          <h2>PR pre-flight</h2>
+          <p class="gates-lead">
+            The <code>validate</code> workflow runs these same checks on your pull request.
+          </p>
+          <ul id="gates" class="gate-list"></ul>
+        </div>
+
+        <div class="handoff" id="handoff">
+          <h2>Open the pull request</h2>
+          <div class="handoff-body">
+            <p class="handoff-lead">
+              Submit a pre-filled registration request — the <code>register</code> workflow
+              validates it and opens the pull request on your behalf.
+            </p>
+            <a
+              id="handoff-request"
+              class="btn-secondary"
+              href="https://github.com/autowarefoundation/autoware-index/issues/new?template=register-request.yml"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Open a registration request ↗</a
+            >
+            <p class="hint">
+              Everything arrives filled in — tick the DCO box and press “Create”. Nothing to fork,
+              paste, or indent.
+            </p>
+            <details class="handoff-manual">
+              <summary>Or open the pull request manually</summary>
+              <ol class="handoff-steps">
+            <li>
+              <button type="button" id="handoff-copy" class="btn-secondary">
+                Copy the updated file
+              </button>
+              <button type="button" id="handoff-copy-entry" class="buffer-copy">
+                or copy just the entry
+              </button>
+              <p class="hint">
+                The updated file is the current registry file with your entry appended — web
+                editors re-indent pasted blocks, so replacing the whole file is the safe route.
+              </p>
+            </li>
+            <li>
+              <a
+                id="handoff-open"
+                class="btn-secondary"
+                href="https://github.com/autowarefoundation/autoware-index/edit/main/distributions/jazzy.yaml"
+                target="_blank"
+                rel="noopener noreferrer"
+                >Edit the file on GitHub ↗</a
+              >
+              <p class="hint">GitHub forks the repository for you if you can't push directly.</p>
+            </li>
+            <li>
+              <p class="handoff-how">
+                Select everything in the editor, paste, and propose the change as a pull request
+                titled
+              </p>
+              <p class="pr-title-row">
+                <code id="pr-title" class="pr-title">feat(jazzy): register …</code>
+                <button
+                  type="button"
+                  id="copy-pr-title"
+                  class="buffer-copy"
+                  aria-label="Copy the pull request title"
+                >
+                  Copy
+                </button>
+              </p>
+                </li>
+              </ol>
+            </details>
+            <p class="copy-status" id="handoff-copy-status" aria-live="polite"></p>
+            <p class="handoff-after">
+              After merge, the eager sweep clones your repository at this ref and validates every
+              registered package against the latest Autoware release — results appear on the
+              <a href="./">browse page</a>.
+            </p>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <footer>
+      <div class="foundation"><a href="https://autoware.org">Autoware Foundation</a></div>
+      <div class="links">
+        <a href="https://github.com/autowarefoundation/autoware">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path
+              d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
+            />
+          </svg>
+          autoware</a
+        >
+        <span class="sep">·</span>
+        <a href="https://github.com/autowarefoundation/autoware-index">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path
+              d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
+            />
+          </svg>
+          autoware-index</a
+        >
+      </div>
+    </footer>
+
+    <noscript>
+      <div class="wrap">
+        <p class="empty">
+          This registration helper runs client-side and needs JavaScript enabled. You can always
+          register by hand: edit
+          <a href="https://github.com/autowarefoundation/autoware-index/tree/main/distributions"
+            >distributions/&lt;distro&gt;.yaml</a
+          >
+          following the
+          <a
+            href="https://github.com/autowarefoundation/autoware-index/blob/main/CONTRIBUTING.md#registering-or-updating-packages"
+            >contributing guide</a
+          >.
+        </p>
+      </div>
+    </noscript>
+    <script type="module" src="register.js"></script>
+  </body>
+</html>

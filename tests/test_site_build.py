@@ -752,6 +752,25 @@ def test_main_without_history_or_metadata(tmp_path, monkeypatch):
     assert (out_dir / "data.json").is_file()
 
 
+def test_main_exports_distros_from_filenames(tmp_path, monkeypatch):
+    # The register page offers every distro file, including a just-created one
+    # with no repositories yet — so `distros` derives from the filenames
+    # (ros_distro == stem is enforced repo-wide), not from the package list.
+    distributions = write_minimal_registry(tmp_path)  # humble.yaml, one package
+    (distributions / "jazzy.yaml").write_text(
+        'schema_version: "2"\nros_distro: jazzy\nrepositories: {}\n'
+    )
+    out_dir = tmp_path / "out"
+    monkeypatch.setattr(
+        "sys.argv",
+        ["build.py", "--distributions-dir", str(distributions), "--out", str(out_dir)],
+    )
+    build.main()
+    data = json.loads((out_dir / "data.json").read_text())
+    assert data["distros"] == ["humble", "jazzy"]
+    assert {p["distro"] for p in data["packages"]} == {"humble"}
+
+
 def test_main_shared_repo_two_packages_join_independently(tmp_path, monkeypatch):
     # The shared-repo case end to end: one repository entry, two packages,
     # two history files -> two cards with independent status/versions that
@@ -904,6 +923,33 @@ def test_export_vocabulary_preserves_file_order_and_drops_deprecated(tmp_path):
     }
     # Deprecated ids are gate-internal; the site never renders them.
     assert "deprecated" not in exported
+
+
+def test_export_vocabulary_includes_disambiguation_only_when_present(tmp_path):
+    import registry_load
+
+    vocab_file = tmp_path / "tags.yaml"
+    vocab_file.write_text(
+        "groups:\n"
+        "  pipeline: Autonomy pipeline\n"
+        "tags:\n"
+        "  sensing:\n"
+        "    group: pipeline\n"
+        "    summary: Processes already-published sensor data.\n"
+        "    disambiguation: Talks to topics, not hardware.\n"
+        "  planning:\n"
+        "    group: pipeline\n"
+        "    summary: Mission, behavior, and motion planning.\n"
+    )
+    exported = build.export_vocabulary(registry_load.load_vocabulary(vocab_file))
+    assert exported["tags"][0] == {
+        "id": "sensing",
+        "group": "pipeline",
+        "summary": "Processes already-published sensor data.",
+        "disambiguation": "Talks to topics, not hardware.",
+    }
+    # No null-placeholder keys: a tag without a disambiguation exports without one.
+    assert "disambiguation" not in exported["tags"][1]
 
 
 def test_main_exports_tag_vocabulary(tmp_path, monkeypatch):

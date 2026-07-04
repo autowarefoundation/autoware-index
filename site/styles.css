@@ -50,6 +50,26 @@ header.site a {
   color: var(--link);
   text-decoration: none;
 }
+.masthead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+header.site a.register-cta {
+  color: var(--fg);
+  background: var(--secondary-soft);
+  border: 1px solid var(--secondary);
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 13.5px;
+  font-weight: 600;
+  transition: box-shadow 0.15s ease;
+}
+header.site a.register-cta:hover {
+  box-shadow: 0 2px 9px rgba(238, 212, 91, 0.6);
+}
 .stats {
   display: flex;
   gap: 24px;
