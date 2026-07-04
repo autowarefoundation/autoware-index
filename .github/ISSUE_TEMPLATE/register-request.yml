@@ -14,13 +14,16 @@ body:
         here with everything pre-filled and pre-validated. On submit, the
         `register` workflow checks the entry and opens a pull request
         crediting you; a maintainer reviews and merges it.
-  - type: dropdown
+  # A text input, not a dropdown: URL query parameters can only prefill text
+  # fields, and the register page arrives here with ?distro=<distro> set.
+  # The workflow validates the value (it must name an existing
+  # distributions/<distro>.yaml) and comments back on any typo.
+  - type: input
     id: distro
     attributes:
       label: ROS distro
-      description: Which distribution file to register into.
-      options:
-        - jazzy
+      description: Which distribution file to register into (e.g. jazzy).
+      placeholder: jazzy
     validations:
       required: true
   - type: textarea
