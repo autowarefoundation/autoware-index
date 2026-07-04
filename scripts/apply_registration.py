@@ -129,7 +129,7 @@ def parse_entry(text: str) -> tuple[str, dict]:
     if not isinstance(name, str) or not ENTRY_NAME_RE.match(name):
         raise RegistrationError(
             f"entry name {name!r} must match {ENTRY_NAME_RE.pattern} "
-            "(quote names YAML would type, e.g. \"no\")"
+            '(quote names YAML would type, e.g. "no")'
         )
     if not isinstance(spec, dict) or not spec:
         raise RegistrationError(f"entry {name!r} must map to the repository fields, got {spec!r}")
@@ -173,13 +173,9 @@ def insert_entry(path: Path, name: str, spec: dict) -> None:
         )
 
     lines = text.splitlines(keepends=True)
-    rep_index = next(
-        (i for i, line in enumerate(lines) if REPOSITORIES_LINE_RE.match(line)), None
-    )
+    rep_index = next((i for i, line in enumerate(lines) if REPOSITORIES_LINE_RE.match(line)), None)
     if rep_index is None:
-        raise RegistrationError(
-            f"{path}: could not locate the top-level `repositories:` line"
-        )
+        raise RegistrationError(f"{path}: could not locate the top-level `repositories:` line")
     if "{" in lines[rep_index]:  # `repositories: {}` -> open the block form
         lines[rep_index] = "repositories:\n"
 
@@ -226,9 +222,7 @@ def apply(body: str, distributions_dir: Path) -> tuple[str, str]:
 
     path = distributions_dir / f"{distro}.yaml"
     if not path.is_file():
-        raise RegistrationError(
-            f"no registry file for distro {distro!r} ({path} does not exist)"
-        )
+        raise RegistrationError(f"no registry file for distro {distro!r} ({path} does not exist)")
     insert_entry(path, name, spec)
     return distro, name
 

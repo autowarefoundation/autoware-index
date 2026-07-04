@@ -194,7 +194,10 @@ function gitUrlProblem(url) {
 }
 
 function httpsEquivalent(host, path) {
-  const clean = path.replace(/^\/+/, "").replace(/\.git$/, "").replace(/\/+$/, "");
+  const clean = path
+    .replace(/^\/+/, "")
+    .replace(/\.git$/, "")
+    .replace(/\/+$/, "");
   return clean && /^[\w-]+(\.[\w-]+)+$/.test(host) ? `https://${host}/${clean}` : null;
 }
 
@@ -555,8 +558,7 @@ async function ghJson(path) {
     return { ok: false, status: 0, data: null, rateLimited: false };
   }
   const rateLimited =
-    (res.status === 403 || res.status === 429) &&
-    res.headers.get("x-ratelimit-remaining") === "0";
+    (res.status === 403 || res.status === 429) && res.headers.get("x-ratelimit-remaining") === "0";
   if (rateLimited) {
     state.github.rateLimit = {
       limit: Number(res.headers.get("x-ratelimit-limit")) || 60,
@@ -949,7 +951,8 @@ function tokenizeLine(line) {
       const pad = rest.slice(0, rest.length - trimmed.length);
       span.append(pad);
       if (trimmed.startsWith("#")) span.append(el("span", { class: "tok-comment", text: trimmed }));
-      else if (trimmed.startsWith('"')) span.append(el("span", { class: "tok-str", text: trimmed }));
+      else if (trimmed.startsWith('"'))
+        span.append(el("span", { class: "tok-str", text: trimmed }));
       else {
         const hint = trimmed.indexOf(" #");
         if (hint >= 0) {
@@ -1002,7 +1005,11 @@ function renderGates(result) {
       el(
         "li",
         { class: "gate", "data-status": gate.status },
-        el("span", { class: "gate-icon", text: GATE_ICON[gate.status] || "", "aria-hidden": "true" }),
+        el("span", {
+          class: "gate-icon",
+          text: GATE_ICON[gate.status] || "",
+          "aria-hidden": "true",
+        }),
         el(
           "div",
           {},
@@ -1134,7 +1141,11 @@ function renderUrlStatus() {
       break;
     }
     case "notfound":
-      setStatus(node, "Not found on GitHub — check the URL (private repositories can't be swept).", "bad");
+      setStatus(
+        node,
+        "Not found on GitHub — check the URL (private repositories can't be swept).",
+        "bad",
+      );
       break;
     case "ratelimited": {
       const rl = rateLimitInfo();
@@ -1156,11 +1167,7 @@ function renderUrlStatus() {
       );
       break;
     case "incomplete":
-      setStatus(
-        node,
-        "This github.com URL is missing its /owner/repository path.",
-        "bad",
-      );
+      setStatus(node, "This github.com URL is missing its /owner/repository path.", "bad");
       break;
     case "nonGithub":
       setStatus(
@@ -1370,7 +1377,8 @@ function renderRefStatus() {
   const check = gh.refCheck;
   if (check.key !== refCheckKey() || check.status === "checking")
     setStatus(node, "Checking upstream…", "");
-  else if (check.status === "ok") setStatus(node, `${REF_LABELS[f.refKind]} exists upstream.`, "ok");
+  else if (check.status === "ok")
+    setStatus(node, `${REF_LABELS[f.refKind]} exists upstream.`, "ok");
   else if (check.status === "missing")
     setStatus(node, `No ${f.refKind} named “${value}” upstream.`, "bad");
   else setStatus(node, "", "");
@@ -1948,7 +1956,11 @@ async function copyUpdatedFile(statusEl) {
       " — couldn't fetch the current file, so this is the entry alone; paste it at the end of repositories: and keep the indentation";
     return;
   }
-  await copyText(base.replace(/\n*$/, "\n") + state.ui.entryText, statusEl, `Updated ${distro}.yaml`);
+  await copyText(
+    base.replace(/\n*$/, "\n") + state.ui.entryText,
+    statusEl,
+    `Updated ${distro}.yaml`,
+  );
 }
 
 async function copyText(text, statusEl, label) {
@@ -2150,7 +2162,8 @@ async function main() {
 
   const packages = data.packages || [];
   const derived = [...new Set(packages.map((p) => p.distro))];
-  state.distros = (Array.isArray(data.distros) && data.distros.length && data.distros) ||
+  state.distros =
+    (Array.isArray(data.distros) && data.distros.length && data.distros) ||
     (derived.length ? derived.sort() : ["jazzy"]);
   state.vocabulary = data.tag_vocabulary || { groups: [], tags: [] };
   for (const t of state.vocabulary.tags || []) state.tagInfo.set(t.id, t);

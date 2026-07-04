@@ -31,7 +31,9 @@
           <div class="field">
             <label for="distro-select">ROS distro</label>
             <select id="distro-select"></select>
-            <p class="hint">Each distro is its own registry file. Register once per distro you support.</p>
+            <p class="hint">
+              Each distro is its own registry file. Register once per distro you support.
+            </p>
           </div>
 
           <div class="field">
@@ -96,14 +98,18 @@
               <input type="radio" name="refkind" value="tag" checked />
               <span class="choice-body">
                 <span class="choice-title">tag</span>
-                <span class="choice-desc">Freeze a known-good release. Validated once; immutable history.</span>
+                <span class="choice-desc"
+                  >Freeze a known-good release. Validated once; immutable history.</span
+                >
               </span>
             </label>
             <label class="choice">
               <input type="radio" name="refkind" value="branch" />
               <span class="choice-body">
                 <span class="choice-title">branch</span>
-                <span class="choice-desc">“Always test my latest.” Re-resolved and re-swept nightly.</span>
+                <span class="choice-desc"
+                  >“Always test my latest.” Re-resolved and re-swept nightly.</span
+                >
               </span>
             </label>
             <label class="choice">
@@ -134,9 +140,7 @@
 
         <!-- Station 3 — packages -->
         <section class="station" id="station-packages" aria-labelledby="station-packages-h">
-          <h2 id="station-packages-h">
-            <span class="station-no">#&nbsp;3</span> packages
-          </h2>
+          <h2 id="station-packages-h"><span class="station-no">#&nbsp;3</span> packages</h2>
           <p class="station-lead">
             Which ROS packages are you registering? Each name must equal a real
             <code>package.xml</code> <code>&lt;name&gt;</code> at the ref above — the sweep resolves
@@ -149,14 +153,14 @@
           </div>
 
           <div id="pkg-list"></div>
-          <button type="button" id="add-package" class="btn-secondary">+ Add a package by name</button>
+          <button type="button" id="add-package" class="btn-secondary">
+            + Add a package by name
+          </button>
         </section>
 
         <!-- Station 4 — maintainers -->
         <section class="station" id="station-maintainers" aria-labelledby="station-maintainers-h">
-          <h2 id="station-maintainers-h">
-            <span class="station-no">#&nbsp;4</span> maintainers
-          </h2>
+          <h2 id="station-maintainers-h"><span class="station-no">#&nbsp;4</span> maintainers</h2>
           <p class="station-lead">
             Who can a reviewer talk to about this repository? At least one real person — CI rejects
             <code>TBD</code> and <code>@example.com</code> placeholders.
@@ -164,7 +168,9 @@
 
           <div id="maint-suggestions" class="found-list"></div>
           <div id="maint-rows"></div>
-          <button type="button" id="add-maintainer" class="btn-secondary">+ Add a maintainer</button>
+          <button type="button" id="add-maintainer" class="btn-secondary">
+            + Add a maintainer
+          </button>
         </section>
       </main>
 
@@ -222,45 +228,47 @@
             <details class="handoff-manual">
               <summary>Or open the pull request manually</summary>
               <ol class="handoff-steps">
-            <li>
-              <button type="button" id="handoff-copy" class="btn-secondary">
-                Copy the updated file
-              </button>
-              <button type="button" id="handoff-copy-entry" class="buffer-copy">
-                or copy just the entry
-              </button>
-              <p class="hint">
-                The updated file is the current registry file with your entry appended — web
-                editors re-indent pasted blocks, so replacing the whole file is the safe route.
-              </p>
-            </li>
-            <li>
-              <a
-                id="handoff-open"
-                class="btn-secondary"
-                href="https://github.com/autowarefoundation/autoware-index/edit/main/distributions/jazzy.yaml"
-                target="_blank"
-                rel="noopener noreferrer"
-                >Edit the file on GitHub ↗</a
-              >
-              <p class="hint">GitHub forks the repository for you if you can't push directly.</p>
-            </li>
-            <li>
-              <p class="handoff-how">
-                Select everything in the editor, paste, and propose the change as a pull request
-                titled
-              </p>
-              <p class="pr-title-row">
-                <code id="pr-title" class="pr-title">feat(jazzy): register …</code>
-                <button
-                  type="button"
-                  id="copy-pr-title"
-                  class="buffer-copy"
-                  aria-label="Copy the pull request title"
-                >
-                  Copy
-                </button>
-              </p>
+                <li>
+                  <button type="button" id="handoff-copy" class="btn-secondary">
+                    Copy the updated file
+                  </button>
+                  <button type="button" id="handoff-copy-entry" class="buffer-copy">
+                    or copy just the entry
+                  </button>
+                  <p class="hint">
+                    The updated file is the current registry file with your entry appended — web
+                    editors re-indent pasted blocks, so replacing the whole file is the safe route.
+                  </p>
+                </li>
+                <li>
+                  <a
+                    id="handoff-open"
+                    class="btn-secondary"
+                    href="https://github.com/autowarefoundation/autoware-index/edit/main/distributions/jazzy.yaml"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >Edit the file on GitHub ↗</a
+                  >
+                  <p class="hint">
+                    GitHub forks the repository for you if you can't push directly.
+                  </p>
+                </li>
+                <li>
+                  <p class="handoff-how">
+                    Select everything in the editor, paste, and propose the change as a pull request
+                    titled
+                  </p>
+                  <p class="pr-title-row">
+                    <code id="pr-title" class="pr-title">feat(jazzy): register …</code>
+                    <button
+                      type="button"
+                      id="copy-pr-title"
+                      class="buffer-copy"
+                      aria-label="Copy the pull request title"
+                    >
+                      Copy
+                    </button>
+                  </p>
                 </li>
               </ol>
             </details>
