@@ -286,7 +286,7 @@ def test_write_outputs_state_files_overwrite_not_append(tmp_path):
 def test_write_outputs_never_regresses_a_newer_state_cursor(tmp_path, capsys):
     # Out-of-order record jobs: run B (newer registration) records first, then
     # the slower run A (older registration) lands. A's history lines still
-    # append, but A must NOT roll the cursor back over B's — otherwise the
+    # append, but A must NOT roll the cursor back over B's; otherwise the
     # level-triggered discover would re-sweep the old ref and the site would
     # show stale state until the next sweep.
     newer = make_state(
@@ -581,7 +581,7 @@ def test_append_history_commit_uses_build_commit_message(monkeypatch, tmp_path):
     commit_calls = [c for c in fake_run.calls if "commit" in c]
     assert len(commit_calls) == 1
     # ["git","-c","user.name=...","-c","user.email=...","commit","-m",<message>]
-    # — identity is per-command so a local run never rewrites the shared
+    # Identity is per-command, so a local run never rewrites the shared
     # repo config with the bot's name.
     assert f"user.name={ah.BOT_NAME}" in commit_calls[0]
     assert f"user.email={ah.BOT_EMAIL}" in commit_calls[0]

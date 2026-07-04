@@ -23,15 +23,15 @@ Honesty rules (locked decision 6, applied per package):
   - pass  only when the package's own closure build AND its own tests
     both report "success" in result.json;
   - fail  only when either reports an actual "failure";
-  - anything else — package absent from the tree (present:false), null
-    outcomes from a cancelled/half-run job, missing artifact — is
+  - anything else (package absent from the tree with present:false, null
+    outcomes from a cancelled/half-run job, a missing artifact) is
     INCONCLUSIVE: a ::error annotation and a skipped envelope, never a
     fabricated record.
 Every record is validated against schema/history-record.schema.json
 (record schema 2) before it is emitted.
 
 Side-outputs for append_history.py:
-  --states-output    state/<distro>/<repo>.json payloads — emitted ONLY for
+  --states-output    state/<distro>/<repo>.json payloads, emitted ONLY for
                      rows where EVERY registered package got a conclusive
                      record, so the level-triggered discover re-sweeps any
                      row that recorded partially or not at all.
@@ -40,8 +40,8 @@ Side-outputs for append_history.py:
                      per present package, cached for the site's descriptions).
 
 Infrastructure honesty (locked decision 5 clarification): a non-empty matrix
-that yields ZERO envelopes is a pipeline fault, not a package failure — this
-script exits non-zero so the record job goes loudly red instead of green-on-
+that yields ZERO envelopes is a pipeline fault, not a package failure, so this
+script exits non-zero and the record job goes loudly red instead of green-on-
 nothing.
 """
 
@@ -66,7 +66,7 @@ def status_for(outcome: dict) -> str | None:
 
     `outcome` is result.json's packages.<name> object: {present, build_outcome,
     test_outcome}. present:false or null outcomes mean nothing was validated
-    for this package — recording either pass (false green) or fail (false red)
+    for this package; recording either pass (false green) or fail (false red)
     would be a lie, so the caller skips the record loudly instead.
     """
     if not outcome.get("present"):
@@ -110,7 +110,7 @@ def envelopes_for_row(
     """Build the per-package envelopes for one matrix row + its result.json.
 
     Returns (envelopes, skip_reasons). A row is fully conclusive when
-    len(envelopes) == number of registered packages — only then may its
+    len(envelopes) == number of registered packages; only then may its
     state file advance.
     """
     distro = row["ros_distro"]
@@ -125,7 +125,7 @@ def envelopes_for_row(
 
     resolved_sha = result.get("resolved_sha") or ""
     if not SHA_RE.match(resolved_sha):
-        # No real sha means the clone/resolve never completed — nothing was
+        # No real sha means the clone/resolve never completed: nothing was
         # validated. Substituting a sentinel would fabricate provenance inside
         # otherwise-conclusive records; skip the whole row loudly instead.
         return [], [
@@ -248,7 +248,7 @@ def main() -> None:
         if len(valid) == len(registered):
             # Every registered package recorded conclusively: the state file
             # may advance, so the level-triggered discover stops re-sweeping
-            # this row. Partial rows stay stale on purpose — they re-sweep
+            # this row. Partial rows stay stale on purpose: they re-sweep
             # (and re-annotate) until the registry or the pipeline is fixed.
             states.append(
                 {
@@ -266,7 +266,7 @@ def main() -> None:
         else:
             print(
                 f"::warning::{distro}/{repo_name}: {len(valid)}/{len(registered)} package(s) "
-                f"recorded conclusively; state not advanced — the row re-sweeps until conclusive",
+                f"recorded conclusively; state not advanced, so the row re-sweeps until conclusive",
                 file=sys.stderr,
             )
 
@@ -280,7 +280,7 @@ def main() -> None:
 
     if rows and not all_envelopes:
         sys.exit(
-            "::error::a non-empty sweep matrix produced ZERO envelopes — this is a pipeline "
+            "::error::a non-empty sweep matrix produced ZERO envelopes: this is a pipeline "
             "fault (missing artifacts or wholly inconclusive results), not a package failure; "
             "failing the record job loudly instead of recording nothing in silence"
         )

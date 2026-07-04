@@ -132,7 +132,7 @@ repos:
         exclude: .svg$
 
   # ------------------------------------------------------------------------
-  # Repo-specific registry hooks below — they mirror validate.yaml and are
+  # Repo-specific registry hooks below: they mirror validate.yaml and are
   # the reason this file is not synced.
   # ------------------------------------------------------------------------
 

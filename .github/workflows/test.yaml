@@ -8,7 +8,7 @@ name: test
 # The workflow triggers on EVERY pull request (no `paths:` filter on the
 # trigger) so the required `pytest` check is always reported. A `changed-files`
 # gate decides whether relevant files actually changed: if not, the `pytest`
-# job is skipped — and a skipped required check counts as passing. (A
+# job is skipped, and a skipped required check counts as passing. (A
 # `paths:`-filtered workflow that is skipped *entirely* never reports its check
 # and would instead block the merge.) Mirrors autowarefoundation/autoware's
 # health-check workflows.

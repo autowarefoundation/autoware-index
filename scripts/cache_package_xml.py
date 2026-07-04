@@ -8,8 +8,8 @@ package's own ``package.xml`` ``<description>`` cached at
 
 In the normal pipeline the SWEEP populates that cache: sweep-repository.yaml
 ships every present package's pristine package.xml inside its result artifact,
-and the record job stages those via build_envelopes.py + append_history.py —
-no extra clone. This script is the MANUAL/BACKFILL path for everything the
+and the record job stages those via build_envelopes.py + append_history.py,
+with no extra clone. This script is the MANUAL/BACKFILL path for everything the
 sweep hasn't covered (e.g. seeding the cache after the schema-2 cutover, or
 repairing a gap):
 
@@ -167,7 +167,7 @@ def push_metadata(staged: Path, rows: list[dict]) -> None:
             run(["git", "fetch", "origin", "data"], tmpdir)
             run(["git", "reset", "--hard", "origin/data"], tmpdir)
 
-            # Merge the staged files over the existing tree — never replace it.
+            # Merge the staged files over the existing tree, never replace it.
             # A backfill stages only what it could cache; wiping metadata/
             # first would delete every other package's cached package.xml.
             dest = tmpdir / "metadata"
@@ -179,7 +179,7 @@ def push_metadata(staged: Path, rows: list[dict]) -> None:
                 return
 
             # Per-command identity: `git config user.*` in a linked worktree
-            # writes the SHARED repo config — this script is the documented
+            # writes the SHARED repo config; this script is the documented
             # MANUAL backfill path, and a local run would leave the operator's
             # clone authoring every later commit as the bot.
             run(

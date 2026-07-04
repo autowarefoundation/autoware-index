@@ -8,11 +8,11 @@ body:
       value: |
         Thanks for federating your packages into the Autoware Index! You can
         also skip this form and open a PR editing `distributions/<distro>.yaml`
-        directly — see [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md). This
+        directly; see [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md). This
         issue just helps a maintainer draft or review the entry.
 
         Registration is per **repository**: one entry owns the git URL and ONE
-        ref, and lists every registered ROS package the repository hosts — a
+        ref, and lists every registered ROS package the repository hosts. A
         monorepo registers several packages in one entry, validated in
         lockstep at that single ref.
   - type: input
@@ -75,7 +75,7 @@ body:
     id: ref_kind
     attributes:
       label: Ref kind
-      description: tag/sha freeze a known-good commit; branch is re-swept nightly. ONE ref for the whole repository — all registered packages validate in lockstep.
+      description: tag/sha freeze a known-good commit; branch is re-swept nightly. ONE ref for the whole repository, so all registered packages validate in lockstep.
       options:
         - tag
         - sha
@@ -94,7 +94,7 @@ body:
     id: maintainers
     attributes:
       label: Maintainers
-      description: One per line — name, email, GitHub handle. Real contacts only (no placeholders). These are the repository-level default; mention per-package overrides if you need them.
+      description: One per line, as name, email, GitHub handle. Real contacts only (no placeholders). These are the repository-level default; mention per-package overrides if you need them.
       placeholder: |
         Jane Doe, jane@example-org.com, janedoe
     validations:

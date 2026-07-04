@@ -8,7 +8,7 @@
 #     -> discover: scripts/diff_matrix.py diffs the PR's test-merge checkout
 #        against that merge's own base parent (HEAD^1) and emits one matrix
 #        row per added/changed sweep tuple
-#        (url, ref, registered package set) — metadata-only edits (tags,
+#        (url, ref, registered package set). Metadata-only edits (tags,
 #        descriptions, maintainers, governance) emit nothing and skip the
 #        build, and entries the PR does not touch are never rebuilt (unlike
 #        sweep_matrix.py --mode eager, which diffs ALL entries against the
@@ -70,7 +70,7 @@ jobs:
 
       # NOT `github.event.pull_request.base.sha`: that payload field is a
       # lazily-refreshed snapshot that can lag the merge checkout's actual
-      # base parent once main moves — diffing against it would blame this PR
+      # base parent once main moves; diffing against it would blame this PR
       # for entries other PRs merged in the meantime. HEAD^1 is the merge
       # commit's first parent, the right base by construction.
       - name: Check out the merge parent

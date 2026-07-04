@@ -4,8 +4,8 @@
 The register workflow (.github/workflows/register.yaml) runs this over the
 body of an issue created from the register-package.yml issue form (normally
 pre-filled by the browse site's register page). It turns the form's fields
-into a registry edit the same way a careful human would — append one entry
-under `repositories:` — but programmatically, so the indentation accidents
+into a registry edit the same way a careful human would (append one entry
+under `repositories:`), but programmatically, so the indentation accidents
 that plague pasting nested YAML into web editors are structurally impossible.
 
 Contract with the issue form (field labels are the section headings GitHub
@@ -20,11 +20,11 @@ renders into the issue body):
 The entry is parsed structurally (never spliced as text) and re-emitted in
 the registry's house style, inserted at the end of the `repositories:` block
 (wherever that block sits in the file). After insertion the file is
-re-parsed and the entry compared for deep equality — a failed round trip is
+re-parsed and the entry compared for deep equality; a failed round trip is
 a hard error, never a silently mangled registry.
 
 Only structural validation happens here (parseable entry, exactly one entry,
-valid entry name, distro file exists, name not already registered — a
+valid entry name, distro file exists, name not already registered; a
 duplicate YAML key would silently shadow the original). The semantic gates
 (schema conformance, tag vocabulary, URL/package uniqueness, placeholder
 maintainers, ref resolution) run in the workflow and on the resulting PR,
@@ -168,7 +168,7 @@ def insert_entry(path: Path, name: str, spec: dict) -> None:
     existing = doc.get("repositories") or {}
     if name in existing:
         raise RegistrationError(
-            f"{path}: {name!r} is already a repository entry — a second YAML key "
+            f"{path}: {name!r} is already a repository entry, and a second YAML key "
             "would silently shadow it; update the existing entry instead"
         )
 
@@ -189,7 +189,7 @@ def insert_entry(path: Path, name: str, spec: dict) -> None:
     new_text = "".join(lines)
 
     # Round-trip tripwire: the file must still parse and must contain exactly
-    # the entry that was requested — never a silently mangled registry.
+    # the entry that was requested, never a silently mangled registry.
     reparsed = yaml.safe_load(new_text)
     if not isinstance(reparsed, dict) or reparsed.get("repositories", {}).get(name) != spec:
         raise RegistrationError(
@@ -212,7 +212,7 @@ def apply(body: str, distributions_dir: Path) -> tuple[str, str]:
     dco = sections.get(SECTION_DCO) or ""
     if "[x]" not in dco.lower():
         raise RegistrationError(
-            "the Developer Certificate of Origin box is not ticked — "
+            "the Developer Certificate of Origin box is not ticked; "
             "edit the issue and tick it to certify the registration"
         )
 

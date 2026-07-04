@@ -1,8 +1,8 @@
 name: pages
 
-# Build the browse site by joining two branches — registry on main
-# (distributions/) and validation history on the orphan data branch
-# (history/) — and deploy it to GitHub Pages.
+# Build the browse site by joining two branches, the registry on main
+# (distributions/) and the validation history on the orphan data branch
+# (history/), and deploy it to GitHub Pages.
 #
 # The data branch cannot trigger this workflow itself (it is orphan and
 # carries no workflow files), so new sweep records are picked up on the next

@@ -39,7 +39,7 @@ def write(tmp_path, name, content):
 
 
 # --------------------------------------------------------------------------
-# load_distribution — the gate
+# load_distribution: the gate
 # --------------------------------------------------------------------------
 def test_load_distribution_accepts_v2(tmp_path):
     doc = m.load_distribution(write(tmp_path, "jazzy.yaml", V2_DOC))
@@ -159,7 +159,7 @@ def test_canonical_url_distinct_repos_stay_distinct():
 
 
 # --------------------------------------------------------------------------
-# load_vocabulary — the closed tag vocabulary gate
+# load_vocabulary: the closed tag vocabulary gate
 # --------------------------------------------------------------------------
 VOCAB_DOC = """
 groups:
@@ -316,7 +316,7 @@ def test_load_vocabulary_real_committed_file(repo_root):
 
 
 # --------------------------------------------------------------------------
-# flatten_packages — the computed package -> repository inverse index
+# flatten_packages: the computed package -> repository inverse index
 # --------------------------------------------------------------------------
 def test_flatten_packages_one_record_per_package(tmp_path):
     doc = m.load_distribution(write(tmp_path, "jazzy.yaml", V2_DOC))

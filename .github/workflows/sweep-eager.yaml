@@ -4,7 +4,7 @@ name: sweep-eager
 # (and on manual dispatch as the recovery hatch). Instead of diffing two
 # commits, discover compares every repository entry's (url, ref, registered
 # package set) against the last conclusively-recorded cursor in
-# data:state/<distro>/<repo_name>.json — so a sweep that was cancelled,
+# data:state/<distro>/<repo_name>.json, so a sweep that was cancelled,
 # displaced from a concurrency queue, or interrupted before recording is
 # simply re-detected by the next run. URL-only changes trigger too.
 #
@@ -16,7 +16,7 @@ name: sweep-eager
 #
 # Only the RECORD job serializes on the data branch (`data-branch-write`):
 # validate jobs of overlapping sweeps run in parallel, shrinking the window
-# in which a queued run can be displaced — and a displaced run self-heals:
+# in which a queued run can be displaced. A displaced run self-heals:
 # its state never advanced, so the stale entry is re-detected by the next
 # eager push or by the nightly's catch-up diff.
 
@@ -86,7 +86,7 @@ jobs:
   record:
     name: record history
     needs: [discover, validate]
-    # Run even if some validate matrix rows failed — we record failures too.
+    # Run even if some validate matrix rows failed; we record failures too.
     if: always() && needs.discover.outputs.has-changes == 'true'
     runs-on: ubuntu-24.04
     concurrency:

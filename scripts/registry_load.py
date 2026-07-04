@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Shared, version-gated loader for distributions/<distro>.yaml.
 
-Every reader of the registry format — the sweep matrix builder, the semantic
-checks, the metadata backfill, and the site exporter — goes through this
+Every reader of the registry format (the sweep matrix builder, the semantic
+checks, the metadata backfill, and the site exporter) goes through this
 module instead of raw ``yaml.safe_load``, so an unsupported ``schema_version``
 is a HARD, uniform failure everywhere. Before this gate existed,
 ``schema_version`` was written but read by nothing: a format change would have
@@ -56,7 +56,7 @@ def load_distribution(path: Path) -> dict:
 
     Raises RegistryError on YAML errors, non-mapping documents, an
     unsupported schema_version, or a missing/non-mapping `repositories` key.
-    Never returns a partially-usable document for an unsupported version —
+    Never returns a partially-usable document for an unsupported version:
     silent empty output is exactly the failure mode this loader exists to kill.
     """
     try:
@@ -84,7 +84,7 @@ def load_distribution(path: Path) -> dict:
             value = (ref or {}).get("value") if isinstance(ref, dict) else None
             if value is not None and not isinstance(value, str):
                 # YAML happily types `value: 1.20` as a float and str() would
-                # silently mangle it to "1.2" — the sweep would then check out
+                # silently mangle it to "1.2"; the sweep would then check out
                 # the wrong ref. The schema requires a string; enforce it at
                 # the uniform gate too (defense for paths that skip CI).
                 raise RegistryError(
@@ -121,9 +121,9 @@ def load_vocabulary(path: Path) -> dict:
     an unknown key in a tag spec (catches ``sumary:``-style typos), a missing
     or empty ``summary``, a ``group`` not declared under ``groups:``, an id
     that is both live and deprecated, or a ``replaced_by`` target that is not
-    a live tag (deprecation chains are rejected — always point at the final
+    a live tag (deprecation chains are rejected; always point at the final
     replacement). Every reader (check_tags.py, site/build.py) goes through
-    this gate, so a broken vocabulary is a hard, uniform failure — never a
+    this gate, so a broken vocabulary is a hard, uniform failure, never a
     vacuously-passing check or a silently ungrouped site.
     """
     try:
@@ -206,9 +206,9 @@ def load_vocabulary(path: Path) -> dict:
 def canonical_url(url: str) -> str:
     """Normalize a git remote URL for duplicate detection.
 
-    Folds the spellings that point at the same repository — scheme, ssh
+    Folds the spellings that point at the same repository (scheme, ssh
     `git@host:org/repo` scp form, userinfo, an explicit port, a trailing
-    slash, a `.git` suffix, and case — into one canonical `host/path` string.
+    slash, a `.git` suffix, and case) into one canonical `host/path` string.
     Used to reject two repository entries that register the same repo under
     different spellings. (Ports are dropped deliberately: a host serving the
     same path on two ports is rarer than the same repo spelled with and

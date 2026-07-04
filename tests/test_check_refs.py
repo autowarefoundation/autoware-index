@@ -1,4 +1,4 @@
-"""Tests for scripts/check_refs.py — the semantic validation guard (H2).
+"""Tests for scripts/check_refs.py: the semantic validation guard (H2).
 
 Focus: placeholder-maintainer rejection (repo-level AND per-package override),
 sha format validation, canonical-URL duplicate detection, per-distro
@@ -135,7 +135,7 @@ class TestCheckMaintainers:
 
     def test_error_message_contains_file_and_owner(self):
         # the owner label is whatever the caller passes (repo entry name, or
-        # "repo.package" for a per-package override) — opaque here.
+        # "repo.package" for a per-package override); it is opaque here.
         m = {"name": "TBD", "email": "real@tier4.jp", "github": "realuser"}
         errors = check_refs.check_maintainers("distributions/jazzy.yaml", "my_repo", [m])
         assert errors[0].startswith("distributions/jazzy.yaml::my_repo:")
@@ -148,7 +148,7 @@ class TestCheckMaintainers:
 
 
 # ===========================================================================
-# check_ref — sha kind
+# check_ref: sha kind
 # ===========================================================================
 
 
@@ -221,7 +221,7 @@ class TestCheckRefSha:
 
 
 # ===========================================================================
-# check_ref — branch/tag kinds and the network gate
+# check_ref: branch/tag kinds and the network gate
 # ===========================================================================
 
 
@@ -354,7 +354,7 @@ class TestCheckRefBranchTagNetwork:
 
 
 # ===========================================================================
-# check_ref — ls-remote memoization through resolve_cache
+# check_ref: ls-remote memoization through resolve_cache
 # ===========================================================================
 
 
@@ -386,7 +386,7 @@ class TestCheckRefMemoization:
             == []
         )
         assert len(calls) == 1
-        # cache is keyed on (url, kind, value) — independent of file/entry.
+        # cache is keyed on (url, kind, value), independent of file/entry.
         assert cache == {("https://r", "branch", "main"): True}
 
     def test_negative_result_cached_but_still_errors(self, monkeypatch):
@@ -419,7 +419,7 @@ class TestCheckRefMemoization:
 
 
 # ===========================================================================
-# ls_remote — monkeypatch subprocess.run; never hit the network
+# ls_remote: monkeypatch subprocess.run; never hit the network
 # ===========================================================================
 
 
@@ -479,7 +479,7 @@ class TestLsRemote:
         (git_repo.path / "f.txt").write_text("x")
         git_repo.commit("init")
         git_repo.git("tag", "v1.0.0")
-        url = git_repo.path.as_uri()  # file:// — local, no network
+        url = git_repo.path.as_uri()  # file:// (local, no network)
 
         assert check_refs.ls_remote(url, "--heads", "main") is True
         assert check_refs.ls_remote(url, "--tags", "v1.0.0") is True
@@ -490,7 +490,7 @@ class TestLsRemote:
 
 
 # ===========================================================================
-# check_file — integration over a temp distributions yaml (schema_version 2)
+# check_file: integration over a temp distributions yaml (schema_version 2)
 # ===========================================================================
 
 
@@ -852,7 +852,7 @@ class TestCheckFile:
         assert "not supported" in errors[0]
 
     def test_empty_file_errors(self, tmp_path):
-        # An empty doc is no longer a silent pass — the loader rejects it.
+        # An empty doc is no longer a silent pass; the loader rejects it.
         p = tmp_path / "empty.yaml"
         p.write_text("")
         errors = check_refs.check_file(p, network=False, resolve_cache={})
@@ -879,7 +879,7 @@ class TestCheckFile:
         assert "cannot parse" in errors[0]
 
     def test_null_repo_spec_errors_on_empty_url(self, tmp_path):
-        # `spec or {}` guards a repo entry mapped to null — no crash, but a
+        # `spec or {}` guards a repo entry mapped to null: no crash, but a
         # null entry has no url, which is now a loud error (it would be
         # registered yet never swept).
         body = """\
@@ -931,7 +931,7 @@ class TestCheckFile:
 
 
 # ===========================================================================
-# main — exit codes + the process-wide shared resolve_cache
+# main: exit codes + the process-wide shared resolve_cache
 # ===========================================================================
 
 

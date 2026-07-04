@@ -103,7 +103,7 @@ function versionTable(versions) {
 
   const body = el("tbody");
   for (const v of versions) {
-    const sha = v.resolved_sha ? v.resolved_sha.slice(0, 12) : "—";
+    const sha = v.resolved_sha ? v.resolved_sha.slice(0, 12) : "-";
     const shaNode =
       v.resolved_sha && v.actions_run_url
         ? el("a", { href: v.actions_run_url, title: "View run", text: sha })
@@ -116,7 +116,7 @@ function versionTable(versions) {
         el("td", {}, statusPill(v.status || "unknown")),
         el("td", {}, el("code", { text: refText(v.ref_at_test) })),
         el("td", {}, el("code", {}, shaNode)),
-        el("td", { text: v.at ? v.at.slice(0, 10) : "—" }),
+        el("td", { text: v.at ? v.at.slice(0, 10) : "-" }),
       ),
     );
   }
@@ -145,7 +145,7 @@ function searchBlob(pkg) {
 
 // (distro, repo_name) -> number of registered packages from that repository,
 // so a card can say it ships with siblings from the same repo. The count map
-// and the per-card lookup MUST build identical keys — hence one shared helper.
+// and the per-card lookup MUST build identical keys, hence one shared helper.
 function repoKey(pkg) {
   return `${pkg.distro} ${pkg.repo_name || pkg.repository || ""}`;
 }
@@ -166,7 +166,7 @@ function card(pkg, siblingCount) {
     el("span", { class: "badge badge-distro", text: pkg.distro }),
     el("span", { class: "badge badge-gov", text: pkg.governance }),
     // A quiet outline pill (same family as the governance badge), not loose
-    // text — a dangling fragment would break the band's pill row. It leads
+    // text; a dangling fragment would break the band's pill row. It leads
     // into the status verdict, which always closes the row. el() skips null.
     status === "fail" && pkg.last_green
       ? el("span", {
@@ -271,7 +271,7 @@ function tagGroups(packages, vocabulary) {
     groups.push({ title: group.title, tags: inUse.map((t) => asTag(t.id, t.summary)) });
   }
   // In-use tags absent from the vocabulary (mismatched --tags-file build)
-  // must stay filterable — their chips render on cards regardless.
+  // must stay filterable; their chips render on cards regardless.
   const leftovers = [...counts.keys()].filter((t) => !known.has(t)).sort();
   if (leftovers.length) {
     groups.push({ title: "Other", tags: leftovers.map((id) => asTag(id, null)) });
@@ -302,7 +302,7 @@ function tagRow({ id, label, count, summary }) {
 }
 
 // (Re)build the tag rail scoped to the ACTIVE distro. The card view is
-// always filtered to one distro, so global counts would overstate — counts
+// always filtered to one distro, so global counts would overstate; counts
 // must be recomputed whenever the distro picker changes. Selected tags
 // still in use in the new distro are kept; the rest are dropped (the
 // caller re-applies filters when that changed the selection).
@@ -509,7 +509,7 @@ function cartRepoBlock(group) {
     block.append(
       el("p", {
         class: "cart-note",
-        text: `Adds the whole ${group.repo} repository — ${group.siblingTotal} registered packages travel together (one clone).`,
+        text: `Adds the whole ${group.repo} repository: ${group.siblingTotal} registered packages travel together (one clone).`,
       }),
     );
   }
@@ -611,7 +611,7 @@ async function copyOutput(which, statusEl) {
       fallbackCopy(text);
       statusEl.textContent = "Copied";
     } catch (err2) {
-      statusEl.textContent = "Copy failed — select the text and copy manually";
+      statusEl.textContent = "Copy failed; select the text and copy manually";
     }
   }
 }

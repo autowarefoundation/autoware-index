@@ -1,4 +1,4 @@
-"""Tests for scripts/apply_registration.py — issue body -> registry edit.
+"""Tests for scripts/apply_registration.py: issue body -> registry edit.
 
 Imported as ``import apply_registration`` because conftest puts scripts/ on
 sys.path. Covers section parsing, entry parsing/normalization, the insertion
@@ -124,7 +124,7 @@ def test_parse_entry_rejects_empty():
 
 
 # --------------------------------------------------------------------------- #
-# emit_entry — house style
+# emit_entry: house style
 # --------------------------------------------------------------------------- #
 
 
@@ -144,7 +144,7 @@ def test_emit_entry_round_trips():
 
 
 # --------------------------------------------------------------------------- #
-# apply — end to end on a registry file
+# apply: end to end on a registry file
 # --------------------------------------------------------------------------- #
 
 

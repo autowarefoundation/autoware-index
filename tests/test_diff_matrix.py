@@ -3,8 +3,8 @@
 The matrix builder diffs the PR's HEAD registry against its merge-base BASE
 registry and emits rows only for entries whose sweep tuple (url, ref,
 registered package set) the PR added or changed. The scoping semantics are
-the whole point — untouched-but-stale entries must never be blamed on the
-PR, and metadata-only edits must never burn a container build — so they get
+the whole point (untouched-but-stale entries must never be blamed on the
+PR, and metadata-only edits must never burn a container build), so they get
 exhaustive coverage here.
 """
 
@@ -78,7 +78,7 @@ def test_removed_entry_emits_nothing(tmp_path):
 
 def test_untouched_sibling_is_never_blamed(tmp_path):
     # The PR adds one entry next to an existing one; only the new entry
-    # builds — unlike `sweep_matrix --mode eager`, which would also pick up
+    # builds, unlike `sweep_matrix --mode eager`, which would also pick up
     # any sibling whose state cursor happens to be stale.
     old = {"awesome_tools": entry()}
     new = {
@@ -215,7 +215,7 @@ def test_v1_base_file_raises_registry_error(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# main() — CLI surface, max-rows guard, output modes
+# main(): CLI surface, max-rows guard, output modes
 # --------------------------------------------------------------------------
 def run_main(monkeypatch, argv):
     monkeypatch.setattr("sys.argv", ["diff_matrix.py", *argv])

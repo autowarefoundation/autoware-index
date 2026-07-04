@@ -1,6 +1,6 @@
 name: Register packages (automatic PR)
 description: >-
-  Submit a ready-made registry entry — a workflow validates it and opens the
+  Submit a ready-made registry entry; a workflow validates it and opens the
   pull request for you. No forking, no editing.
 title: "feat: register packages"
 labels: [registration]
@@ -10,7 +10,7 @@ body:
       value: >-
         The easiest way to fill this form is the
         [register page](https://autowarefoundation.github.io/autoware-index/register.html)
-        on the browse site — its "Open a registration request" button arrives
+        on the browse site; its "Open a registration request" button arrives
         here with everything pre-filled and pre-validated. On submit, the
         `register` workflow checks the entry and opens a pull request
         crediting you; a maintainer reviews and merges it.
@@ -32,7 +32,7 @@ body:
       label: Registry entry
       description: >-
         Exactly one `repositories:` entry, as produced by the register page
-        (any consistent indentation is fine — the workflow re-indents it).
+        (any consistent indentation is fine; the workflow re-indents it).
       render: yaml
     validations:
       required: true

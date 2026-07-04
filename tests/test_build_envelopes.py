@@ -3,7 +3,7 @@
 The recorder is the honesty chokepoint (locked decision 6): per package,
 `pass` only on success/success of ITS OWN closure build + ITS OWN tests,
 `fail` only on a real failure, anything else (absent from tree, null
-outcomes, missing artifact) is a loud skip — never a fabricated record.
+outcomes, missing artifact) is a loud skip, never a fabricated record.
 It also derives the state-advance set (a row advances only when EVERY
 registered package recorded conclusively) and stages the artifact-shipped
 package.xml files, and it hard-fails when a non-empty matrix records nothing.
@@ -76,7 +76,7 @@ def write_artifact(
 
 
 # --------------------------------------------------------------------------
-# status_for — the per-package honesty mapping
+# status_for: the per-package honesty mapping
 # --------------------------------------------------------------------------
 @pytest.mark.parametrize(
     ("outcome", "expected"),
@@ -99,7 +99,7 @@ def test_status_for(outcome, expected):
 
 
 # --------------------------------------------------------------------------
-# find_result — content-keyed artifact discovery (layout-independent)
+# find_result: content-keyed artifact discovery (layout-independent)
 # --------------------------------------------------------------------------
 def test_find_result_matches_on_content_not_dirname(tmp_path):
     write_artifact(tmp_path, make_result(), subdir="weirdly-named-dir")
@@ -124,7 +124,7 @@ def test_find_result_distinguishes_repos_and_distros(tmp_path):
 
 
 def test_find_result_ignores_v1_results_and_garbage(tmp_path):
-    # A legacy per-package result.json has no "schema": 2 — never matched.
+    # A legacy per-package result.json has no "schema": 2 and is never matched.
     legacy = {"ros_distro": "jazzy", "package_name": "awesome_tools", "build_outcome": "success"}
     write_artifact(tmp_path, legacy, subdir="legacy")
     (tmp_path / "junk").mkdir()
@@ -137,7 +137,7 @@ def test_find_result_empty_dir(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# envelopes_for_row — fan-out + per-package skips
+# envelopes_for_row: fan-out + per-package skips
 # --------------------------------------------------------------------------
 AT = "2026-06-11T12:00:00Z"
 URL = "https://example.com/run/42"
@@ -234,7 +234,7 @@ def test_envelopes_for_row_invalid_sha_skips_whole_row(bad_sha):
 
 
 # --------------------------------------------------------------------------
-# stage_metadata — artifact-shipped package.xml -> staged metadata tree
+# stage_metadata: artifact-shipped package.xml -> staged metadata tree
 # --------------------------------------------------------------------------
 def test_stage_metadata_copies_present_files(tmp_path):
     art = write_artifact(
@@ -256,7 +256,7 @@ def test_stage_metadata_no_xml_dir(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# main() — end to end on tmp dirs
+# main(): end to end on tmp dirs
 # --------------------------------------------------------------------------
 def run_main(monkeypatch, tmp_path, rows, *, sweep_kind="eager"):
     matrix_file = tmp_path / "matrix.json"
@@ -313,7 +313,7 @@ def test_main_full_row_advances_state(monkeypatch, tmp_path):
 
 def test_main_partial_row_does_not_advance_state(monkeypatch, tmp_path, capsys):
     # One package absent: its envelope is skipped, so the row must NOT
-    # advance — the level-triggered discover re-sweeps it until conclusive.
+    # advance; the level-triggered discover re-sweeps it until conclusive.
     write_artifact(
         tmp_path / "results",
         make_result(
@@ -335,7 +335,7 @@ def test_main_partial_row_does_not_advance_state(monkeypatch, tmp_path, capsys):
 
 
 def test_main_fail_records_still_advance_state(monkeypatch, tmp_path):
-    # fail IS conclusive — a red row records and advances; only inconclusive
+    # fail IS conclusive: a red row records and advances; only inconclusive
     # rows re-sweep. (Otherwise a genuinely broken repo would re-sweep nightly
     # forever for no new information.)
     write_artifact(
