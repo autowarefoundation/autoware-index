@@ -2040,8 +2040,11 @@ function wire() {
 
   const nameInput = document.getElementById("repo-name");
   nameInput.addEventListener("input", () => {
-    state.ui.repoNameTouched = true;
     state.form.repoName = nameInput.value;
+    // "Touched" means the user is keeping their own name here — an emptied
+    // field returns to auto-suggest ownership, so the next URL edit fills it
+    // again instead of staying blank forever.
+    state.ui.repoNameTouched = nameInput.value.trim() !== "";
     refresh();
   });
 
@@ -2075,7 +2078,9 @@ function wire() {
   const refInput = document.getElementById("ref-value");
   refInput.addEventListener("input", () => {
     state.form.refValue = refInput.value;
-    state.ui.refTouched = true;
+    // Same ownership rule as the entry name; explicit custom-entry mode
+    // stays user-owned even while empty.
+    state.ui.refTouched = refInput.value.trim() !== "" || state.ui.refCustom;
     onRefChanged();
   });
   // While focused the input never swaps out from under the cursor; converge
