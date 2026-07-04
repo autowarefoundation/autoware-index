@@ -15,11 +15,13 @@
 # Token: minted from the org's GitHub App (the APP_ID / PRIVATE_KEY org
 # secrets, same as sync-files.yaml), so the created PRs trigger the validate
 # workflow like any human-opened PR. The app installation must cover this
-# repository with contents + pull-requests write (issues write for the
-# feedback comments). Where those secrets are absent (forks), the workflow
-# falls back to github.token — GitHub then does NOT trigger workflows on the
-# created PR (a maintainer closes/reopens it to run CI) and the repo setting
-# "Allow GitHub Actions to create and approve pull requests" must be enabled.
+# repository with contents + pull-requests write. Issue feedback comments
+# deliberately use the workflow's own token instead (the permissions block
+# grants it issues: write), so they never depend on the app's permission set.
+# Where the app secrets are absent (forks), everything falls back to
+# github.token — GitHub then does NOT trigger workflows on the created PR (a
+# maintainer closes/reopens it to run CI) and the repo setting "Allow GitHub
+# Actions to create and approve pull requests" must be enabled.
 
 name: register
 
@@ -44,6 +46,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       HAS_APP_ID: ${{ secrets.APP_ID != '' }}
+      # Comments always go through the workflow token (issues: write above);
+      # the app token (GH_TOKEN) is for pushing and PR creation.
+      COMMENT_TOKEN: ${{ github.token }}
       ISSUE_NUMBER: ${{ github.event.issue.number }}
       ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
       ISSUE_AUTHOR_ID: ${{ github.event.issue.user.id }}
@@ -95,7 +100,7 @@ jobs:
               echo '```'
               echo "Edit the issue to fix it — this workflow reruns automatically."
             } > /tmp/comment.md
-            gh issue comment "$ISSUE_NUMBER" --body-file /tmp/comment.md
+            GH_TOKEN="$COMMENT_TOKEN" gh issue comment "$ISSUE_NUMBER" --body-file /tmp/comment.md
             exit 1
           fi
           cat /tmp/outputs.txt >> "$GITHUB_OUTPUT"
@@ -118,7 +123,7 @@ jobs:
               echo '```'
               echo "Edit the issue to fix it — this workflow reruns automatically."
             } > /tmp/comment.md
-            gh issue comment "$ISSUE_NUMBER" --body-file /tmp/comment.md
+            GH_TOKEN="$COMMENT_TOKEN" gh issue comment "$ISSUE_NUMBER" --body-file /tmp/comment.md
             exit 1
           fi
 
@@ -159,5 +164,5 @@ jobs:
               --title "feat(${DISTRO}): register ${NAME}" \
               --body-file /tmp/pr-body.md)
           fi
-          gh issue comment "$ISSUE_NUMBER" \
+          GH_TOKEN="$COMMENT_TOKEN" gh issue comment "$ISSUE_NUMBER" \
             --body "Pull request ready: ${PR_URL} — the \`validate\` workflow checks it like any registration PR, and it closes this issue when merged."
