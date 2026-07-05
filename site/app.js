@@ -159,6 +159,14 @@ function repoSiblingCounts(packages) {
   return counts;
 }
 
+// All registered package names of pkg's repository in pkg's distro. The cart
+// treats a multi-package repository as one all-or-nothing unit: selecting or
+// deselecting any member applies to the whole group, since one clone brings
+// every sibling anyway.
+function repoPackageNames(pkg) {
+  return state.packages.filter((p) => repoKey(p) === repoKey(pkg)).map((p) => p.name);
+}
+
 function card(pkg, siblingCount) {
   const status = pkg.current_status || "unknown";
   const repo = pkg.repo_name || pkg.repository;
@@ -453,24 +461,6 @@ function wireRepoEcho() {
   });
 }
 
-// Selection echo: while any package of a multi-package repository sits in a
-// cart, the repository's cards carry .repo-selected, since their source will
-// arrive in the selection's clone either way. Recomputed from state.carts on
-// every cart change (renderCart calls this), so it needs no per-event deltas.
-function syncRepoEchoes() {
-  const selected = new Set();
-  for (const [distro, set] of state.carts) {
-    for (const name of set) {
-      const p = state.pkgIndex.get(keyOf(distro, name));
-      if (p) selected.add(repoKey(p));
-    }
-  }
-  for (const [key, cards] of repoCardGroups) {
-    const on = cards.length > 1 && selected.has(key);
-    for (const c of cards) c.classList.toggle("repo-selected", on);
-  }
-}
-
 // A monorepo badge is pressed exactly while the search box holds its
 // repository (the tag-rail convention). applyFilters re-syncs on every query
 // edit, so typing over the repo name unpresses the badges without a click.
@@ -538,15 +528,19 @@ function saveCart() {
   }
 }
 
-// Re-hydrate names from storage, dropping any that no longer exist in data.json
-// (e.g. a package was removed after this cart was last saved).
+// Re-hydrate names from storage, dropping any that no longer exist in
+// data.json (e.g. a package was removed after this cart was last saved) and
+// expanding each survivor to its whole repository group, so the cart's
+// all-or-nothing invariant holds even for carts saved before a repository
+// gained a package (or before groups selected together at all).
 function hydrateCart() {
   const stored = loadStoredCart();
   for (const [distro, names] of Object.entries(stored)) {
     if (!Array.isArray(names)) continue;
     const set = getCart(distro);
     for (const name of names) {
-      if (state.pkgIndex.has(keyOf(distro, name))) set.add(name);
+      const p = state.pkgIndex.get(keyOf(distro, name));
+      if (p) for (const n of repoPackageNames(p)) set.add(n);
     }
   }
 }
@@ -582,14 +576,32 @@ function renderToggle(btn, inCart) {
 }
 
 function syncToggle(btn) {
-  const inCart = getCart(btn.dataset.distro).has(btn.dataset.pkg);
-  const pkg = btn.dataset.pkg;
+  const { distro, pkg } = btn.dataset;
+  const inCart = getCart(distro).has(pkg);
+  const p = state.pkgIndex.get(keyOf(distro, pkg));
+  const groupSize = p ? state.siblings.get(repoKey(p)) || 1 : 1;
+  const others = groupSize - 1;
+  // Monorepo toggles speak for the whole group, so nobody is surprised when
+  // one click adds (or removes) the siblings too.
+  const unit =
+    others > 0
+      ? `${pkg} and its ${others} repository ${others === 1 ? "sibling" : "siblings"}`
+      : pkg;
   btn.setAttribute("aria-pressed", inCart ? "true" : "false");
   btn.setAttribute(
     "aria-label",
-    inCart ? `Remove ${pkg} from the repos builder` : `Add ${pkg} to the repos builder`,
+    inCart ? `Remove ${unit} from the repos builder` : `Add ${unit} to the repos builder`,
   );
-  btn.setAttribute("title", inCart ? "Added (click to remove)" : "Add to repos");
+  btn.setAttribute(
+    "title",
+    inCart
+      ? others > 0
+        ? `Added (click to remove all ${groupSize})`
+        : "Added (click to remove)"
+      : others > 0
+        ? `Add to repos: one clone brings all ${groupSize} registered packages`
+        : "Add to repos",
+  );
   renderToggle(btn, inCart);
 }
 
@@ -604,35 +616,31 @@ function syncAllToggles() {
 
 function cartRepoBlock(group) {
   const block = el("div", { class: "cart-repo" });
+  // Selection is all-or-nothing per repository, so the one Remove lives on
+  // the block head and releases the whole group; package rows are plain.
   block.append(
     el(
       "div",
       { class: "cart-repo-head" },
       el("code", { class: "cart-repo-name", text: group.repo }),
       el("span", { class: "muted cart-repo-ref", text: refText(group.ref) }),
+      el("button", {
+        class: "cart-remove",
+        type: "button",
+        "data-repo": group.repo,
+        "aria-label": `Remove the ${group.repo} repository from the repos builder`,
+        text: "Remove",
+      }),
     ),
   );
   for (const name of group.names) {
-    block.append(
-      el(
-        "div",
-        { class: "cart-pkg" },
-        el("span", { text: name }),
-        el("button", {
-          class: "cart-remove",
-          type: "button",
-          "data-pkg": name,
-          "aria-label": `Remove ${name}`,
-          text: "Remove",
-        }),
-      ),
-    );
+    block.append(el("div", { class: "cart-pkg" }, el("span", { text: name })));
   }
-  if (group.siblingTotal > group.names.length) {
+  if (group.names.length > 1) {
     block.append(
       el("p", {
         class: "cart-note",
-        text: `Adds the whole ${group.repo} repository: ${group.siblingTotal} registered packages travel together (one clone).`,
+        text: `These ${group.names.length} registered packages travel together (one clone).`,
       }),
     );
   }
@@ -640,7 +648,6 @@ function cartRepoBlock(group) {
 }
 
 function renderCart() {
-  syncRepoEchoes();
   const distro = state.active;
   document.getElementById("cart-distro").textContent = distro;
 
@@ -664,12 +671,7 @@ function renderCart() {
   for (const p of items) {
     const key = p.repo_name || p.repository;
     if (!groups.has(key)) {
-      groups.set(key, {
-        repo: key,
-        ref: p.ref,
-        names: [],
-        siblingTotal: state.siblings.get(repoKey(p)) || 1,
-      });
+      groups.set(key, { repo: key, ref: p.ref, names: [] });
     }
     groups.get(key).names.push(p.name);
   }
@@ -770,26 +772,35 @@ function wireRosdistro() {
 }
 
 function wireCart() {
+  // Toggling any member of a multi-package repository adds or removes the
+  // WHOLE group (repoPackageNames): one clone brings every sibling, so the
+  // cart never holds a partial repository.
   document.getElementById("cards").addEventListener("click", (e) => {
     const btn = e.target.closest(".cart-toggle");
     if (!btn) return;
     const { distro, pkg } = btn.dataset;
     const set = getCart(distro);
-    if (set.has(pkg)) set.delete(pkg);
-    else set.add(pkg);
+    const p = state.pkgIndex.get(keyOf(distro, pkg));
+    const names = p ? repoPackageNames(p) : [pkg];
+    if (set.has(pkg)) for (const n of names) set.delete(n);
+    else for (const n of names) set.add(n);
     saveCart();
-    syncToggle(btn);
+    for (const n of names) syncCardToggle(distro, n);
     if (distro === state.active) renderCart();
   });
 
   document.getElementById("cart").addEventListener("click", (e) => {
     const remove = e.target.closest(".cart-remove");
     if (remove) {
-      const name = remove.dataset.pkg;
-      getCart(state.active).delete(name);
+      const set = getCart(state.active);
+      const names = [...set].filter((n) => {
+        const p = state.pkgIndex.get(keyOf(state.active, n));
+        return p && (p.repo_name || p.repository) === remove.dataset.repo;
+      });
+      for (const n of names) set.delete(n);
       saveCart();
       renderCart();
-      syncCardToggle(state.active, name);
+      for (const n of names) syncCardToggle(state.active, n);
       return;
     }
     if (e.target.closest("#cart-clear")) {
@@ -839,7 +850,7 @@ async function main() {
   for (const pkg of packages) {
     cardsEl.append(card(pkg, state.siblings.get(repoKey(pkg)) || 1));
   }
-  indexRepoCards(); // before the first renderCart: syncRepoEchoes reads it
+  indexRepoCards(); // the hover echo's card group index
 
   hydrateCart();
   wireRosdistro(); // sets the default distro before wireFilters paints
