@@ -55,20 +55,32 @@ function el(tag, attrs = {}, ...children) {
   return node;
 }
 
-// Inline SVG icon (plus / check) for the circular cart toggle. Built with
-// createElementNS so it stays in the SVG namespace; no innerHTML.
+// Inline SVG icons for the circular cart toggle (plus / check) and the cart
+// blocks' remove button (trash). Built with createElementNS so they stay in
+// the SVG namespace; no innerHTML.
 const SVG_NS = "http://www.w3.org/2000/svg";
-function icon(name) {
+const ICON_PATHS = {
+  plus: "M8 3.25v9.5M3.25 8h9.5",
+  check: "M3.5 8.5l3 3 6-7",
+  trash:
+    "M2.75 4.5h10.5" +
+    "M6.4 4.5V3.4c0-.63.51-1.15 1.15-1.15h.9c.64 0 1.15.52 1.15 1.15v1.1" +
+    "M4.3 4.5l.5 8.05c.05.74.66 1.3 1.4 1.3h3.6c.74 0 1.35-.56 1.4-1.3l.5-8.05" +
+    "M6.7 7.3v3.7M9.3 7.3v3.7",
+};
+function icon(name, size = 15) {
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("viewBox", "0 0 16 16");
-  svg.setAttribute("width", "15");
-  svg.setAttribute("height", "15");
+  svg.setAttribute("width", String(size));
+  svg.setAttribute("height", String(size));
   svg.setAttribute("aria-hidden", "true");
   const path = document.createElementNS(SVG_NS, "path");
-  path.setAttribute("d", name === "check" ? "M3.5 8.5l3 3 6-7" : "M8 3.25v9.5M3.25 8h9.5");
+  path.setAttribute("d", ICON_PATHS[name]);
   path.setAttribute("fill", "none");
   path.setAttribute("stroke", "currentColor");
-  path.setAttribute("stroke-width", "2");
+  // The trash outline reads cleaner with a lighter stroke than the chunky
+  // plus/check glyphs.
+  path.setAttribute("stroke-width", name === "trash" ? "1.5" : "2");
   path.setAttribute("stroke-linecap", "round");
   path.setAttribute("stroke-linejoin", "round");
   svg.appendChild(path);
@@ -616,21 +628,27 @@ function syncAllToggles() {
 
 function cartRepoBlock(group) {
   const block = el("div", { class: "cart-repo" });
-  // Selection is all-or-nothing per repository, so the one Remove lives on
-  // the block head and releases the whole group; package rows are plain.
+  // Selection is all-or-nothing per repository, so the one Remove releases
+  // the whole group: a trash icon button pinned to the block's top-right
+  // corner (out of the head's flow), while the repo name and its ref stack
+  // as their own lines; package rows are plain.
   block.append(
     el(
       "div",
       { class: "cart-repo-head" },
       el("code", { class: "cart-repo-name", text: group.repo }),
-      el("span", { class: "muted cart-repo-ref", text: refText(group.ref) }),
-      el("button", {
+      el("div", { class: "muted cart-repo-ref", text: refText(group.ref) }),
+    ),
+    el(
+      "button",
+      {
         class: "cart-remove",
         type: "button",
         "data-repo": group.repo,
         "aria-label": `Remove the ${group.repo} repository from the repos builder`,
-        text: "Remove",
-      }),
+        title: "Remove from repos",
+      },
+      icon("trash", 13),
     ),
   );
   for (const name of group.names) {
