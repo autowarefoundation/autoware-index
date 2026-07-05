@@ -226,19 +226,25 @@ noscript .wrap {
     border-color 0.15s ease,
     box-shadow 0.15s ease;
 }
-/* Golden glow on hover, and kept persistently while the package is selected
-   (its toggle is pressed) so chosen items stand out. */
-.card:hover,
-.card:has(.cart-toggle[aria-pressed="true"]) {
+/* Two glow families, two meanings. Exploring is golden: hovering a card
+   (and, softer, its repository siblings via .repo-hover below). Selection is
+   primary blue: a card whose toggle is pressed holds the blue glow (its
+   :has() specificity outranks :hover, so it stays blue under the pointer
+   too), and repository groups select all-or-nothing, so a whole monorepo
+   turns blue together. */
+.card:hover {
   border-color: var(--secondary);
   box-shadow: 0 2px 10px rgba(238, 212, 91, 0.35);
 }
-/* Sibling echo: a softer version of the glow on the OTHER cards of the same
-   repository while one of them is hovered (.repo-hover) or in the cart
-   (.repo-selected): one clone brings them all. :where() keeps specificity at
-   plain-class level, so the direct hover/selected glow above always wins on
-   the card itself. */
-.card:where(.repo-hover, .repo-selected) {
+.card:has(.cart-toggle[aria-pressed="true"]) {
+  border-color: var(--primary);
+  box-shadow: 0 2px 10px rgba(114, 144, 229, 0.45);
+}
+/* Hover echo: a softer golden glow on the OTHER cards of the same repository
+   while one is hovered: one clone brings them all. :where() keeps specificity
+   at plain-class level, so the direct hover/selected glow above always wins
+   on the card itself. */
+.card:where(.repo-hover) {
   border-color: var(--secondary);
   box-shadow: 0 1px 6px rgba(238, 212, 91, 0.22);
 }
@@ -448,10 +454,11 @@ footer .sep {
   margin-top: 8px;
 }
 /* Fixed-size circular icon button (no size change on hover). Inactive = very
-   light gold fill with a normal-gold edge and a blue plus; active (in cart) =
-   gold fill with a black check. Words live in the title tooltip + aria-label so
-   nothing reflows. Pinned to the card's top-right corner, out of the header's
-   wrapping flow, so a long package name can never push it to a second line. */
+   light gold fill with a normal-gold edge and an ink plus; active (in cart) =
+   primary-blue fill with a white check, matching the selected card's blue
+   glow. Words live in the title tooltip + aria-label so nothing reflows.
+   Pinned to the card's top-right corner, out of the header's wrapping flow,
+   so a long package name can never push it to a second line. */
 .cart-toggle {
   position: absolute;
   top: 16px;
@@ -478,19 +485,25 @@ footer .sep {
 .cart-toggle svg {
   display: block;
 }
+/* Hover reads as a defined ring plus the glow, not just a faint haze. */
 .cart-toggle:hover {
-  box-shadow: 0 2px 9px rgba(238, 212, 91, 0.6);
+  box-shadow:
+    0 0 0 3px rgba(238, 212, 91, 0.5),
+    0 2px 10px rgba(238, 212, 91, 0.85);
 }
 .cart-toggle:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 .cart-toggle[aria-pressed="true"] {
-  background: var(--secondary);
-  border-color: var(--secondary);
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
 }
 .cart-toggle[aria-pressed="true"]:hover {
-  box-shadow: 0 2px 9px rgba(238, 212, 91, 0.6);
+  box-shadow:
+    0 0 0 3px rgba(114, 144, 229, 0.45),
+    0 2px 10px rgba(114, 144, 229, 0.8);
 }
 
 #cart {
@@ -546,11 +559,14 @@ footer .sep {
   padding: 10px 12px;
   margin-bottom: 10px;
 }
+/* Repo name on the left; the ref and the group Remove pushed right. Selection
+   is all-or-nothing per repository, so the one Remove sits on this head row,
+   not on the package rows. */
 .cart-repo-head {
   display: flex;
-  justify-content: space-between;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
+  gap: 2px 8px;
   margin-bottom: 4px;
 }
 .cart-repo-name {
@@ -559,6 +575,7 @@ footer .sep {
 }
 .cart-repo-ref {
   font-size: 12px;
+  margin-left: auto;
 }
 .cart-pkg {
   display: flex;
