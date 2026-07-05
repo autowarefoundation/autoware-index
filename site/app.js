@@ -165,12 +165,24 @@ function card(pkg, siblingCount) {
   const badges = el(
     "div",
     { class: "badges" },
+    // The status verdict leads the row; on failing packages a quiet outline
+    // pill (same family as the governance badge, not loose text that would
+    // break the pill row) follows with the last Autoware version that
+    // passed. el() skips null.
+    statusPill(status),
+    status === "fail" && pkg.last_green
+      ? el("span", {
+          class: "badge",
+          text: `last green ${pkg.last_green}`,
+          title: `Last passing validation was against Autoware ${pkg.last_green}`,
+        })
+      : null,
     el("span", { class: "badge badge-distro", text: pkg.distro }),
     el("span", { class: "badge badge-gov", text: pkg.governance }),
     // Monorepo badge: the same quiet outline family as the governance badge,
-    // but a button. Clicking it filters the list to this repository's
-    // packages (wireRepoBadges drops the repo name into the search box);
-    // clicking again clears. el() skips null: single-package repos add nothing.
+    // but a button, closing the row. Clicking it filters the list to this
+    // repository's packages (wireRepoBadges drops the repo name into the
+    // search box); clicking again clears. Single-package repos add nothing.
     siblingCount > 1
       ? el("button", {
           class: "badge badge-repo",
@@ -187,17 +199,6 @@ function card(pkg, siblingCount) {
             `${repo}. Click to see them together; click again to clear.`,
         })
       : null,
-    // A quiet outline pill (same family as the governance badge), not loose
-    // text; a dangling fragment would break the band's pill row. It leads
-    // into the status verdict, which always closes the row. el() skips null.
-    status === "fail" && pkg.last_green
-      ? el("span", {
-          class: "badge",
-          text: `last green ${pkg.last_green}`,
-          title: `Last passing validation was against Autoware ${pkg.last_green}`,
-        })
-      : null,
-    statusPill(status),
   );
 
   const toggle = el("button", {
@@ -220,8 +221,8 @@ function card(pkg, siblingCount) {
   const meta = el(
     "div",
     { class: "meta" },
-    el("a", { class: "repo", href: pkg.repository, text: pkg.repository }),
-    el("span", { class: "muted" }, " · registered ref: ", el("code", { text: refText(pkg.ref) })),
+    el("div", {}, el("a", { class: "repo", href: pkg.repository, text: pkg.repository })),
+    el("div", { class: "muted" }, "registered ref: ", el("code", { text: refText(pkg.ref) })),
   );
 
   const details = el(
@@ -246,15 +247,16 @@ function card(pkg, siblingCount) {
       "header",
       {},
       el("h2", { text: pkg.name }),
-      // One classification band under the name: the domain tag chips on
-      // the left (wrapping onto further lines when there are many), the
-      // registry pills (distro, governance, monorepo, status) at the right.
-      el("div", { class: "card-head-actions" }, tags, badges, toggle),
+      // The classification band under the name holds the registry pills
+      // (status, last green, distro, governance, monorepo), aligned left;
+      // the domain tag chips close the card as its footer row below.
+      el("div", { class: "card-head-actions" }, badges, toggle),
     ),
     pkg.description ? el("p", { class: "description", text: pkg.description }) : null,
     meta,
     maintainers(pkg.maintainers),
     details,
+    (pkg.tags || []).length ? tags : null,
   );
 }
 

@@ -330,6 +330,11 @@ button.badge-repo:focus-visible {
   gap: 6px;
   flex-wrap: wrap;
 }
+/* The domain tag chips close the card as its footer row (app.js only
+   renders the row when the package has tags). */
+.card .tags {
+  margin-top: 12px;
+}
 .tag {
   font-size: 12px;
   background: var(--secondary-soft);
@@ -432,23 +437,15 @@ footer .sep {
 }
 
 /* Repos builder (cart sidebar) */
-/* The classification band: always the card's second line. Tag chips hold
-   the left side and keep wrapping onto the following lines; the registry
-   pills sit pinned at the band's right edge (they drop to their own
-   right-aligned line only when a narrow card leaves the tags no room). */
+/* The classification band: always the card's second line, holding the
+   registry pills (status, last green, distro, governance, monorepo) flowing
+   from the left. The domain tag chips live at the card's bottom (.card .tags). */
 .card-head-actions {
   display: flex;
   align-items: flex-start;
   gap: 8px 10px;
   flex-wrap: wrap;
   margin-top: 8px;
-}
-.card-head-actions .tags {
-  flex: 1 1 160px;
-  min-width: 0;
-}
-.card-head-actions .badges {
-  margin-left: auto;
 }
 /* Fixed-size circular icon button (no size change on hover). Inactive = very
    light gold fill with a normal-gold edge and a blue plus; active (in cart) =
