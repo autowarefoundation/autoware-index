@@ -233,6 +233,15 @@ noscript .wrap {
   border-color: var(--secondary);
   box-shadow: 0 2px 10px rgba(238, 212, 91, 0.35);
 }
+/* Sibling echo: a softer version of the glow on the OTHER cards of the same
+   repository while one of them is hovered (.repo-hover) or in the cart
+   (.repo-selected): one clone brings them all. :where() keeps specificity at
+   plain-class level, so the direct hover/selected glow above always wins on
+   the card itself. */
+.card:where(.repo-hover, .repo-selected) {
+  border-color: var(--secondary);
+  box-shadow: 0 1px 6px rgba(238, 212, 91, 0.22);
+}
 .card h2 {
   margin: 0;
   font-size: 18px;
@@ -262,6 +271,37 @@ noscript .wrap {
   border-color: var(--secondary);
   background: var(--secondary);
   color: #3a3208;
+}
+/* Monorepo badge: same quiet outline family as the other badges, but a
+   button; clicking filters the list to the repository's packages, clicking
+   again clears. font: inherit first (buttons default to a UA font), then
+   the badge size back on top. */
+button.badge-repo {
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+button.badge-repo:hover {
+  background: var(--secondary-soft);
+  border-color: var(--secondary);
+  color: var(--secondary-ink);
+}
+/* Pressed while the repo filter is active (app.js syncs aria-pressed with
+   the search box): the same filled-gold treatment as the distro badge and
+   the pressed tag-rail rows. After :hover so the fill holds under the
+   pointer. */
+button.badge-repo[aria-pressed="true"] {
+  background: var(--secondary);
+  border-color: var(--secondary);
+  color: #3a3208;
+}
+button.badge-repo:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
 }
 .pill {
   font-size: 12px;

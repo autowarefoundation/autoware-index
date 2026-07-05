@@ -19,7 +19,7 @@ const REGISTRY_SOURCE = "autowarefoundation/autoware-index@main";
 const state = {
   packages: [],
   pkgIndex: new Map(), // `${distro}/${name}` -> pkg
-  siblings: new Map(), // repoKey -> count (for the monorepo note)
+  siblings: new Map(), // repoKey -> count (for the monorepo badge + cart note)
   carts: new Map(), // distro -> Set<name>
   distributions: new Map(), // distro -> reconstructed distribution dict (memoized)
   tagSummaries: new Map(), // tag id -> one-line summary (vocabulary tooltips)
@@ -144,8 +144,9 @@ function searchBlob(pkg) {
 }
 
 // (distro, repo_name) -> number of registered packages from that repository,
-// so a card can say it ships with siblings from the same repo. The count map
-// and the per-card lookup MUST build identical keys, hence one shared helper.
+// so a card can wear the monorepo badge and the cart can note that siblings
+// travel together in one clone. The count map, the per-card lookup, and the
+// card group index MUST build identical keys, hence one shared helper.
 function repoKey(pkg) {
   return `${pkg.distro} ${pkg.repo_name || pkg.repository || ""}`;
 }
@@ -160,11 +161,32 @@ function repoSiblingCounts(packages) {
 
 function card(pkg, siblingCount) {
   const status = pkg.current_status || "unknown";
+  const repo = pkg.repo_name || pkg.repository;
   const badges = el(
     "div",
     { class: "badges" },
     el("span", { class: "badge badge-distro", text: pkg.distro }),
     el("span", { class: "badge badge-gov", text: pkg.governance }),
+    // Monorepo badge: the same quiet outline family as the governance badge,
+    // but a button. Clicking it filters the list to this repository's
+    // packages (wireRepoBadges drops the repo name into the search box);
+    // clicking again clears. el() skips null: single-package repos add nothing.
+    siblingCount > 1
+      ? el("button", {
+          class: "badge badge-repo",
+          type: "button",
+          "data-repo": repo,
+          // Pressed while the repo filter is active (syncRepoBadges). The
+          // visible pill stays terse; the label carries the repository and
+          // the action for screen readers (title tooltips are hover-only).
+          "aria-pressed": "false",
+          "aria-label": `Monorepo ${repo}: show its ${siblingCount} registered packages together`,
+          text: `monorepo · ${siblingCount} registered`,
+          title:
+            `One clone brings all ${siblingCount} registered packages from ` +
+            `${repo}. Click to see them together; click again to clear.`,
+        })
+      : null,
     // A quiet outline pill (same family as the governance badge), not loose
     // text; a dangling fragment would break the band's pill row. It leads
     // into the status verdict, which always closes the row. el() skips null.
@@ -201,14 +223,6 @@ function card(pkg, siblingCount) {
     el("a", { class: "repo", href: pkg.repository, text: pkg.repository }),
     el("span", { class: "muted" }, " · registered ref: ", el("code", { text: refText(pkg.ref) })),
   );
-  if (siblingCount > 1) {
-    meta.append(
-      el("span", {
-        class: "muted",
-        text: ` · one of ${siblingCount} registered packages from this repository`,
-      }),
-    );
-  }
 
   const details = el(
     "details",
@@ -223,6 +237,7 @@ function card(pkg, siblingCount) {
       class: "card",
       "data-name": pkg.name.toLowerCase(),
       "data-distro": pkg.distro,
+      "data-repo": repo,
       "data-status": status,
       "data-tags": (pkg.tags || []).join(" "),
       "data-search": searchBlob(pkg),
@@ -233,7 +248,7 @@ function card(pkg, siblingCount) {
       el("h2", { text: pkg.name }),
       // One classification band under the name: the domain tag chips on
       // the left (wrapping onto further lines when there are many), the
-      // registry pills (distro, governance, status) pinned at the right.
+      // registry pills (distro, governance, monorepo, status) at the right.
       el("div", { class: "card-head-actions" }, tags, badges, toggle),
     ),
     pkg.description ? el("p", { class: "description", text: pkg.description }) : null,
@@ -283,6 +298,12 @@ function tagGroups(packages, vocabulary) {
 // no tag is selected, and clicking it clears the whole selection.
 function tagPressed(id) {
   return id === "" ? state.activeTags.size === 0 : state.activeTags.has(id);
+}
+
+function syncTagRailPressed() {
+  for (const b of document.querySelectorAll(".tagbar-tag")) {
+    b.setAttribute("aria-pressed", tagPressed(b.dataset.tag) ? "true" : "false");
+  }
 }
 
 // One rail row: tag name left, package count right.
@@ -335,9 +356,7 @@ function wireTagRail() {
     if (id === "") state.activeTags.clear();
     else if (state.activeTags.has(id)) state.activeTags.delete(id);
     else state.activeTags.add(id);
-    for (const b of document.querySelectorAll(".tagbar-tag")) {
-      b.setAttribute("aria-pressed", tagPressed(b.dataset.tag) ? "true" : "false");
-    }
+    syncTagRailPressed();
     applyFilters();
   });
 }
@@ -374,11 +393,113 @@ function wireFilters() {
       visible += ok ? 1 : 0;
     }
     empty.hidden = visible !== 0;
+    syncRepoBadges();
   };
   for (const elm of [q, distro, status]) elm.addEventListener("input", applyFilters);
   // Paint the initial (rosdistro-scoped) view; the picker now defaults to a
   // single distro instead of "All distros", so the first render must filter.
   applyFilters();
+}
+
+// --- Repository grouping (monorepo badge + sibling echo) --------------------
+// The card list stays flat and package-ordered; the repository relationship
+// shows through a shared badge, a soft glow on sibling cards, and the cart's
+// per-repo blocks, never through nested layout.
+
+// repoKey-shaped string -> [card elements]. Built once after the cards render
+// so the echo never queries by attribute selector (a data-repo can be a full
+// URL when repo_name is absent, which would need escaping).
+const repoCardGroups = new Map();
+
+function cardRepoKey(card) {
+  return repoKey({ distro: card.dataset.distro, repo_name: card.dataset.repo });
+}
+
+function indexRepoCards() {
+  for (const card of document.querySelectorAll(".card")) {
+    const key = cardRepoKey(card);
+    if (!repoCardGroups.has(key)) repoCardGroups.set(key, []);
+    repoCardGroups.get(key).push(card);
+  }
+}
+
+// Hover echo: while the pointer rests on a card, the other cards from the
+// same repository carry .repo-hover (they arrive in the same clone). Cards
+// hidden by filters keep the class harmlessly; display:none never paints.
+function wireRepoEcho() {
+  const cardsEl = document.getElementById("cards");
+  let hovered = null;
+  const clear = () => {
+    for (const c of cardsEl.querySelectorAll(".repo-hover")) c.classList.remove("repo-hover");
+  };
+  cardsEl.addEventListener("pointerover", (e) => {
+    const card = e.target.closest(".card");
+    if (card === hovered) return;
+    hovered = card;
+    clear();
+    if (!card) return;
+    for (const mate of repoCardGroups.get(cardRepoKey(card)) || []) {
+      if (mate !== card) mate.classList.add("repo-hover");
+    }
+  });
+  cardsEl.addEventListener("pointerout", (e) => {
+    // Moves within the hovered card keep the echo; anything else clears it
+    // (the pointerover on the next card, if any, rebuilds immediately).
+    if (hovered && e.relatedTarget && hovered.contains(e.relatedTarget)) return;
+    hovered = null;
+    clear();
+  });
+}
+
+// Selection echo: while any package of a multi-package repository sits in a
+// cart, the repository's cards carry .repo-selected, since their source will
+// arrive in the selection's clone either way. Recomputed from state.carts on
+// every cart change (renderCart calls this), so it needs no per-event deltas.
+function syncRepoEchoes() {
+  const selected = new Set();
+  for (const [distro, set] of state.carts) {
+    for (const name of set) {
+      const p = state.pkgIndex.get(keyOf(distro, name));
+      if (p) selected.add(repoKey(p));
+    }
+  }
+  for (const [key, cards] of repoCardGroups) {
+    const on = cards.length > 1 && selected.has(key);
+    for (const c of cards) c.classList.toggle("repo-selected", on);
+  }
+}
+
+// A monorepo badge is pressed exactly while the search box holds its
+// repository (the tag-rail convention). applyFilters re-syncs on every query
+// edit, so typing over the repo name unpresses the badges without a click.
+function syncRepoBadges() {
+  const q = document.getElementById("q").value.trim();
+  for (const b of document.querySelectorAll(".badge-repo")) {
+    b.setAttribute("aria-pressed", b.dataset.repo === q ? "true" : "false");
+  }
+}
+
+// The monorepo badge doubles as a filter: it drops the repository name into
+// the search box (searchBlob indexes repo_name and the repository URL), so
+// "show me what travels together" is a filter state, not a separate layout.
+// Activating also clears the tag/status facets, which would otherwise keep
+// ANDing siblings away and belie the badge's "together" promise; clicking
+// the badge again restores the unfiltered view.
+function wireRepoBadges() {
+  const q = document.getElementById("q");
+  const status = document.getElementById("status");
+  document.getElementById("cards").addEventListener("click", (e) => {
+    const badge = e.target.closest(".badge-repo");
+    if (!badge) return;
+    const activating = q.value.trim() !== badge.dataset.repo;
+    q.value = activating ? badge.dataset.repo : "";
+    if (activating) {
+      status.value = "";
+      state.activeTags.clear();
+      syncTagRailPressed();
+    }
+    applyFilters();
+  });
 }
 
 // --- Cart -----------------------------------------------------------------
@@ -517,6 +638,7 @@ function cartRepoBlock(group) {
 }
 
 function renderCart() {
+  syncRepoEchoes();
   const distro = state.active;
   document.getElementById("cart-distro").textContent = distro;
 
@@ -715,6 +837,7 @@ async function main() {
   for (const pkg of packages) {
     cardsEl.append(card(pkg, state.siblings.get(repoKey(pkg)) || 1));
   }
+  indexRepoCards(); // before the first renderCart: syncRepoEchoes reads it
 
   hydrateCart();
   wireRosdistro(); // sets the default distro before wireFilters paints
@@ -722,6 +845,8 @@ async function main() {
   wireFilters();
   wireTagRail();
   wireCart();
+  wireRepoEcho();
+  wireRepoBadges();
   syncAllToggles();
   renderCart();
 }
