@@ -35,7 +35,10 @@ per-package **compatibility history** table built from sweep records: which
 Autoware version each ref was tested against, pass/fail, the resolved commit,
 and a link to the Actions run. Failing packages surface their last-green
 Autoware version, and a package sharing its repository with registered siblings
-notes "one of N registered packages from this repository" on its card.
+wears a clickable "monorepo · N registered" badge on its card: clicking filters
+the list to that repository's packages (clicking again clears), and hovering
+or selecting any of them softly highlights the sibling cards that arrive in
+the same clone.
 
 ## The registration page
 
