@@ -188,7 +188,10 @@ noscript .wrap {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  margin: 18px 0 22px;
+  /* The 12px paddings become the white mask above/below the row while it is
+     stuck; the negative top margin cancels the top one at rest, so the row
+     sits exactly level with the tag rail and repos builder panels. */
+  margin: -12px 0 22px;
   position: sticky;
   top: 0;
   background: var(--bg);
