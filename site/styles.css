@@ -554,28 +554,30 @@ footer .sep {
 }
 
 .cart-repo {
+  position: relative; /* anchors the pinned remove button */
   border: 1px solid var(--border);
   border-radius: 9px;
   padding: 10px 12px;
   margin-bottom: 10px;
 }
-/* Repo name on the left; the ref and the group Remove pushed right. Selection
-   is all-or-nothing per repository, so the one Remove sits on this head row,
-   not on the package rows. */
+/* Repo name and its ref stack as their own lines; the group Remove (trash)
+   is pinned to the block's top-right corner, mirroring the cards' pinned
+   toggle. Selection is all-or-nothing per repository, so the one Remove
+   releases the whole block, not single package rows. */
 .cart-repo-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 8px;
   margin-bottom: 4px;
 }
 .cart-repo-name {
+  display: block;
   font-size: 13px;
   color: var(--fg);
+  /* Keep clear of the pinned trash button; repo keys are single unbreakable
+     words (or URLs), so give them a break opportunity too. */
+  padding-right: 30px;
+  overflow-wrap: anywhere;
 }
 .cart-repo-ref {
   font-size: 12px;
-  margin-left: auto;
 }
 .cart-pkg {
   display: flex;
@@ -586,15 +588,36 @@ footer .sep {
   padding: 2px 0;
 }
 .cart-remove {
-  font-size: 11px;
-  color: var(--fail);
-  background: none;
-  border: none;
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 50%;
   cursor: pointer;
-  padding: 2px 4px;
+  color: var(--fail);
+  background: #fff;
+  border: 1px solid var(--border);
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.cart-remove svg {
+  display: block;
 }
 .cart-remove:hover {
-  text-decoration: underline;
+  border-color: var(--fail);
+  background: rgba(209, 36, 47, 0.08);
+  box-shadow: 0 1px 6px rgba(209, 36, 47, 0.35);
+}
+.cart-remove:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
 }
 .cart-note {
   margin: 6px 0 0;
