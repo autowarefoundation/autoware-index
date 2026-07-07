@@ -60,3 +60,29 @@ repositories:
         tags:
           - planning
           - simulator
+  vision_pilot:
+    url: https://github.com/autowarefoundation/vision_pilot
+    ref:
+      kind: tag
+      value: v1.0
+    governance: foundation
+    maintainers:
+      - name: Atanasko Mitrev
+        email: atanasko.mitrev@autoware.org
+        github: atanasko
+      - name: Muhammad Zain Khawaja
+        email: zain.khawaja@autoware.org
+        github: m-zain-khawaja
+      - name: Pranav Doma
+        email: pranav.doma@autoware.org
+        github: pranavdoma
+      - name: Tran Huy
+        email: tran.huy@autoware.org
+        github: TranHuuNhatHuy
+    packages:
+      vision_pilot:
+        tags:
+          - sensing
+          - perception
+          - planning
+        description: Open-Source End-to-End L2 ADAS System
