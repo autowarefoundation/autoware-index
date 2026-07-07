@@ -60,3 +60,18 @@ repositories:
         tags:
           - planning
           - simulator
+  pacmod_interface:
+    url: https://github.com/tier4/pacmod_interface.git
+    ref:
+      kind: branch
+      value: main
+    governance: community
+    maintainers:
+      - name: Tomoya Kimura
+        email: tomoya.kimura@tier4.jp
+        github: tkimura4
+    packages:
+      pacmod_interface:
+        tags:
+          - vehicle
+          - driver
