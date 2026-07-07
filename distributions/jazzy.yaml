@@ -60,3 +60,18 @@ repositories:
         tags:
           - planning
           - simulator
+  tamagawa_imu_driver:
+    url: https://github.com/tier4/tamagawa_imu_driver.git
+    ref:
+      kind: branch
+      value: ros2
+    governance: community
+    maintainers:
+      - name: Ryohsuke Mitsudome
+        email: ryohsuke.mitsudome@tier4.jp
+        github: mitsudome-r
+    packages:
+      tamagawa_imu_driver:
+        tags:
+          - sensing
+          - driver
