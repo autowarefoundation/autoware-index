@@ -1,0 +1,441 @@
+name: sweep-repository
+
+# Reusable workflow that clones one registered REPOSITORY at a pinned ref
+# and validates every registered package it hosts against a version-pinned
+# Autoware Core container image, in a single job ("repository sweep mode").
+# Called by the autoware-index registry's sweep workflows (sweep-eager.yaml,
+# sweep-nightly.yaml) with one matrix row per (distro, repository).
+#
+# A repository hosting N registered packages is cloned and built ONCE (each
+# package exactly once, shared tree), instead of once per registered package.
+#
+# Honesty contract (per package, derived inside this one job):
+#   - present:        the registered package name exists in the cloned tree
+#                     (`colcon list`). Absent packages are reported with
+#                     present:false and FAIL this job loudly: the registry
+#                     entry is wrong; nothing is fabricated for them.
+#   - build_outcome:  "success" iff the package's own dependency closure
+#                     (`colcon list --packages-up-to <pkg>`, workspace-local)
+#                     contains no failed package and its install dir exists.
+#                     A broken in-repo dependency honestly fails its
+#                     dependents; they are unusable at that source state.
+#                     A closure member declaring a rosdep key that cannot be
+#                     resolved counts as failed too: the manifest is the
+#                     defect. rosdep failures naming no key stay an
+#                     infrastructure fault (all outcomes null).
+#   - test_outcome:   the package's OWN tests only (`colcon test
+#                     --packages-select <pkg> --return-code-on-test-failure`).
+#                     A sibling's tests never touch this package's verdict.
+#                     null when the build already failed (tests never ran).
+#
+# Artifact contract (consumed by autoware-index scripts/build_envelopes.py;
+# don't rename the prefix or reshape result.json without bumping the recorder):
+#   name:  validate-result-<ros_distro>-<repo_name>-<resolved_version>
+#   files: result.json        {"schema": 2, ros_distro, autoware_version,
+#                              repo_name, repository, ref:{kind,value},
+#                              resolved_sha, packages:{<name>:{present,
+#                              build_outcome, test_outcome}}}
+#          package-xmls/<pkg>.xml   pristine package.xml of each present
+#                                   package, copied BEFORE remove-exec-depend
+#                                   (cached to data:metadata/ by the recorder)
+#
+# No GHA build/ccache caching on purpose: sweep rows are batch validation;
+# a shared cache key across same-run rows races and never restores.
+#
+# autoware_version is optional. When unset (the default), the `resolve` job
+# picks the version at runtime via the latest-autoware-version composite, so
+# all packages of one repository are validated against ONE version and sha.
+#
+# Registered packages must not ship a build_depends.repos: the pinned image
+# already contains the matching Autoware Core build, so this workflow
+# intentionally does not expose a build_depends_repos input.
+
+on:
+  workflow_call:
+    inputs:
+      ros_distro:
+        description: ROS 2 distribution (e.g. "jazzy").
+        required: true
+        type: string
+      autoware_version:
+        description: |
+          Autoware SemVer (e.g. "1.8.0"). Drives the container tag.
+          When empty (the default), the workflow falls back to the
+          latest-autoware-version composite action: the freshest
+          autoware release whose container image is already on GHCR.
+          See .github/actions/latest-autoware-version/action.yaml. The
+          recorder reads the resolved value from result.json.
+        required: false
+        type: string
+        default: ""
+      repo_name:
+        description: Registry key of the repository entry (artifact + record identity).
+        required: true
+        type: string
+      repository:
+        description: Git URL of the repository to clone.
+        required: true
+        type: string
+      ref_kind:
+        description: "Registered ref kind: tag | sha | branch (recorded in result.json)."
+        required: true
+        type: string
+      ref_value:
+        description: Tag, branch, or SHA of repository to check out.
+        required: true
+        type: string
+      packages:
+        description: Space-separated registered ROS package names hosted by this repository.
+        required: true
+        type: string
+      base_image_stage:
+        description: Container image stage. Defaults to core-devel.
+        required: false
+        type: string
+        default: core-devel
+      runs-on:
+        description: |
+          Runner label as a JSON-encoded array (workaround for the lack
+          of array inputs in workflow_call). Default: '["ubuntu-24.04"]'.
+        required: false
+        type: string
+        default: '["ubuntu-24.04"]'
+
+    outputs:
+      resolved_sha:
+        description: The exact commit SHA that was checked out and built.
+        value: ${{ jobs.validate.outputs.resolved_sha }}
+
+jobs:
+  resolve:
+    name: resolve autoware_version
+    runs-on: ubuntu-24.04
+    outputs:
+      autoware_version: ${{ inputs.autoware_version || steps.latest.outputs.autoware_version }}
+    steps:
+      - name: Resolve latest autoware_version
+        id: latest
+        if: inputs.autoware_version == ''
+        uses: autowarefoundation/autoware-index-github-actions/.github/actions/latest-autoware-version@main
+        with:
+          ros_distro: ${{ inputs.ros_distro }}
+          base_image_stage: ${{ inputs.base_image_stage }}
+
+  validate:
+    needs: resolve
+    name: sweep build+test (${{ inputs.ros_distro }}, autoware ${{ needs.resolve.outputs.autoware_version }}, ${{ inputs.repo_name }})
+    runs-on: ${{ fromJson(inputs.runs-on) }}
+    container:
+      image: ghcr.io/autowarefoundation/autoware:${{ inputs.base_image_stage }}-${{ inputs.ros_distro }}-${{ needs.resolve.outputs.autoware_version }}
+    outputs:
+      resolved_sha: ${{ steps.resolve.outputs.sha }}
+    steps:
+      - name: Clone repository
+        env:
+          REPOSITORY: ${{ inputs.repository }}
+          REF_VALUE: ${{ inputs.ref_value }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}"
+          # The container runs as a different user than owns the mounted
+          # workspace, so git refuses operations here ("dubious ownership").
+          # Mark it safe before later git-based steps.
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+          git clone "${REPOSITORY}" .
+          git checkout "${REF_VALUE}"
+
+      - name: Resolve commit SHA
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}"
+          echo "sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+
+      - name: Scan workspace for registered packages
+        # Runs BEFORE remove-exec-depend so package-xmls/ caches the pristine
+        # upstream package.xml, not the build-mangled one.
+        id: scan
+        env:
+          PACKAGES: ${{ inputs.packages }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}"
+          mkdir -p package-xmls
+          # Enumerate as a checked command (not a process substitution, whose
+          # failure would be silently swallowed and misreport every package
+          # as absent): a colcon error fails the step loudly instead.
+          colcon list --base-paths . > .colcon-list.txt
+          declare -A pkg_path
+          while IFS=$'\t' read -r name path _type; do
+            if [[ -n "${pkg_path[$name]:-}" ]]; then
+              echo "::warning::duplicate package name '${name}' in the tree (${pkg_path[$name]} and ${path}); colcon will refuse to build it"
+            fi
+            pkg_path["$name"]="$path"
+          done < .colcon-list.txt
+
+          present=()
+          absent=()
+          for pkg in ${PACKAGES}; do
+            if [[ -n "${pkg_path[$pkg]:-}" ]]; then
+              present+=("$pkg")
+              cp "${pkg_path[$pkg]}/package.xml" "package-xmls/${pkg}.xml"
+            else
+              absent+=("$pkg")
+              echo "::error::registered package '${pkg}' not found in the repository tree at this ref"
+            fi
+          done
+
+          echo "present=${present[*]:-}" >> "${GITHUB_OUTPUT}"
+          echo "absent=${absent[*]:-}" >> "${GITHUB_OUTPUT}"
+          printf '%s\n' "${present[@]:-}" | sed '/^$/d' > .sweep-present.txt
+          printf '%s\n' "${absent[@]:-}" | sed '/^$/d' > .sweep-absent.txt
+          echo "found ${#present[@]} present / ${#absent[@]} absent of $(wc -w <<< "${PACKAGES}") registered package(s)"
+
+      - name: Remove exec_depend
+        if: steps.scan.outputs.present != ''
+        uses: autowarefoundation/autoware-github-actions/remove-exec-depend@v1
+
+      - name: Install dependencies (rosdep)
+        if: steps.scan.outputs.present != ''
+        env:
+          ROS_DISTRO_INPUT: ${{ inputs.ros_distro }}
+          PRESENT: ${{ steps.scan.outputs.present }}
+        shell: bash
+        # No nounset here or in the build/verdict steps: colcon- and
+        # ament-generated setup.sh scripts reference unset variables
+        # (COLCON_TRACE, AMENT_PYTHON_EXECUTABLE, ...) and abort the shell
+        # under `set -u` the moment they are sourced.
+        run: |
+          set -eo pipefail
+          cd "${GITHUB_WORKSPACE}"
+          : > .sweep-failed.txt
+          apt-get -yqq update
+          rosdep update || echo "::warning::rosdep update failed; using the image's existing sources"
+          # shellcheck disable=SC2086
+          package_paths=$(colcon list -p --packages-up-to ${PRESENT} --base-paths .)
+          if [ -f /opt/autoware/setup.sh ]; then
+            . /opt/autoware/setup.sh
+          fi
+          # rosdep's exit code is DATA, not a job verdict: a key it cannot
+          # resolve is a defect in the declaring package's OWN manifest. Seed
+          # those packages into .sweep-failed.txt so the verdict step fails
+          # them (and their dependents) through the usual closure check, then
+          # retry without their keys so one bad manifest cannot blind its
+          # siblings. A failure naming no key is an infrastructure fault:
+          # leave every outcome null and go red without attributing.
+          # shellcheck disable=SC2086
+          if ! DEBIAN_FRONTEND=noninteractive rosdep install -yqq \
+              --from-paths ${package_paths} --ignore-src --rosdistro "${ROS_DISTRO_INPUT}" \
+              > .sweep-rosdep.log 2>&1; then
+            cat .sweep-rosdep.log
+            sed -n '/could not have their rosdep keys resolved/,$p' .sweep-rosdep.log \
+              | sed -n 's/^\([^[:space:]:]*\): Cannot locate rosdep definition for \[\(.*\)\]$/\1 \2/p' \
+              > .sweep-unresolved.txt
+            if [ ! -s .sweep-unresolved.txt ]; then
+              echo "::error::rosdep install failed without naming an unresolvable key; infrastructure fault, all outcomes inconclusive"
+              exit 1
+            fi
+            awk '{print $1}' .sweep-unresolved.txt | sort -u > .sweep-failed.txt
+            skip_keys=$(awk '{print $2}' .sweep-unresolved.txt | sort -u | paste -sd' ')
+            echo "::error::unresolvable rosdep key(s) [${skip_keys}] declared by: $(paste -sd' ' .sweep-failed.txt)"
+            # shellcheck disable=SC2086
+            DEBIAN_FRONTEND=noninteractive rosdep install -yqq \
+              --from-paths ${package_paths} --ignore-src --rosdistro "${ROS_DISTRO_INPUT}" \
+              --skip-keys "${skip_keys}"
+          fi
+
+      - name: Build (union of registered packages)
+        if: steps.scan.outputs.present != ''
+        env:
+          ROS_DISTRO_INPUT: ${{ inputs.ros_distro }}
+          PRESENT: ${{ steps.scan.outputs.present }}
+        shell: bash
+        run: |
+          set -eo pipefail
+          cd "${GITHUB_WORKSPACE}"
+          # shellcheck disable=SC1090
+          . "/opt/ros/${ROS_DISTRO_INPUT}/setup.sh"
+          if [ -f /opt/autoware/setup.sh ]; then
+            . /opt/autoware/setup.sh
+          fi
+          # Each present package and its workspace-local dependencies build
+          # exactly once; --continue-on-error keeps independent siblings
+          # building after one fails. The build's exit code is DATA, not a
+          # job verdict (per-package attribution happens in the next step),
+          # so errexit (implied by `shell: bash`) must be suspended around
+          # the pipeline or a failing package would abort this step before
+          # PIPESTATUS is read and no honest `fail` could ever be recorded.
+          set +e
+          # shellcheck disable=SC2086
+          colcon build \
+            --event-handlers console_cohesion+ \
+            --packages-up-to ${PRESENT} \
+            --continue-on-error \
+            --cmake-args -DCMAKE_BUILD_TYPE=Release \
+            --base-paths . 2>&1 | tee .sweep-build.log
+          build_rc=${PIPESTATUS[0]}
+          set -e
+          # Append: the rosdep step may already have seeded this file with
+          # packages whose manifests declare an unresolvable key.
+          grep -E '^(Failed|Aborted)[[:space:]]+<<<' .sweep-build.log \
+            | awk '{print $3}' | sort -u >> .sweep-failed.txt || true
+          if ! grep -q '^Summary:' .sweep-build.log; then
+            # colcon always prints a Summary line when it actually ran; its
+            # absence means the build never executed (broken env/image/disk).
+            # That is an infrastructure fault: leave every outcome null
+            # (inconclusive, the recorder skips loudly) instead of letting
+            # the verdict step's install-dir checks fabricate per-package
+            # failures out of a pipeline problem.
+            echo "::error::colcon build produced no summary; infrastructure fault, all outcomes inconclusive"
+            exit 1
+          fi
+          if [ "${build_rc}" -ne 0 ] && [ ! -s .sweep-failed.txt ]; then
+            echo "::warning::colcon build exited ${build_rc} without naming failed packages; install-dir checks will attribute"
+          fi
+          echo "build exited ${build_rc}; failed/aborted: $(paste -sd' ' .sweep-failed.txt || true)"
+
+      - name: Derive per-package verdicts (own closure build, own tests)
+        if: steps.scan.outputs.present != ''
+        env:
+          ROS_DISTRO_INPUT: ${{ inputs.ros_distro }}
+        shell: bash
+        run: |
+          set -eo pipefail
+          cd "${GITHUB_WORKSPACE}"
+          # shellcheck disable=SC1090
+          . "/opt/ros/${ROS_DISTRO_INPUT}/setup.sh"
+          if [ -f /opt/autoware/setup.sh ]; then
+            . /opt/autoware/setup.sh
+          fi
+          : > .sweep-results.txt
+          while IFS= read -r pkg; do
+            closure=$(colcon list --names-only --packages-up-to "${pkg}" --base-paths .)
+            failed_dep=$(grep -Fx -f .sweep-failed.txt <<< "${closure}" | head -n1 || true)
+            if [ -n "${failed_dep}" ] || [ ! -d "install/${pkg}" ]; then
+              echo "${pkg} failure skipped" >> .sweep-results.txt
+              echo "::error::${pkg}: build failure (closure member: ${failed_dep:-${pkg} itself, no install dir})"
+              continue
+            fi
+            if colcon test \
+                --event-handlers console_cohesion+ \
+                --packages-select "${pkg}" \
+                --executor sequential \
+                --return-code-on-test-failure; then
+              echo "${pkg} success success" >> .sweep-results.txt
+            else
+              echo "${pkg} success failure" >> .sweep-results.txt
+              echo "::error::${pkg}: its own tests failed"
+            fi
+          done < .sweep-present.txt
+          column -t .sweep-results.txt || cat .sweep-results.txt
+
+      - name: Compose result.json
+        if: always()
+        env:
+          ROS_DISTRO_INPUT: ${{ inputs.ros_distro }}
+          AUTOWARE_VERSION: ${{ needs.resolve.outputs.autoware_version }}
+          REPO_NAME: ${{ inputs.repo_name }}
+          REPOSITORY: ${{ inputs.repository }}
+          REF_KIND: ${{ inputs.ref_kind }}
+          REF_VALUE: ${{ inputs.ref_value }}
+          RESOLVED_SHA: ${{ steps.resolve.outputs.sha }}
+          PACKAGES: ${{ inputs.packages }}
+        shell: bash
+        run: |
+          cd "${GITHUB_WORKSPACE}"
+          python3 - <<'EOF'
+          import json
+          import os
+          from pathlib import Path
+
+          # build_outcome/test_outcome lines written by the verdict step;
+          # packages never reaching it (absent, or the build steps were
+          # skipped/cancelled) get explicit nulls; the recorder treats
+          # those as inconclusive, never as pass or fail.
+          results = {}
+          results_file = Path(".sweep-results.txt")
+          if results_file.is_file():
+              for line in results_file.read_text().splitlines():
+                  pkg, build, test = line.split()
+                  results[pkg] = {
+                      "build_outcome": build,
+                      "test_outcome": None if test == "skipped" else test,
+                  }
+
+          present = set()
+          present_file = Path(".sweep-present.txt")
+          if present_file.is_file():
+              present = set(present_file.read_text().split())
+
+          packages = {}
+          for pkg in os.environ["PACKAGES"].split():
+              outcome = results.get(pkg, {"build_outcome": None, "test_outcome": None})
+              packages[pkg] = {"present": pkg in present, **outcome}
+
+          result = {
+              "schema": 2,
+              "ros_distro": os.environ["ROS_DISTRO_INPUT"],
+              "autoware_version": os.environ["AUTOWARE_VERSION"],
+              "repo_name": os.environ["REPO_NAME"],
+              "repository": os.environ["REPOSITORY"],
+              "ref": {"kind": os.environ["REF_KIND"], "value": os.environ["REF_VALUE"]},
+              "resolved_sha": os.environ["RESOLVED_SHA"],
+              "packages": packages,
+          }
+          Path("result.json").write_text(json.dumps(result, indent=2))
+          print(json.dumps(result, indent=2))
+          EOF
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: validate-result-${{ inputs.ros_distro }}-${{ inputs.repo_name }}-${{ needs.resolve.outputs.autoware_version }}
+          path: |
+            result.json
+            package-xmls/
+          if-no-files-found: error
+          # A manual re-run of a failed leg produces the same artifact name;
+          # without overwrite the fresh attempt's upload would conflict and
+          # the recorder would keep matching the stale attempt's result.json.
+          overwrite: true
+
+      - name: Report
+        if: always()
+        env:
+          REPO_NAME: ${{ inputs.repo_name }}
+          REF_KIND: ${{ inputs.ref_kind }}
+          REF_VALUE: ${{ inputs.ref_value }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}"
+          fail=0
+          if [ -s .sweep-absent.txt ]; then
+            echo "::error::registered package(s) missing from the tree: $(paste -sd' ' .sweep-absent.txt)"
+            fail=1
+          fi
+          if [ -f .sweep-results.txt ] && grep -qE ' (failure)( |$)' .sweep-results.txt; then
+            fail=1
+          fi
+          {
+            echo "### sweep ${REPO_NAME} @ ${REF_KIND} ${REF_VALUE}"
+            echo ""
+            echo "| package | present | build | test |"
+            echo "|---|---|---|---|"
+            while IFS= read -r pkg; do
+              line=$(grep "^${pkg} " .sweep-results.txt 2>/dev/null || true)
+              if [ -n "${line}" ]; then
+                echo "| ${pkg} | yes | $(awk '{print $2}' <<< "${line}") | $(awk '{print $3}' <<< "${line}") |"
+              else
+                echo "| ${pkg} | yes | - | - |"
+              fi
+            done < <(cat .sweep-present.txt 2>/dev/null || true)
+            while IFS= read -r pkg; do
+              echo "| ${pkg} | **no** | - | - |"
+            done < <(cat .sweep-absent.txt 2>/dev/null || true)
+          } >> "${GITHUB_STEP_SUMMARY}"
+          exit "${fail}"

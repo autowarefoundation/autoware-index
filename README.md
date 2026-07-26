@@ -120,5 +120,6 @@ To preview the browse site locally, see [`site/README.md`](site/README.md).
   composes a `.repos` file from the registry (`compose`), checks a workspace against it
   (`check`), and lists packages with their latest validation status (`list`).
 - [`autoware-index-github-actions`](https://github.com/autowarefoundation/autoware-index-github-actions)
-  hosts the reusable workflows that do the actual per-repository build + test, plus
-  the `latest-autoware-version` resolver.
+  hosts `validate-package.yaml`, the reusable workflow a registered package's own CI
+  calls to check it still builds against the latest Autoware Core release, plus the
+  `latest-autoware-version` resolver this repository's sweep uses.

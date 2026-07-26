@@ -64,7 +64,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
-    uses: autowarefoundation/autoware-index-github-actions/.github/workflows/sweep-repository.yaml@main
+    uses: ./.github/workflows/sweep-repository.yaml
     with:
       ros_distro: ${{ matrix.ros_distro }}
       repo_name: ${{ matrix.repo_name }}

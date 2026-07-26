@@ -6,8 +6,8 @@ The sweep workflow runs:
     discover  → matrix JSON (one row per (distro, repository), with the
                 space-separated registered package names)
        │
-    validate  → per-row jobs that call autoware-index-github-actions'
-                sweep-repository.yaml: ONE clone + union build per repo,
+    validate  → per-row jobs that call .github/workflows/sweep-repository.yaml:
+                ONE clone + union build per repo,
                 per-package verdicts derived inside the job, uploaded as
                 validate-result-<distro>-<repo_name>-<version> containing
                 result.json (schema 2) + package-xmls/<pkg>.xml

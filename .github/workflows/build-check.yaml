@@ -13,7 +13,7 @@
 #        build, and entries the PR does not touch are never rebuilt (unlike
 #        sweep_matrix.py --mode eager, which diffs ALL entries against the
 #        data-branch cursors and would blame unrelated staleness on the PR)
-#     -> validate: matrix fan-out into sweep-repository.yaml@main, exactly
+#     -> validate: matrix fan-out into sweep-repository.yaml, exactly
 #        like sweep-eager.yaml's validate job
 #     -> and nothing else: NO record job. The verdict is advisory, for the
 #        reviewing maintainer; history stays append-only from post-merge
@@ -105,7 +105,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
-    uses: autowarefoundation/autoware-index-github-actions/.github/workflows/sweep-repository.yaml@main
+    uses: ./.github/workflows/sweep-repository.yaml
     with:
       ros_distro: ${{ matrix.ros_distro }}
       repo_name: ${{ matrix.repo_name }}

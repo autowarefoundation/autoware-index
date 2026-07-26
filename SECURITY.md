@@ -19,10 +19,13 @@ builds of externally-hosted package source**:
   repository is therefore executed by our runners. Registrations are reviewed by
   maintainers before merge for exactly this reason.
 - Validation results are recorded verbatim to the orphan `data` branch and
-  rendered by the browse site. The reusable workflows in
-  [`autoware-index-github-actions`](https://github.com/autowarefoundation/autoware-index-github-actions)
-  produce those results; pinning them to an immutable ref (a release tag + SHA)
-  rather than a moving branch is tracked hardening work.
+  rendered by the browse site. The reusable workflow that produces them,
+  `.github/workflows/sweep-repository.yaml`, lives in this repository and is
+  called at the caller's own commit. It resolves the Autoware version through
+  the `latest-autoware-version` action in
+  [`autoware-index-github-actions`](https://github.com/autowarefoundation/autoware-index-github-actions),
+  still referenced at the moving `@main`; pinning that to an immutable ref (a
+  release tag + SHA) is tracked hardening work.
 
 If you find a way for a registration PR, a sweep, or the data-branch write path
 to execute unintended code, exfiltrate secrets, or falsify history records,
