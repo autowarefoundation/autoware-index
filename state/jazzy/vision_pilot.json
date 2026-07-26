@@ -1,0 +1,12 @@
+{
+  "url": "https://github.com/autowarefoundation/vision_pilot",
+  "ref": {
+    "kind": "tag",
+    "value": "v1.0"
+  },
+  "packages": [
+    "vision_pilot"
+  ],
+  "last_run_url": "https://github.com/autowarefoundation/autoware-index/actions/runs/30224688392",
+  "at": "2026-07-26T23:13:00Z"
+}
