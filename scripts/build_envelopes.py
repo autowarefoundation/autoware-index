@@ -27,8 +27,12 @@ Honesty rules (locked decision 6, applied per package):
     outcomes from a cancelled/half-run job, a missing artifact) is
     INCONCLUSIVE: a ::error annotation and a skipped envelope, never a
     fabricated record.
-Every record is validated against schema/history-record.schema.json
-(record schema 2) before it is emitted.
+Every artifact is validated against schema/sweep-result.schema.json (artifact
+schema 2) when it is read, and every record against
+schema/history-record.schema.json (record schema 2) before it is emitted. The
+artifact's emitter is the "Compose result.json" step of
+.github/workflows/sweep-repository.yaml in THIS repo; tests/test_sweep_repository.py
+runs that step for real and asserts what it writes still parses here.
 
 Side-outputs for append_history.py:
   --states-output    state/<distro>/<repo>.json payloads, emitted ONLY for
@@ -58,7 +62,9 @@ import sys
 import jsonschema
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
-SCHEMA_PATH = Path(__file__).resolve().parent.parent / "schema" / "history-record.schema.json"
+SCHEMA_DIR = Path(__file__).resolve().parent.parent / "schema"
+SCHEMA_PATH = SCHEMA_DIR / "history-record.schema.json"
+RESULT_SCHEMA_PATH = SCHEMA_DIR / "sweep-result.schema.json"
 
 
 def status_for(outcome: dict) -> str | None:
@@ -104,8 +110,45 @@ def find_result(results_dir: Path, distro: str, repo_name: str) -> Path | None:
     return None
 
 
+def result_schema_errors(
+    result: dict, validator: jsonschema.Draft202012Validator
+) -> tuple[list[str], dict[str, list[str]]]:
+    """Validate one result.json against schema/sweep-result.schema.json.
+
+    The artifact is the only payload crossing the job boundary: a YAML heredoc
+    in sweep-repository.yaml writes it, this script reads it. Both live in this
+    repo, so the emit contract is checkable — and the failures worth catching
+    are quiet ones. Reword the verdict step's "success"/"failure" tokens and
+    status_for() would map every package to None: no crash, no attributable
+    annotation, every row inconclusive, re-swept forever. Structure is checked
+    here; the semantic gates (empty resolved_sha, empty autoware_version) stay
+    in envelopes_for_row(), which owns better messages for them.
+
+    Returns (row_errors, {package: errors}). Errors under packages/<name>/ are
+    attributed to that package so a drift in one entry is skipped like any
+    other inconclusive outcome, instead of dropping its siblings' conclusive
+    records: the verdict step writes each package's line from a different echo,
+    so one line can drift while the rest stay correct.
+    """
+    row_errors: list[str] = []
+    package_errors: dict[str, list[str]] = {}
+    for err in sorted(validator.iter_errors(result), key=str):
+        path = list(err.absolute_path)
+        detail = f"{'/'.join(str(p) for p in path) or '<root>'}: {err.message}"
+        if len(path) >= 2 and path[0] == "packages":
+            package_errors.setdefault(str(path[1]), []).append(detail)
+        else:
+            row_errors.append(detail)
+    return row_errors, package_errors
+
+
 def envelopes_for_row(
-    row: dict, result: dict, sweep_kind: str, at: str, run_url: str
+    row: dict,
+    result: dict,
+    sweep_kind: str,
+    at: str,
+    run_url: str,
+    invalid_packages: dict[str, list[str]] | None = None,
 ) -> tuple[list[dict], list[str]]:
     """Build the per-package envelopes for one matrix row + its result.json.
 
@@ -116,6 +159,7 @@ def envelopes_for_row(
     distro = row["ros_distro"]
     packages = row["packages"].split()
     skips: list[str] = []
+    invalid_packages = invalid_packages or {}
 
     autoware_version = result.get("autoware_version")
     if not autoware_version:
@@ -136,6 +180,13 @@ def envelopes_for_row(
     outcomes = result.get("packages") or {}
     envelopes: list[dict] = []
     for package in packages:
+        if package in invalid_packages:
+            for detail in invalid_packages[package]:
+                skips.append(
+                    f"{distro}/{package}: outcome fails schema/sweep-result.schema.json "
+                    f"({detail}); nothing can be attributed"
+                )
+            continue
         outcome = outcomes.get(package)
         if outcome is None:
             skips.append(f"{distro}/{package}: result.json carries no outcome for this package")
@@ -209,6 +260,7 @@ def main() -> None:
     now = dt.datetime.now(dt.UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
     validator = jsonschema.Draft202012Validator(json.loads(SCHEMA_PATH.read_text()))
+    result_validator = jsonschema.Draft202012Validator(json.loads(RESULT_SCHEMA_PATH.read_text()))
 
     all_envelopes: list[dict] = []
     states: list[dict] = []
@@ -223,8 +275,24 @@ def main() -> None:
             continue
         result = json.loads(result_file.read_text())
 
+        # A malformed artifact means the emit contract drifted, not that a
+        # package failed. A row-level drift skips the whole row loudly: its
+        # state cannot advance, so it re-sweeps, and a whole-matrix drift still
+        # trips the zero-envelopes tripwire below instead of recording a
+        # green-on-nothing. A drift inside one package's outcome is attributed
+        # to that package instead, so its siblings still record.
+        row_errors, package_errors = result_schema_errors(result, result_validator)
+        if row_errors:
+            for detail in row_errors:
+                print(
+                    f"::error::{distro}/{repo_name}: result.json fails "
+                    f"schema/sweep-result.schema.json: {detail}",
+                    file=sys.stderr,
+                )
+            continue
+
         envelopes, skips = envelopes_for_row(
-            row, result, args.sweep_kind, now, args.actions_run_url
+            row, result, args.sweep_kind, now, args.actions_run_url, package_errors
         )
         for reason in skips:
             print(f"::error::{reason}; skipping envelope", file=sys.stderr)

@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/autowarefoundation/autoware-index/main/schema/sweep-result.schema.json",
+  "title": "Autoware Index sweep result artifact",
+  "description": "Schema for result.json, the per-repository artifact the sweep's validate job uploads (as validate-result-<ros_distro>-<repo_name>-<autoware_version>) and the record job's scripts/build_envelopes.py reads back. Emitted by the 'Compose result.json' step of .github/workflows/sweep-repository.yaml; both halves live in this repository so they change together. This constrains STRUCTURE: keys, types, and the outcome vocabulary. Semantic gates stay in the reader, which owns the diagnostics for them: an empty resolved_sha or autoware_version is a legal payload here and is skipped loudly by envelopes_for_row(), not rejected as malformed. Deliberately NOT additionalProperties:false at either level: an unknown key is a field someone ADDED, which the reader ignores harmlessly, and rejecting it would throw away a whole sweep's history over a backwards-compatible emitter change. A renamed key is still caught, by 'required' on the name that went missing. Exact key-set equality is asserted at PR time instead, by tests/test_sweep_repository.py.",
+  "type": "object",
+  "required": [
+    "schema",
+    "ros_distro",
+    "autoware_version",
+    "repo_name",
+    "repository",
+    "ref",
+    "resolved_sha",
+    "packages"
+  ],
+  "properties": {
+    "schema": {
+      "const": 2,
+      "description": "Artifact format version. Independent of the history record's own 'schema': 2 (schema/history-record.schema.json) — the two numbers coincide today and are versioned separately. find_result() gates on this, so bumping it without bumping the reader makes every artifact invisible rather than loud."
+    },
+    "ros_distro": {
+      "type": "string",
+      "minLength": 1,
+      "description": "ROS 2 distribution the sweep ran for, e.g. 'jazzy'. Half of the identity find_result() matches a matrix row against; never copied into the record."
+    },
+    "autoware_version": {
+      "type": "string",
+      "description": "Autoware Core SemVer the packages were validated against, resolved at runtime by the latest-autoware-version action. Copied verbatim into each record's autoware_version, where history-record.schema.json enforces X.Y.Z. Empty means the resolve step produced nothing; envelopes_for_row() skips the whole row loudly rather than recording an unattributable version."
+    },
+    "repo_name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Registry key of the repository entry. The other half of the find_result() identity match."
+    },
+    "repository": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Git URL the job actually cloned. Provenance only: the recorder builds record.repository from the matrix row, not from here."
+    },
+    "ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "value"],
+      "description": "The ref the job actually checked out. Provenance only: the recorder builds record.ref_at_test from the matrix row, not from here. Mirrors distribution.schema.json#/$defs/ref, inlined so this schema validates offline.",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["tag", "sha", "branch"]
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "resolved_sha": {
+      "type": "string",
+      "description": "The exact commit that was checked out, 40 lowercase hex. Empty is the documented 'clone/resolve never completed' signal: nothing was validated, every package also carries present:false, and envelopes_for_row() skips the whole row on it. Left unconstrained here on purpose so that gate keeps owning the message; the recorder re-validates the 40-hex form via SHA_RE before it reaches a record."
+    },
+    "packages": {
+      "type": "object",
+      "description": "One entry per package name the job was asked to validate (the workflow's `packages` input). The recorder iterates the MATRIX ROW's package list, not this map, so a name here that the row does not list is ignored and a name the row lists but this map omits becomes a loud per-package skip.",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]*$",
+        "description": "ROS package name. Hyphens are legal in repository keys and tags but NOT in package names."
+      },
+      "additionalProperties": { "$ref": "#/$defs/package_outcome" }
+    }
+  },
+  "$defs": {
+    "package_outcome": {
+      "description": "One package's verdict. Kept in $defs so build_envelopes.py can validate it per package: a drift here is attributed to the package it belongs to and skipped like any other inconclusive outcome, instead of dropping the conclusive records of every sibling in the same repository.",
+      "type": "object",
+      "required": ["present", "build_outcome", "test_outcome"],
+      "properties": {
+          "present": {
+            "type": "boolean",
+            "description": "Whether `colcon list` found this package in the cloned tree. false means nothing was validated for it, whatever the outcomes say."
+          },
+          "build_outcome": {
+            "type": ["string", "null"],
+            "enum": ["success", "failure", null],
+            "description": "Verdict for this package's OWN workspace-local dependency closure, including a closure member declaring an unresolvable rosdep key. null means the build never ran (package absent, rosdep infrastructure fault, no-Summary infrastructure fault, cancellation) and is INCONCLUSIVE, never a red. The vocabulary is closed on purpose: status_for() compares against these exact literals, so any reword ('ok', 'passed', 'Success') would silently turn every package inconclusive and re-sweep the row forever."
+          },
+          "test_outcome": {
+            "type": ["string", "null"],
+            "enum": ["success", "failure", null],
+            "description": "Verdict for this package's OWN tests (colcon test --packages-select). null means the tests never ran, which includes the deliberate 'skipped' sentinel the emitter erases when the build already failed. Same closed vocabulary as build_outcome, for the same reason."
+          }
+        }
+    }
+  }
+}

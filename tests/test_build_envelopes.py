@@ -404,3 +404,57 @@ def test_main_emitted_records_validate_against_schema(monkeypatch, tmp_path):
     schema = json.loads(m.SCHEMA_PATH.read_text())
     for e in envelopes:
         jsonschema.Draft202012Validator(schema).validate(e["record"])
+
+
+def test_main_row_level_schema_drift_skips_the_whole_row_loudly(monkeypatch, tmp_path, capsys):
+    # A drift outside the packages map (here an invented ref kind) means the
+    # emit contract broke, not that a package failed. Nothing in the row can be
+    # trusted, so it is skipped with the offending path named; its state cannot
+    # advance, and with every row skipped the zero-envelope tripwire fires
+    # rather than committing a green-on-nothing.
+    write_artifact(tmp_path / "results", make_result(ref={"kind": "commit", "value": "1.2.0"}))
+    with pytest.raises(SystemExit):
+        run_main(monkeypatch, tmp_path, [make_row()])
+    err = capsys.readouterr().err
+    assert "result.json fails schema/sweep-result.schema.json" in err
+    assert "ref/kind" in err
+
+
+def test_main_package_level_schema_drift_skips_only_that_package(monkeypatch, tmp_path, capsys):
+    # The verdict step writes each package's line from its own echo, so one can
+    # drift while the rest stay correct. The drifted package is skipped like any
+    # other inconclusive outcome and its sibling still records -- but the row is
+    # only partially conclusive, so its state must not advance.
+    result = make_result()
+    result["packages"]["autoware_a_filter"]["build_outcome"] = "ok"
+    write_artifact(tmp_path / "results", result)
+
+    envelopes, states, _ = run_main(monkeypatch, tmp_path, [make_row()])
+    assert [e["package_name"] for e in envelopes] == ["zz_planner_b"]
+    assert states == []
+    err = capsys.readouterr().err
+    assert "autoware_a_filter: outcome fails schema/sweep-result.schema.json" in err
+    assert "build_outcome" in err
+
+
+def test_main_unknown_keys_do_not_cost_the_row_its_records(monkeypatch, tmp_path):
+    # An added field is backwards compatible: the reader ignores it, so
+    # validation must too. Rejecting it would throw away a whole sweep's
+    # history over a harmless emitter change.
+    result = make_result(runner_os="ubuntu-24.04")
+    result["packages"]["autoware_a_filter"]["duration_s"] = 12
+    write_artifact(tmp_path / "results", result)
+    envelopes, states, _ = run_main(monkeypatch, tmp_path, [make_row()])
+    assert len(envelopes) == 2 and len(states) == 1
+
+
+def test_main_accepts_a_result_with_an_empty_resolved_sha(monkeypatch, tmp_path, capsys):
+    # The schema must not pre-empt the reader's own gates: an empty
+    # resolved_sha is a legal payload that envelopes_for_row() rejects with a
+    # message explaining that nothing was validated.
+    write_artifact(tmp_path / "results", make_result(resolved_sha=""))
+    with pytest.raises(SystemExit):
+        run_main(monkeypatch, tmp_path, [make_row()])
+    err = capsys.readouterr().err
+    assert "nothing was validated" in err
+    assert "fails schema/sweep-result.schema.json" not in err
