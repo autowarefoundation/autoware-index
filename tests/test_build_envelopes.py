@@ -99,41 +99,69 @@ def test_status_for(outcome, expected):
 
 
 # --------------------------------------------------------------------------
-# find_result: content-keyed artifact discovery (layout-independent)
+# find_results: content-keyed artifact discovery (layout-independent)
 # --------------------------------------------------------------------------
-def test_find_result_matches_on_content_not_dirname(tmp_path):
+def only(results_dir, distro, repo_name):
+    """Return the single match, asserting there is exactly one."""
+    found = m.find_results(results_dir, distro, repo_name)
+    assert len(found) == 1, found
+    return found[0]
+
+
+def test_find_results_matches_on_content_not_dirname(tmp_path):
     write_artifact(tmp_path, make_result(), subdir="weirdly-named-dir")
-    found = m.find_result(tmp_path, "jazzy", "awesome_tools")
-    assert found is not None
+    found = only(tmp_path, "jazzy", "awesome_tools")
     assert found.name == "result.json"
     assert found.parent.name == "weirdly-named-dir"
 
 
-def test_find_result_root_extraction_layout(tmp_path):
+def test_find_results_root_extraction_layout(tmp_path):
     # Single-artifact downloads extract to the path root, no subdir.
     (tmp_path / "result.json").write_text(json.dumps(make_result()))
-    assert m.find_result(tmp_path, "jazzy", "awesome_tools") == tmp_path / "result.json"
+    assert only(tmp_path, "jazzy", "awesome_tools") == tmp_path / "result.json"
 
 
-def test_find_result_distinguishes_repos_and_distros(tmp_path):
+def test_find_results_distinguishes_repos_and_distros(tmp_path):
     write_artifact(tmp_path, make_result(), subdir="a")
     write_artifact(tmp_path, make_result(repo_name="other_repo"), subdir="b")
     write_artifact(tmp_path, make_result(ros_distro="humble"), subdir="c")
-    assert m.find_result(tmp_path, "jazzy", "other_repo").parent.name == "b"
-    assert m.find_result(tmp_path, "humble", "awesome_tools").parent.name == "c"
+    assert only(tmp_path, "jazzy", "other_repo").parent.name == "b"
+    assert only(tmp_path, "humble", "awesome_tools").parent.name == "c"
 
 
-def test_find_result_ignores_v1_results_and_garbage(tmp_path):
+def test_find_results_ignores_v1_results_and_garbage(tmp_path):
     # A legacy per-package result.json has no "schema": 2 and is never matched.
     legacy = {"ros_distro": "jazzy", "package_name": "awesome_tools", "build_outcome": "success"}
     write_artifact(tmp_path, legacy, subdir="legacy")
     (tmp_path / "junk").mkdir()
     (tmp_path / "junk" / "result.json").write_text("{not json")
-    assert m.find_result(tmp_path, "jazzy", "awesome_tools") is None
+    assert m.find_results(tmp_path, "jazzy", "awesome_tools") == []
 
 
-def test_find_result_empty_dir(tmp_path):
-    assert m.find_result(tmp_path, "jazzy", "awesome_tools") is None
+def test_find_results_empty_dir(tmp_path):
+    assert m.find_results(tmp_path, "jazzy", "awesome_tools") == []
+
+
+def test_find_results_returns_every_match_not_the_first(tmp_path):
+    # Two attempts of one run, uploaded under different artifact names because
+    # a re-run re-resolved the Autoware version. Returning only the first would
+    # silently commit whichever version sorts first as a STRING -- and that is
+    # not even reliably the stale one, so the bug would be nondeterministic.
+    write_artifact(
+        tmp_path,
+        make_result(autoware_version="1.8.0"),
+        subdir="validate-result-jazzy-awesome_tools-1.8.0",
+    )
+    write_artifact(
+        tmp_path,
+        make_result(autoware_version="1.9.0"),
+        subdir="validate-result-jazzy-awesome_tools-1.9.0",
+    )
+    found = m.find_results(tmp_path, "jazzy", "awesome_tools")
+    assert sorted(p.parent.name for p in found) == [
+        "validate-result-jazzy-awesome_tools-1.8.0",
+        "validate-result-jazzy-awesome_tools-1.9.0",
+    ]
 
 
 # --------------------------------------------------------------------------
@@ -458,3 +486,75 @@ def test_main_accepts_a_result_with_an_empty_resolved_sha(monkeypatch, tmp_path,
     err = capsys.readouterr().err
     assert "nothing was validated" in err
     assert "fails schema/sweep-result.schema.json" not in err
+
+
+def test_main_ambiguous_artifacts_skip_the_row_instead_of_guessing(monkeypatch, tmp_path, capsys):
+    # A "Re-run all jobs" that straddles an Autoware release re-runs `resolve`,
+    # so the fresh upload lands under a NEW artifact name and `overwrite: true`
+    # cannot replace the stale one. Both carry real verdicts for real builds,
+    # and nothing on disk says which attempt is newer. Picking either would
+    # record a coin flip as provenance, so the row is skipped: its state does
+    # not advance and it re-sweeps cleanly against a single artifact.
+    results = tmp_path / "results"
+    write_artifact(
+        results,
+        make_result(
+            autoware_version="1.8.0",
+            packages={
+                "autoware_a_filter": {
+                    "present": True,
+                    "build_outcome": "failure",
+                    "test_outcome": None,
+                },
+                "zz_planner_b": {
+                    "present": True,
+                    "build_outcome": "failure",
+                    "test_outcome": None,
+                },
+            },
+        ),
+        subdir="validate-result-jazzy-awesome_tools-1.8.0",
+    )
+    write_artifact(
+        results,
+        make_result(autoware_version="1.9.0"),
+        subdir="validate-result-jazzy-awesome_tools-1.9.0",
+    )
+    with pytest.raises(SystemExit):
+        run_main(monkeypatch, tmp_path, [make_row()])
+    err = capsys.readouterr().err
+    assert "2 result artifacts match this row" in err
+    assert "Refusing to guess" in err
+    assert "validate-result-jazzy-awesome_tools-1.8.0" in err
+    assert "validate-result-jazzy-awesome_tools-1.9.0" in err
+
+
+def test_main_ambiguity_does_not_block_other_rows(monkeypatch, tmp_path, capsys):
+    # One ambiguous row must not cost the rest of the sweep its records.
+    results = tmp_path / "results"
+    good = make_row(repo_name="good_tools", packages="autoware_a_filter")
+    write_artifact(
+        results,
+        make_result(
+            repo_name="good_tools",
+            packages={
+                "autoware_a_filter": {
+                    "present": True,
+                    "build_outcome": "success",
+                    "test_outcome": "success",
+                }
+            },
+        ),
+        subdir="validate-result-jazzy-good_tools-1.9.0",
+    )
+    for version in ("1.8.0", "1.9.0"):
+        write_artifact(
+            results,
+            make_result(autoware_version=version),
+            subdir=f"validate-result-jazzy-awesome_tools-{version}",
+        )
+
+    envelopes, states, _ = run_main(monkeypatch, tmp_path, [good, make_row()])
+    assert [e["package_name"] for e in envelopes] == ["autoware_a_filter"]
+    assert [s["repo_name"] for s in states] == ["good_tools"]
+    assert "Refusing to guess" in capsys.readouterr().err

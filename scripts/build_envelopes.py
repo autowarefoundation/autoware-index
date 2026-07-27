@@ -17,7 +17,10 @@ The sweep workflow runs:
                 on-disk artifact layout is not stable), fans it out into one
                 envelope per registered package, stages the per-package
                 state/metadata side-outputs, and hands everything to
-                append_history.py for a single data-branch commit.
+                append_history.py for a single data-branch commit. A row whose
+                identity matches MORE than one artifact is ambiguous (a re-run
+                that re-resolved the Autoware version) and is skipped loudly
+                rather than guessed at.
 
 Honesty rules (locked decision 6, applied per package):
   - pass  only when the package's own closure build AND its own tests
@@ -86,16 +89,30 @@ def status_for(outcome: dict) -> str | None:
     return None
 
 
-def find_result(results_dir: Path, distro: str, repo_name: str) -> Path | None:
-    """Find the result.json sweep-repository.yaml uploaded for (distro, repo).
+def find_results(results_dir: Path, distro: str, repo_name: str) -> list[Path]:
+    """Find every result.json sweep-repository.yaml uploaded for (distro, repo).
 
     download-artifact's on-disk layout is not stable: with several matching
     artifacts it makes a per-artifact subdirectory, but with a single match it
     extracts straight into the download path root. So we cannot key off the
     artifact directory name. Every result.json carries its own identity, so
-    search recursively and match on the file's contents. Returns the PATH (the
-    sibling package-xmls/ dir is needed too), not the parsed payload.
+    search recursively and match on the file's contents. Returns PATHS (the
+    sibling package-xmls/ dir is needed too), not the parsed payloads.
+
+    ALL matches are returned, not the first, because more than one is possible
+    and picking between them cannot be done here. Artifacts are named
+    validate-result-<distro>-<repo>-<autoware_version> and re-runs rely on
+    `overwrite: true` to replace the previous attempt's upload — but that only
+    works while the name is identical. A full "Re-run all jobs" that straddles
+    an Autoware release re-runs the `resolve` job too, resolves a NEWER
+    version, and uploads under a NEW name; the earlier attempt's artifact stays
+    in the run and matches this same (schema, ros_distro, repo_name) identity.
+    Returning the first would then commit whichever version sorts first as a
+    string, which is not even reliably the stale one: "1.8.0" < "1.9.0" picks
+    the stale attempt, "1.10.0" < "1.8.0" picks the fresh one. The caller
+    refuses to guess instead.
     """
+    matches = []
     for result_file in sorted(results_dir.glob("**/result.json")):
         try:
             data = json.loads(result_file.read_text())
@@ -106,8 +123,8 @@ def find_result(results_dir: Path, distro: str, repo_name: str) -> Path | None:
             and data.get("ros_distro") == distro
             and data.get("repo_name") == repo_name
         ):
-            return result_file
-    return None
+            matches.append(result_file)
+    return matches
 
 
 def result_schema_errors(
@@ -266,13 +283,29 @@ def main() -> None:
     states: list[dict] = []
     for row in rows:
         distro, repo_name = row["ros_distro"], row["repo_name"]
-        result_file = find_result(results_dir, distro, repo_name)
-        if result_file is None:
+        matches = find_results(results_dir, distro, repo_name)
+        if not matches:
             print(
                 f"::error::no result artifact for {distro}/{repo_name}; skipping its envelopes",
                 file=sys.stderr,
             )
             continue
+        if len(matches) > 1:
+            # Two attempts of the same run uploaded under different names,
+            # which only happens when a re-run re-resolved the Autoware
+            # version. Both carry real verdicts for real builds and nothing on
+            # disk says which attempt is newer, so choosing would be a coin
+            # flip recorded as provenance. Skip the row: its state cannot
+            # advance, so it re-sweeps cleanly against one artifact.
+            listed = ", ".join(sorted(str(p.parent.name) for p in matches))
+            print(
+                f"::error::{distro}/{repo_name}: {len(matches)} result artifacts match this "
+                f"row ({listed}); a re-run resolved a different autoware_version, so which "
+                f"attempt is current is ambiguous. Refusing to guess; skipping its envelopes",
+                file=sys.stderr,
+            )
+            continue
+        result_file = matches[0]
         result = json.loads(result_file.read_text())
 
         # A malformed artifact means the emit contract drifted, not that a
