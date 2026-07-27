@@ -91,7 +91,11 @@ def step_env(step: dict, expressions: dict[str, str] | None = None) -> dict[str,
 
 
 def run_step(
-    repo_root: Path, tmp_path: Path, name: str, env: dict[str, str], stubs: dict[str, str] | None = None
+    repo_root: Path,
+    tmp_path: Path,
+    name: str,
+    env: dict[str, str],
+    stubs: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess:
     """Execute a workflow step's ENTIRE run: body under bash, in tmp_path.
 
@@ -209,7 +213,9 @@ def test_package_outcome_keys_match_the_schema_exactly(repo_root, tmp_path):
         repo_root, tmp_path, packages="pkg_a", results="pkg_a success success\n", present="pkg_a\n"
     )
     declared = result_schema(repo_root)["$defs"]["package_outcome"]
-    assert set(result["packages"]["pkg_a"]) == set(declared["required"]) == set(declared["properties"])
+    assert (
+        set(result["packages"]["pkg_a"]) == set(declared["required"]) == set(declared["properties"])
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -231,15 +237,24 @@ def test_schema_outcome_enum_is_exactly_what_status_for_understands(repo_root):
 
     # Every non-null enum member must be a literal status_for actually branches
     # on, in both positions.
-    assert build_envelopes.status_for(
-        {"present": True, "build_outcome": "success", "test_outcome": "success"}
-    ) == "pass"
-    assert build_envelopes.status_for(
-        {"present": True, "build_outcome": "failure", "test_outcome": None}
-    ) == "fail"
-    assert build_envelopes.status_for(
-        {"present": True, "build_outcome": "success", "test_outcome": "failure"}
-    ) == "fail"
+    assert (
+        build_envelopes.status_for(
+            {"present": True, "build_outcome": "success", "test_outcome": "success"}
+        )
+        == "pass"
+    )
+    assert (
+        build_envelopes.status_for(
+            {"present": True, "build_outcome": "failure", "test_outcome": None}
+        )
+        == "fail"
+    )
+    assert (
+        build_envelopes.status_for(
+            {"present": True, "build_outcome": "success", "test_outcome": "failure"}
+        )
+        == "fail"
+    )
 
 
 def test_every_writer_of_sweep_results_uses_the_known_vocabulary(repo_root):
@@ -257,10 +272,14 @@ def test_every_writer_of_sweep_results_uses_the_known_vocabulary(repo_root):
     body = "\n".join(
         s["run"] for s in workflow["jobs"]["validate"]["steps"] if isinstance(s.get("run"), str)
     )
-    writers = [ln.strip() for ln in body.splitlines() if re.search(r">>?\s*\.sweep-results\.txt", ln)]
+    writers = [
+        ln.strip() for ln in body.splitlines() if re.search(r">>?\s*\.sweep-results\.txt", ln)
+    ]
     truncations = [ln for ln in writers if ln.startswith(": >")]
     echoes = [ln for ln in writers if ln not in truncations]
-    assert len(truncations) == 1, f"expected exactly one truncation of .sweep-results.txt: {truncations}"
+    assert (
+        len(truncations) == 1
+    ), f"expected exactly one truncation of .sweep-results.txt: {truncations}"
 
     recognised = re.compile(r'^echo "\$\{pkg\} (\w+) (\w+)" >> \.sweep-results\.txt$')
     unrecognised = [ln for ln in echoes if not recognised.match(ln)]
@@ -541,7 +560,7 @@ def test_rosdep_step_retries_with_skip_keys_so_siblings_still_install(repo_root,
 
 
 def test_rosdep_step_hard_fails_on_an_infrastructure_fault(repo_root, tmp_path):
-    """rosdep naming nobody must never be attributed to a package.
+    """A rosdep failure naming nobody must never be attributed to a package.
 
     Exit non-zero with nothing seeded: the build and verdict steps are then
     skipped, every outcome stays null, and the recorder treats the row as

@@ -74,21 +74,21 @@
       "type": "object",
       "required": ["present", "build_outcome", "test_outcome"],
       "properties": {
-          "present": {
-            "type": "boolean",
-            "description": "Whether `colcon list` found this package in the cloned tree. false means nothing was validated for it, whatever the outcomes say."
-          },
-          "build_outcome": {
-            "type": ["string", "null"],
-            "enum": ["success", "failure", null],
-            "description": "Verdict for this package's OWN workspace-local dependency closure, including a closure member declaring an unresolvable rosdep key. null means the build never ran (package absent, rosdep infrastructure fault, no-Summary infrastructure fault, cancellation) and is INCONCLUSIVE, never a red. The vocabulary is closed on purpose: status_for() compares against these exact literals, so any reword ('ok', 'passed', 'Success') would silently turn every package inconclusive and re-sweep the row forever."
-          },
-          "test_outcome": {
-            "type": ["string", "null"],
-            "enum": ["success", "failure", null],
-            "description": "Verdict for this package's OWN tests (colcon test --packages-select). null means the tests never ran, which includes the deliberate 'skipped' sentinel the emitter erases when the build already failed. Same closed vocabulary as build_outcome, for the same reason."
-          }
+        "present": {
+          "type": "boolean",
+          "description": "Whether `colcon list` found this package in the cloned tree. false means nothing was validated for it, whatever the outcomes say."
+        },
+        "build_outcome": {
+          "type": ["string", "null"],
+          "enum": ["success", "failure", null],
+          "description": "Verdict for this package's OWN workspace-local dependency closure, including a closure member declaring an unresolvable rosdep key. null means the build never ran (package absent, rosdep infrastructure fault, no-Summary infrastructure fault, cancellation) and is INCONCLUSIVE, never a red. The vocabulary is closed on purpose: status_for() compares against these exact literals, so any reword ('ok', 'passed', 'Success') would silently turn every package inconclusive and re-sweep the row forever."
+        },
+        "test_outcome": {
+          "type": ["string", "null"],
+          "enum": ["success", "failure", null],
+          "description": "Verdict for this package's OWN tests (colcon test --packages-select). null means the tests never ran, which includes the deliberate 'skipped' sentinel the emitter erases when the build already failed. Same closed vocabulary as build_outcome, for the same reason."
         }
+      }
     }
   }
 }
