@@ -297,6 +297,31 @@ jobs:
           fi
           echo "build exited ${build_rc}; failed/aborted: $(paste -sd' ' .sweep-failed.txt || true)"
 
+      - name: Relax the CycloneDDS socket buffer minimum
+        if: steps.scan.outputs.present != ''
+        shell: bash
+        # The Autoware image exports CYCLONEDDS_URI pointing at a config that
+        # demands SocketReceiveBufferSize min="10MB". A job container cannot
+        # raise net.core.rmem_max past 2 MiB, so Cyclone refuses to create a
+        # domain and every gtest constructing an rclcpp::Node dies with
+        # "failed to initialize rcl node" -- reporting an honest package as a
+        # test failure. Upstream repos patch the same file in their own CI.
+        # The minimum only bounds DDS throughput, which no verdict depends on.
+        run: |
+          set -euo pipefail
+          config="${CYCLONEDDS_URI:-}"
+          config="${config#file://}"
+          if [ -z "${config}" ] || [ ! -f "${config}" ]; then
+            echo "::notice::no CycloneDDS config at '${config:-<unset>}'; nothing to relax"
+            exit 0
+          fi
+          if ! grep -q 'min="10MB"' "${config}"; then
+            echo "::notice::${config} pins no 10MB socket buffer minimum; leaving it alone"
+            exit 0
+          fi
+          sed -i 's|min="10MB"|min="default"|' "${config}"
+          echo "relaxed SocketReceiveBufferSize min in ${config}"
+
       - name: Derive per-package verdicts (own closure build, own tests)
         if: steps.scan.outputs.present != ''
         env:
