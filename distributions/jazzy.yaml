@@ -63,8 +63,8 @@ repositories:
   vision_pilot:
     url: https://github.com/autowarefoundation/vision_pilot
     ref:
-      kind: tag
-      value: v1.0
+      kind: sha
+      value: "fb71488da95940bfb2232887583833d08702f8c1"
     governance: foundation
     maintainers:
       - name: Atanasko Mitrev
