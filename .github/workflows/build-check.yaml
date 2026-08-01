@@ -76,7 +76,7 @@ jobs:
       - name: Check out the merge parent
         run: git worktree add --detach _base "$(git rev-parse 'HEAD^1')"
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
