@@ -46,6 +46,7 @@ STATIC_ASSETS = (
     "register.html",
     "register.css",
     "register.js",
+    "favicon.svg",
 )
 
 sys.path.insert(0, str(SITE_DIR.parent / "scripts"))

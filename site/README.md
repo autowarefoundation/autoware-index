@@ -13,6 +13,7 @@ site/
   register.html # registration page shell (linked from the browse header)
   register.css  # registration page styles (shares the brand tokens from styles.css)
   register.js   # registration wizard: live YAML entry + client-side mirror of the PR gates
+  favicon.svg   # tab icon: the Autoware mark, from autoware-repos-visualizer's optimized favicon
   sample-data/  # local-preview history + metadata fixtures (CI never reads it)
 ```
 
