@@ -1,12 +1,12 @@
 {
   "url": "https://github.com/autowarefoundation/autoware_livox_tag_filter",
   "ref": {
-    "kind": "branch",
-    "value": "main"
+    "kind": "tag",
+    "value": "1.0.0"
   },
   "packages": [
     "autoware_livox_tag_filter"
   ],
-  "last_run_url": "https://github.com/autowarefoundation/autoware-index/actions/runs/31156206051",
-  "at": "2026-08-07T07:12:25Z"
+  "last_run_url": "https://github.com/autowarefoundation/autoware-index/actions/runs/31161569351",
+  "at": "2026-08-07T08:27:21Z"
 }
