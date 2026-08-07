@@ -13,8 +13,8 @@ repositories:
   autoware_livox_tag_filter:
     url: https://github.com/autowarefoundation/autoware_livox_tag_filter
     ref:
-      kind: branch
-      value: main
+      kind: tag
+      value: 1.0.0
     governance: foundation
     maintainers:
       - name: Ryohsuke Mitsudome
