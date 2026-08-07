@@ -5,10 +5,6 @@
 # ONE ref, and lists the registered packages it hosts under `packages:`.
 # A monorepo registers several packages in one entry, all validated in
 # lockstep at the repository's single ref.
-#
-# autoware_livox_tag_filter is registered against its `main` branch: the
-# upstream repo has no tags/releases yet, so a branch ref is the only thing
-# that resolves today. Switch to `kind: tag` once maintainers cut a release.
 
 schema_version: "2"
 ros_distro: jazzy
@@ -19,7 +15,7 @@ repositories:
     ref:
       kind: branch
       value: main
-    governance: community
+    governance: foundation
     maintainers:
       - name: Ryohsuke Mitsudome
         email: ryohsuke.mitsudome@tier4.jp
