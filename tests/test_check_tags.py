@@ -29,6 +29,7 @@ VOCAB_BODY = """\
       planning:
         group: pipeline
         summary: Mission, behavior, and motion planning.
+        aliases: [nav, route-planning]
       tool:
         group: operations
         summary: An executable developer utility you run.
@@ -119,6 +120,21 @@ class TestCheckPackageTags:
         errors = check_tags.check_package_tags("f.yaml", "r.p", ["slam"], vocab)
         assert len(errors) == 1
         assert "unknown tag 'slam' (no close match; see schema/tags.yaml)" in errors[0]
+
+    def test_alias_rejected_naming_canonical_id(self, tmp_path):
+        # An alias is a search synonym, never a registry value; the error is
+        # an exact statement of the canonical id, not a did-you-mean guess.
+        vocab = load_vocab(tmp_path)
+        errors = check_tags.check_package_tags("f.yaml", "r.p", ["nav"], vocab)
+        assert len(errors) == 1
+        assert "tag 'nav' is a search alias of 'planning'; write 'planning'" in errors[0]
+
+    def test_alias_check_tolerates_pre_alias_vocabulary(self, tmp_path):
+        # A vocabulary dict without the computed `aliases` map (built by an
+        # older loader) must not crash the check.
+        vocab = load_vocab(tmp_path)
+        vocab.pop("aliases")
+        assert check_tags.check_package_tags("f.yaml", "r.p", ["sensing"], vocab) == []
 
     def test_deprecated_tag_names_replacement(self, tmp_path):
         vocab = load_vocab(tmp_path)

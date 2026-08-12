@@ -1421,11 +1421,14 @@ function tagPicker(pkg) {
     if (!tags.length) continue;
     const chips = el("div", { class: "tagpick-chips" });
     for (const tag of tags) {
-      const title = tag.disambiguation ? `${tag.summary} ${tag.disambiguation}` : tag.summary;
+      let title = tag.disambiguation ? `${tag.summary} ${tag.disambiguation}` : tag.summary;
+      // A labeled chip shows the label but stores the id, so the tooltip
+      // names the id the generated YAML will carry.
+      if (tag.label && tag.label !== tag.id) title = `Stored as \`${tag.id}\`. ${title}`;
       const chip = el("button", {
         type: "button",
         class: "tagchip",
-        text: tag.id,
+        text: tag.label || tag.id,
         title,
         "aria-pressed": "false",
       });
