@@ -58,6 +58,12 @@ tags:
   v2x:
     group: pipeline
     summary: Vehicle-to-everything communication (ETSI ITS stacks, V2I bridges and mocks).
+  e2e-driving:
+    group: pipeline
+    label: End-to-end driving
+    summary: A driving stack built around end-to-end AI models, from camera or sensor input to driving commands (hybrid architectures with a classical planner qualify).
+    disambiguation: End-to-end SIMULATION is `simulator`; full-system integration testing is `testing`; a component-level learned model is `ml` plus its pipeline tag.
+    aliases: [e2e, end-to-end, e2e-ai, end-to-end-ai]
 
   # --- Infrastructure & support ---
   common-library:
