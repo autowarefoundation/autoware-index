@@ -78,7 +78,10 @@ repositories:
     packages:
       vision_pilot:
         tags:
+          - e2e-driving
+          - ml
           - sensing
           - perception
           - planning
+          - control
         description: Open-Source End-to-End L2 ADAS System
