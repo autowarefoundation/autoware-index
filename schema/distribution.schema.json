@@ -42,6 +42,13 @@
           "type": "string",
           "enum": ["community", "foundation"]
         },
+        "reference_design": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "enum": ["pov"] },
+          "uniqueItems": true,
+          "description": "Optional, reviewer-granted: the named AWF reference designs whose published documentation cites this repository ('pov' = the privately-owned-vehicles design). The grant test is that citation, so any reviewer can confirm or refuse a value from public documents. The enum grows one value per design whose owners confirm its spelling; it is display and filter metadata, never a ref selector, and stays outside the sweep diff tuple."
+        },
         "maintainers": {
           "type": "array",
           "minItems": 1,
