@@ -182,9 +182,25 @@ alone is three-way ambiguous inside Autoware (simulation, integration
 testing, learned driving).
 
 Previously rejected (with reasons): `racing`, `hmi`, `fleet-management`,
-`security`, `deployment` (no two registerable anchor packages exist);
-`gpu`/`cuda` (a hardware requirement, wrong axis); `profiling` (folded into
-`evaluation`'s definition).
+`security`, `deployment` (no two registerable anchor packages exist), and
+`profiling` (folded into `evaluation`'s definition).
+
+Ids refused permanently live under `reserved:` in
+[`schema/tags.yaml`](schema/tags.yaml). CI prints the recorded reason word
+for word when one enters a distribution file. Two families are refused once,
+here, so they are not re-litigated request by request:
+
+- **Safety claims**: ASIL, ISO 26262, SOTIF, ISO 21434, "certified",
+  "production-ready", TRL, and asserted REP-2004 levels. ASIL attaches to an
+  item inside a system boundary and an ODD. The identical package is QM in
+  one vehicle program and ASIL-B in another. The sweep proves that a
+  repository builds. It proves nothing about hazard analysis.
+- **Machine-measurable properties**: `gpu`, `cuda`, `jetson`, `arm`,
+  archived-upstream, and quality-declaration presence. CI can measure these
+  from what the sweep already clones, so a human never asserts them. License
+  class is the cheap yes beside this refusal: `package.xml` already carries
+  `<license>` and the sweep already caches it, so showing it is display work
+  only.
 
 ### Renaming, merging, or retiring a tag
 

@@ -39,6 +39,10 @@ VOCAB_BODY = """\
         note: Renamed.
       retired:
         replaced_by: []
+    reserved:
+      gpu:
+        note: A build requirement, not a topic. Derivable from package.xml/CMake.
+        see: [tool]
     """
 
 DISTRO_TEMPLATE = """\
@@ -134,6 +138,23 @@ class TestCheckPackageTags:
         # older loader) must not crash the check.
         vocab = load_vocab(tmp_path)
         vocab.pop("aliases")
+        assert check_tags.check_package_tags("f.yaml", "r.p", ["sensing"], vocab) == []
+
+    def test_reserved_tag_prints_recorded_note_and_see(self, tmp_path):
+        # The refusal is data, printed word for word at the moment of the
+        # mistake, so it never has to be re-argued in review.
+        vocab = load_vocab(tmp_path)
+        errors = check_tags.check_package_tags("f.yaml", "r.p", ["gpu"], vocab)
+        assert len(errors) == 1
+        assert (
+            "f.yaml::r.p: tag 'gpu' is reserved and will not be minted. "
+            "A build requirement, not a topic. Derivable from package.xml/CMake. "
+            "(see: tool)"
+        ) == errors[0]
+
+    def test_reserved_check_tolerates_pre_reserved_vocabulary(self, tmp_path):
+        vocab = load_vocab(tmp_path)
+        vocab.pop("reserved")
         assert check_tags.check_package_tags("f.yaml", "r.p", ["sensing"], vocab) == []
 
     def test_deprecated_tag_names_replacement(self, tmp_path):
