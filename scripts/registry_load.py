@@ -278,7 +278,7 @@ def flatten_packages(doc: dict, *, distro: str | None = None) -> list[dict]:
     Each record carries the repository context the package inherits:
 
         {distro, package, repo_name, repository, ref, governance,
-         tags, maintainers, description}
+         reference_design, tags, maintainers, description}
 
     `maintainers` resolves the per-package override over the repo-level
     default. The package -> repository mapping is COMPUTED here at load time,
@@ -300,6 +300,7 @@ def flatten_packages(doc: dict, *, distro: str | None = None) -> list[dict]:
                     "repository": spec.get("url", ""),
                     "ref": spec.get("ref") or {},
                     "governance": spec.get("governance", "community"),
+                    "reference_design": spec.get("reference_design") or [],
                     "tags": pkg_spec.get("tags") or [],
                     "maintainers": pkg_spec.get("maintainers") or repo_maintainers,
                     "description": pkg_spec.get("description") or "",

@@ -37,6 +37,7 @@ repositories:
       kind: sha
       value: fb71488da95940bfb2232887583833d08702f8c1
     governance: foundation
+    reference_design: [pov]
     maintainers:
       - name: Atanasko Mitrev
         email: atanasko.mitrev@autoware.org
