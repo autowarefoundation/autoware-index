@@ -43,7 +43,7 @@ SUPPORTED_SCHEMA_VERSION = "2"
 TAG_ID_PATTERN = re.compile(r"^[a-z][a-z0-9-]*$")
 TAG_ID_MAX_LENGTH = 20
 
-_TAG_KEYS = {"group", "summary", "disambiguation"}
+_TAG_KEYS = {"group", "summary", "disambiguation", "label", "aliases"}
 _DEPRECATED_KEYS = {"replaced_by", "note"}
 
 
@@ -115,16 +115,21 @@ def _check_tag_id(path: Path, tag_id: object) -> None:
 def load_vocabulary(path: Path) -> dict:
     """Parse and self-check schema/tags.yaml (the closed tag vocabulary).
 
-    Returns ``{"groups": {...}, "tags": {...}, "deprecated": {...}}`` with
-    ``deprecated`` defaulting to an empty mapping. Raises RegistryError on the
-    first inconsistency: unparseable/non-mapping document, a malformed tag id,
-    an unknown key in a tag spec (catches ``sumary:``-style typos), a missing
+    Returns ``{"groups": {...}, "tags": {...}, "deprecated": {...},
+    "aliases": {...}}`` with ``deprecated`` defaulting to an empty mapping and
+    ``aliases`` computed as one flat ``alias -> canonical live id`` map from
+    the per-tag ``aliases:`` lists. Raises RegistryError on the first
+    inconsistency: unparseable/non-mapping document, a malformed tag id, an
+    unknown key in a tag spec (catches ``sumary:``-style typos), a missing
     or empty ``summary``, a ``group`` not declared under ``groups:``, an id
-    that is both live and deprecated, or a ``replaced_by`` target that is not
+    that is both live and deprecated, a ``replaced_by`` target that is not
     a live tag (deprecation chains are rejected; always point at the final
-    replacement). Every reader (check_tags.py, site/build.py) goes through
-    this gate, so a broken vocabulary is a hard, uniform failure, never a
-    vacuously-passing check or a silently ungrouped site.
+    replacement), a malformed ``label``/``aliases`` value, or an alias that
+    collides with a live id, a deprecated id, or another tag's alias (the
+    four namespaces stay pairwise disjoint). Every reader (check_tags.py,
+    site/build.py) goes through this gate, so a broken vocabulary is a hard,
+    uniform failure, never a vacuously-passing check or a silently ungrouped
+    site.
     """
     try:
         doc = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -169,6 +174,25 @@ def load_vocabulary(path: Path) -> dict:
             not isinstance(disambiguation, str) or not disambiguation.strip()
         ):
             raise RegistryError(f"{path}::{tag_id}: `disambiguation` must be a non-empty string")
+        label = spec.get("label")
+        if label is not None and (
+            not isinstance(label, str) or not label.strip() or "\n" in label.strip()
+        ):
+            raise RegistryError(f"{path}::{tag_id}: `label` must be a non-empty single-line string")
+        aliases = spec.get("aliases")
+        if aliases is not None:
+            if not isinstance(aliases, list) or not aliases:
+                raise RegistryError(
+                    f"{path}::{tag_id}: `aliases` must be a non-empty list of alias strings"
+                )
+            for alias in aliases:
+                # Aliases share the id grammar so search stays predictable,
+                # but not the length cap: they are search terms, never ids,
+                # and never valid in distributions/*.yaml.
+                if not isinstance(alias, str) or not TAG_ID_PATTERN.match(alias):
+                    raise RegistryError(
+                        f"{path}::{tag_id}: alias {alias!r} must match {TAG_ID_PATTERN.pattern}"
+                    )
 
     deprecated = doc.get("deprecated") or {}
     if not isinstance(deprecated, dict):
@@ -200,7 +224,24 @@ def load_vocabulary(path: Path) -> dict:
         if note is not None and (not isinstance(note, str) or not note.strip()):
             raise RegistryError(f"{path}::{tag_id}: `note` must be a non-empty string")
 
-    return {"groups": groups, "tags": tags, "deprecated": deprecated}
+    # Flatten per-tag aliases into one alias -> canonical map, enforcing that
+    # live ids, deprecated ids, and aliases never overlap: an alias that
+    # shadows an id would make check_tags' diagnostics ambiguous.
+    aliases_map: dict[str, str] = {}
+    for tag_id, spec in tags.items():
+        for alias in spec.get("aliases") or []:
+            if alias in tags:
+                raise RegistryError(f"{path}::{tag_id}: alias {alias!r} is also a live tag id")
+            if alias in deprecated:
+                raise RegistryError(f"{path}::{tag_id}: alias {alias!r} is also a deprecated id")
+            if alias in aliases_map:
+                raise RegistryError(
+                    f"{path}::{tag_id}: alias {alias!r} is already an alias of "
+                    f"{aliases_map[alias]!r}"
+                )
+            aliases_map[alias] = tag_id
+
+    return {"groups": groups, "tags": tags, "deprecated": deprecated, "aliases": aliases_map}
 
 
 def canonical_url(url: str) -> str:

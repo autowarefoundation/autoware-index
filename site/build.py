@@ -101,7 +101,9 @@ def export_vocabulary(vocab: dict) -> dict:
     Groups and live tags are exported in vocabulary-file order (the display
     order for the site's grouped filter); each tag carries its group, the
     one-line summary app.js renders as the tooltip, and, when present, the
-    disambiguation sentence the register page's tag picker appends to it.
+    disambiguation sentence the register page's tag picker appends to it,
+    the display `label` (chip text; the id stays the stored/filter key), and
+    the `aliases` search synonyms app.js folds into each card's search blob.
     Deprecated ids are not exported: the gate keeps them out of the registry,
     so no card needs them.
     """
@@ -110,6 +112,10 @@ def export_vocabulary(vocab: dict) -> dict:
         tag = {"id": tid, "group": spec["group"], "summary": spec["summary"]}
         if spec.get("disambiguation"):
             tag["disambiguation"] = spec["disambiguation"]
+        if spec.get("label"):
+            tag["label"] = spec["label"]
+        if spec.get("aliases"):
+            tag["aliases"] = spec["aliases"]
         tags.append(tag)
     return {
         "groups": [{"id": gid, "title": title} for gid, title in vocab["groups"].items()],

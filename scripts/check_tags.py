@@ -16,6 +16,12 @@ defect beyond JSON-schema shape (which only checks count/pattern/uniqueness):
      merge without migrating every usage in the same commit: deprecation and
      migration are atomic by construction.
 
+  3. Alias. A search synonym from a tag's `aliases:` list (`ai` for `ml`) is
+     valid in search boxes and CLI filters, never in the registry itself; the
+     error names the canonical id to write instead. This beats the fuzzy
+     did-you-mean: the mapping is exact, so the diagnostic is a statement,
+     not a guess.
+
 The vocabulary itself is self-checked by registry_load.load_vocabulary (bad
 ids, unknown groups, replaced_by chains, ...); a broken vocabulary is a hard
 failure here, never a vacuous pass.
@@ -62,6 +68,7 @@ def check_package_tags(file: str, owner: str, tags: list, vocabulary: dict) -> l
     errors: list[str] = []
     live = set(vocabulary["tags"])
     deprecated = vocabulary["deprecated"]
+    aliases = vocabulary.get("aliases") or {}
     for tag in tags or []:
         if not isinstance(tag, str):
             # Shape defense for files that skip CI (same idiom as the
@@ -70,6 +77,12 @@ def check_package_tags(file: str, owner: str, tags: list, vocabulary: dict) -> l
             errors.append(f"{file}::{owner}: tag {tag!r} must be a string")
             continue
         if tag in live:
+            continue
+        if tag in aliases:
+            errors.append(
+                f"{file}::{owner}: tag {tag!r} is a search alias of "
+                f"{aliases[tag]!r}; write {aliases[tag]!r} in the registry"
+            )
             continue
         if tag in deprecated:
             replacements = deprecated[tag].get("replaced_by") or []
