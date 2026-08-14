@@ -123,3 +123,28 @@ tags:
 #     replaced_by: [launch]
 #     note: Renamed 2026-07 to match the ecosystem's *_launch convention (PR #NN).
 deprecated: {}
+
+# Ids decided never to mint. check_tags.py prints the recorded `note` word
+# for word when one enters a distribution file, so the refusal reaches the
+# contributor at the moment of the mistake instead of living in review
+# folklore. Optional `see:` names the live ids that cover the concept; every
+# target must be a live tag (the loader rejects danglers). Reserved ids are
+# disjoint from live ids, deprecated ids, and aliases.
+reserved:
+  reference-design:
+    note: >-
+      A repository property, not a package topic. Use the repository field
+      `reference_design`: the named designs are plural (PoV, LSA, Off-road),
+      and the field says which one.
+  gpu:
+    note: A build requirement, not a topic. Derivable from package.xml/CMake, so CI must own it, never a human.
+  stable:
+    note: A maturity claim the index cannot verify. Freshness is the sweep history.
+  asil-b:
+    note: >-
+      ASIL is assigned to an item or function within a system boundary and an
+      ODD. The identical package is QM in one vehicle program and ASIL-B in
+      another. The index has no evidence for it and must not assert it. The
+      same refusal covers the whole safety family: ISO 26262, SOTIF,
+      ISO 21434, "certified", "production-ready", and TRL.
+    see: [system]

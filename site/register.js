@@ -2172,6 +2172,7 @@ async function main() {
     (derived.length ? derived.sort() : ["jazzy"]);
   state.vocabulary = data.tag_vocabulary || { groups: [], tags: [] };
   for (const t of state.vocabulary.tags || []) state.tagInfo.set(t.id, t);
+  if (Number.isInteger(data.max_tags) && data.max_tags > 0) MAX_TAGS = data.max_tags;
 
   for (const p of packages) {
     if (!state.existing.has(p.distro))
