@@ -72,8 +72,8 @@ A PR cannot merge unless, for every changed entry:
   `.git` suffix or the ssh form count as the same URL);
 - every package name appears in exactly ONE repository entry per distro;
 - every package tag is a live id in [`schema/tags.yaml`](schema/tags.yaml)
-  (1–5 per package): unknown and deprecated tags are rejected, with a
-  did-you-mean suggestion;
+  (at least one per package): unknown and deprecated tags are rejected, with
+  a did-you-mean suggestion;
 - maintainers are real: `TBD` / `@example.com` placeholders are rejected.
 
 So please register a `ref` that exists upstream, and list real maintainers
@@ -110,8 +110,8 @@ See [`README.md`](README.md#ref-kinds) for details.
 
 ## Package tags
 
-Every registered package carries 1–5 tags from the closed vocabulary in
-[`schema/tags.yaml`](schema/tags.yaml). The vocabulary is the single source
+Every registered package carries one or more tags from the closed vocabulary
+in [`schema/tags.yaml`](schema/tags.yaml). The vocabulary is the single source
 of truth: each id has a one-line `summary` (rendered as the browse site's
 tooltip) and, where a boundary is subtle, a `disambiguation` sentence.
 `scripts/check_tags.py` rejects unknown and deprecated tags at PR time with a

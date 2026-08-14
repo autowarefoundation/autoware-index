@@ -28,7 +28,7 @@ const state = {
   vocabulary: null, // data.json's tag_vocabulary block (groups + live tags)
   active: "jazzy",
   // Tag rail selection. Multiple tags combine as OR (union): that is the
-  // faceted-browsing convention, and with 1-5 tags per package an AND
+  // faceted-browsing convention, and with only a few tags per package an AND
   // intersection would usually be empty in a registry this size. Empty set
   // = all packages.
   activeTags: new Set(),
