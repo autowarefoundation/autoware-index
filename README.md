@@ -49,8 +49,8 @@ the pull request on your behalf.
 Or by hand: fork this repo, add ONE entry under `repositories:` in
 `distributions/<distro>.yaml` for each distro you support, and open a pull request. The
 `validate` workflow checks schema conformance, ref resolvability, and uniqueness; the
-`build-check` workflow builds + tests added or changed entries against the current Autoware
-release as an advisory signal for the reviewer. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the
+`build-check` workflow reports separate build and test checks for added or changed entries
+against the current Autoware release as advisory signals for the reviewer. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the
 full walkthrough and local validation.
 
 ## Registry format
