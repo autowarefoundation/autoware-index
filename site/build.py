@@ -87,6 +87,7 @@ def load_distributions(distributions_dir: Path) -> list[dict]:
                     "repository": rec["repository"],
                     "description": rec["description"],
                     "governance": rec["governance"],
+                    "reference_design": rec["reference_design"],
                     "tags": rec["tags"],
                     "maintainers": rec["maintainers"],
                     "ref": rec["ref"],

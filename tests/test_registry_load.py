@@ -466,3 +466,19 @@ def test_flatten_packages_tolerates_sparse_specs():
     assert records[0]["tags"] == []
     assert records[0]["maintainers"] == []
     assert records[0]["governance"] == "community"
+    assert records[0]["reference_design"] == []
+
+
+def test_flatten_packages_carries_reference_design():
+    doc = {
+        "ros_distro": "jazzy",
+        "repositories": {
+            "r": {
+                "url": "u",
+                "reference_design": ["pov"],
+                "packages": {"p": {"tags": ["planning"]}},
+            },
+        },
+    }
+    records = m.flatten_packages(doc)
+    assert records[0]["reference_design"] == ["pov"]

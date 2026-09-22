@@ -117,10 +117,30 @@ def test_load_distributions_flattens_packages(tmp_path):
         "repository": "https://example.com/a",
         "description": "Package A",
         "governance": "core",
+        "reference_design": [],
         "tags": ["planning"],
         "maintainers": ["alice"],
         "ref": {"kind": "branch", "value": "main"},
     }
+
+
+def test_load_distributions_carries_reference_design(tmp_path):
+    # The repository-level grant flows onto every package record, so the
+    # site can wear the badge next to the governance badge.
+    (tmp_path / "humble.yaml").write_text(
+        'schema_version: "2"\n'
+        "ros_distro: humble\n"
+        "repositories:\n"
+        "  repo_a:\n"
+        "    url: https://example.com/a\n"
+        "    reference_design: [pov]\n"
+        "    ref: {kind: branch, value: main}\n"
+        "    packages:\n"
+        "      pkg_a:\n"
+        "        tags: [planning]\n"
+    )
+    regs = build.load_distributions(tmp_path)
+    assert regs[0]["reference_design"] == ["pov"]
 
 
 def test_load_distributions_defaults_for_sparse_spec(tmp_path):
@@ -143,6 +163,7 @@ def test_load_distributions_defaults_for_sparse_spec(tmp_path):
             "repository": "",
             "description": "",
             "governance": "community",
+            "reference_design": [],
             "tags": [],
             "maintainers": [],
             "ref": {},

@@ -66,6 +66,7 @@ repositories:
       kind: tag | sha | branch
       value: "<tag-name | full-sha | branch-name>"
     governance: community | foundation
+    reference_design: [pov] # optional, reviewer-granted (see below)
     maintainers: # repo-level default
       - { name: ..., email: ..., github: ... }
     packages: # every registered package this repo hosts
@@ -84,6 +85,11 @@ Key rules:
   at the registered ref, never the repository name (unless they genuinely coincide).
 - **`tags`** are one or more entries from the closed vocabulary in [`schema/tags.yaml`](schema/tags.yaml).
 - **`description`** is optional; omit it to show the upstream `package.xml` `<description>`.
+- **`reference_design`** is optional and reviewer-granted: a repository lists a named AWF
+  reference design (today only `pov`) exactly when that design's published documentation cites
+  the repository. The citation is the whole grant test, so any reviewer can confirm or refuse a
+  value from public documents. New design names enter the schema enum only after their owners
+  confirm the spelling.
 
 | `ref` kind  | Sweep behaviour                                                                                    |
 | ----------- | -------------------------------------------------------------------------------------------------- |
