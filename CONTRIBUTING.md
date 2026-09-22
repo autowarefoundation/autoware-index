@@ -174,7 +174,12 @@ re-litigated):
 | --------------- | ----------------------------------------------------------------------------------------------- |
 | `data`          | First registration of a `ros2bag_extensions`-class package; settle `data` vs `data-tools` then. |
 | `teleoperation` | Two registerable teleoperation packages (e.g. the TUM stack lands).                             |
-| `e2e`           | A second registerable end-to-end package (`ml` + `planning`/`control` cover it today).          |
+
+The `e2e` concept left this table in 2026-08: it is live as `e2e-driving`
+(minted by maintainer decision, with `vision_pilot` as the anchor), and the
+string `e2e` is one of its aliases. The spelled-out id exists because `e2e`
+alone is three-way ambiguous inside Autoware (simulation, integration
+testing, learned driving).
 
 Previously rejected (with reasons): `racing`, `hmi`, `fleet-management`,
 `security`, `deployment` (no two registerable anchor packages exist);
