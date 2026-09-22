@@ -82,7 +82,7 @@ Key rules:
   repository entry. Repository URLs and package names are unique per distro file.
 - **`packages:` keys are real ROS package names**: each must equal the `package.xml` `<name>`
   at the registered ref, never the repository name (unless they genuinely coincide).
-- **`tags`** are 1–5 entries from the closed vocabulary in [`schema/tags.yaml`](schema/tags.yaml).
+- **`tags`** are one or more entries from the closed vocabulary in [`schema/tags.yaml`](schema/tags.yaml).
 - **`description`** is optional; omit it to show the upstream `package.xml` `<description>`.
 
 | `ref` kind  | Sweep behaviour                                                                                    |

@@ -20,7 +20,6 @@ const PKG_NAME_RE = /^[a-z][a-z0-9_]*$/;
 // scripts/check_refs.py SHA_RE + PLACEHOLDER_NAMES.
 const SHA_RE = /^[0-9a-f]{40}$/;
 const PLACEHOLDER_NAMES = new Set(["tbd", "todo", "n/a", "na", "none", "xxx", ""]);
-const MAX_TAGS = 5;
 
 const REGISTRY_REPO = "autowarefoundation/autoware-index";
 const GH_API = "https://api.github.com";
@@ -339,7 +338,7 @@ function entryLines() {
     if (pkg.tags.length) {
       for (const t of pkg.tags) lines.push(`          - ${t}`);
     } else {
-      lines.push(`          # pick 1–5 tags (station 3)`);
+      lines.push(`          # pick at least one tag (station 3)`);
     }
     lines.push(...descriptionLines(pkg.description, "        "));
     const overrides = maintainerLines(pkg.maintainers, "          ");
@@ -408,10 +407,10 @@ function validate() {
     gates.push({ id: "shape", name: "check-jsonschema", status, msg });
   }
 
-  // Gate 2 (check_tags): 1–5 live tags per package; tool-only is a warning.
+  // Gate 2 (check_tags): at least one live tag per package; tool-only warns.
   {
     let status = "ok";
-    let msg = "every package carries 1–5 tags from the vocabulary";
+    let msg = "every package carries at least one tag from the vocabulary";
     const untagged = f.packages.filter((p) => p.name.trim() && !p.tags.length);
     const toolOnly = f.packages.filter(
       (p) => p.tags.length === 1 && p.tags[0] === "tool" && p.name.trim(),
@@ -1435,8 +1434,7 @@ function tagPicker(pkg) {
       chip.addEventListener("click", () => {
         const i = pkg.tags.indexOf(tag.id);
         if (i >= 0) pkg.tags.splice(i, 1);
-        else if (pkg.tags.length < MAX_TAGS) pkg.tags.push(tag.id);
-        else return;
+        else pkg.tags.push(tag.id);
         chip.setAttribute("aria-pressed", pkg.tags.includes(tag.id) ? "true" : "false");
         refresh();
       });
@@ -1599,15 +1597,13 @@ function updatePackageCards() {
     if (tone === "bad") nodes.nameInput.setAttribute("aria-invalid", "true");
     else nodes.nameInput.removeAttribute("aria-invalid");
 
-    // Tag chips: pressed state + freeze unselected chips at the 5-tag cap.
-    const atCap = pkg.tags.length >= MAX_TAGS;
+    // Tag chips: pressed state.
     for (const [id, chip] of nodes.picker.chipRefs) {
       const selected = pkg.tags.includes(id);
       chip.setAttribute("aria-pressed", selected ? "true" : "false");
-      chip.disabled = atCap && !selected;
     }
     nodes.picker.meta.textContent = "";
-    nodes.picker.meta.append(`${pkg.tags.length}/${MAX_TAGS} selected`);
+    nodes.picker.meta.append(`${pkg.tags.length} selected`);
     if (pkg.tags.length) {
       nodes.picker.meta.append(" · order: ");
       nodes.picker.meta.append(el("b", { text: pkg.tags.join(" → ") }));
