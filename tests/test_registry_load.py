@@ -404,6 +404,97 @@ def test_load_vocabulary_rejects_duplicate_alias_across_tags(tmp_path):
     assert "alias 'x' is already an alias of 'a'" in str(exc.value)
 
 
+RESERVED_DOC = VOCAB_DOC + """
+reserved:
+  gpu:
+    note: A build requirement, not a topic.
+  asil-b:
+    note: >-
+      ASIL attaches to an item within a system
+      boundary and an ODD.
+    see: [planning]
+"""
+
+
+def test_load_vocabulary_reserved_returned(tmp_path):
+    vocab = m.load_vocabulary(write_vocab(tmp_path, RESERVED_DOC))
+    assert set(vocab["reserved"]) == {"gpu", "asil-b"}
+    assert vocab["reserved"]["asil-b"]["see"] == ["planning"]
+
+
+def test_load_vocabulary_reserved_defaults_empty(tmp_path):
+    vocab = m.load_vocabulary(write_vocab(tmp_path, VOCAB_DOC))
+    assert vocab["reserved"] == {}
+
+
+def test_load_vocabulary_rejects_reserved_shadowing_live_id(tmp_path):
+    content = (
+        "groups:\n  g: Title\n"
+        "tags:\n  a:\n    group: g\n    summary: s\n"
+        "reserved:\n  a:\n    note: n\n"
+    )
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_vocabulary(write_vocab(tmp_path, content))
+    assert "reserved id is also a live tag" in str(exc.value)
+
+
+def test_load_vocabulary_rejects_reserved_shadowing_deprecated_id(tmp_path):
+    content = (
+        "groups:\n  g: Title\n"
+        "tags:\n  a:\n    group: g\n    summary: s\n"
+        "deprecated:\n  b:\n    replaced_by: [a]\n"
+        "reserved:\n  b:\n    note: n\n"
+    )
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_vocabulary(write_vocab(tmp_path, content))
+    assert "reserved id is also a deprecated id" in str(exc.value)
+
+
+def test_load_vocabulary_rejects_reserved_shadowing_alias(tmp_path):
+    content = (
+        "groups:\n  g: Title\n"
+        "tags:\n  a:\n    group: g\n    summary: s\n    aliases: [b]\n"
+        "reserved:\n  b:\n    note: n\n"
+    )
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_vocabulary(write_vocab(tmp_path, content))
+    assert "reserved id is also an alias of 'a'" in str(exc.value)
+
+
+def test_load_vocabulary_rejects_reserved_without_note(tmp_path):
+    content = (
+        "groups:\n  g: Title\n" "tags:\n  a:\n    group: g\n    summary: s\n" "reserved:\n  b: {}\n"
+    )
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_vocabulary(write_vocab(tmp_path, content))
+    assert "reserved `note` must be a non-empty string" in str(exc.value)
+
+
+def test_load_vocabulary_rejects_reserved_unknown_key(tmp_path):
+    content = (
+        "groups:\n  g: Title\n"
+        "tags:\n  a:\n    group: g\n    summary: s\n"
+        "reserved:\n  b:\n    note: n\n    sea: [a]\n"
+    )
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_vocabulary(write_vocab(tmp_path, content))
+    assert "unknown key(s)" in str(exc.value)
+    assert "sea" in str(exc.value)
+
+
+def test_load_vocabulary_rejects_reserved_dangling_see_target(tmp_path):
+    # A `see:` that points at an unminted tag would merge a pointer to
+    # nowhere; the loader rejects it so the PR cannot merge.
+    content = (
+        "groups:\n  g: Title\n"
+        "tags:\n  a:\n    group: g\n    summary: s\n"
+        "reserved:\n  b:\n    note: n\n    see: [ghost]\n"
+    )
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_vocabulary(write_vocab(tmp_path, content))
+    assert "`see` target 'ghost' is not a live tag" in str(exc.value)
+
+
 def test_load_vocabulary_real_committed_file(repo_root):
     # The committed vocabulary must always load: site/build.py and
     # check_tags.py both hard-fail on a broken schema/tags.yaml.

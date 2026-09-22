@@ -74,9 +74,9 @@
         "tags": {
           "type": "array",
           "minItems": 1,
-          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$", "maxLength": 20 },
           "uniqueItems": true,
-          "description": "One or more tags from the closed vocabulary in schema/tags.yaml. This schema checks shape only; membership and deprecation are enforced by scripts/check_tags.py."
+          "description": "One or more tags from the closed vocabulary in schema/tags.yaml. This schema checks shape only (the item grammar mirrors registry_load.py's TAG_ID_PATTERN and length cap); membership and deprecation are enforced by scripts/check_tags.py."
         },
         "description": {
           "type": "string",

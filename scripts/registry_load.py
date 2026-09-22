@@ -45,6 +45,7 @@ TAG_ID_MAX_LENGTH = 20
 
 _TAG_KEYS = {"group", "summary", "disambiguation", "label", "aliases"}
 _DEPRECATED_KEYS = {"replaced_by", "note"}
+_RESERVED_KEYS = {"note", "see"}
 
 
 class RegistryError(Exception):
@@ -116,9 +117,10 @@ def load_vocabulary(path: Path) -> dict:
     """Parse and self-check schema/tags.yaml (the closed tag vocabulary).
 
     Returns ``{"groups": {...}, "tags": {...}, "deprecated": {...},
-    "aliases": {...}}`` with ``deprecated`` defaulting to an empty mapping and
-    ``aliases`` computed as one flat ``alias -> canonical live id`` map from
-    the per-tag ``aliases:`` lists. Raises RegistryError on the first
+    "aliases": {...}, "reserved": {...}}`` with ``deprecated`` and
+    ``reserved`` defaulting to empty mappings and ``aliases`` computed as one
+    flat ``alias -> canonical live id`` map from the per-tag ``aliases:``
+    lists. Raises RegistryError on the first
     inconsistency: unparseable/non-mapping document, a malformed tag id, an
     unknown key in a tag spec (catches ``sumary:``-style typos), a missing
     or empty ``summary``, a ``group`` not declared under ``groups:``, an id
@@ -241,7 +243,53 @@ def load_vocabulary(path: Path) -> dict:
                 )
             aliases_map[alias] = tag_id
 
-    return {"groups": groups, "tags": tags, "deprecated": deprecated, "aliases": aliases_map}
+    # Reserved ids: decided never to mint, with the recorded refusal printed
+    # by check_tags at the moment of the mistake. Disjoint from every other
+    # namespace; `see:` targets must be live so the pointer never dangles.
+    reserved = doc.get("reserved") or {}
+    if not isinstance(reserved, dict):
+        raise RegistryError(f"{path}: `reserved` must be a mapping of tag id -> spec")
+    for tag_id, spec in reserved.items():
+        _check_tag_id(path, tag_id)
+        if tag_id in tags:
+            raise RegistryError(f"{path}::{tag_id}: reserved id is also a live tag")
+        if tag_id in deprecated:
+            raise RegistryError(f"{path}::{tag_id}: reserved id is also a deprecated id")
+        if tag_id in aliases_map:
+            raise RegistryError(
+                f"{path}::{tag_id}: reserved id is also an alias of {aliases_map[tag_id]!r}"
+            )
+        if not isinstance(spec, dict):
+            raise RegistryError(f"{path}::{tag_id}: reserved spec must be a mapping")
+        unknown = set(spec) - _RESERVED_KEYS
+        if unknown:
+            raise RegistryError(
+                f"{path}::{tag_id}: unknown key(s) {sorted(unknown)!r} "
+                f"(allowed: {sorted(_RESERVED_KEYS)!r})"
+            )
+        note = spec.get("note")
+        if not isinstance(note, str) or not note.strip():
+            raise RegistryError(
+                f"{path}::{tag_id}: reserved `note` must be a non-empty string "
+                f"(it is the refusal check_tags prints)"
+            )
+        see = spec.get("see")
+        if see is not None:
+            if not isinstance(see, list) or not all(isinstance(t, str) for t in see):
+                raise RegistryError(f"{path}::{tag_id}: `see` must be a list of live tag ids")
+            for target in see:
+                if target not in tags:
+                    raise RegistryError(
+                        f"{path}::{tag_id}: `see` target {target!r} is not a live tag"
+                    )
+
+    return {
+        "groups": groups,
+        "tags": tags,
+        "deprecated": deprecated,
+        "aliases": aliases_map,
+        "reserved": reserved,
+    }
 
 
 def canonical_url(url: str) -> str:

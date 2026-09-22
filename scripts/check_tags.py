@@ -22,6 +22,12 @@ defect beyond JSON-schema shape (which only checks count/pattern/uniqueness):
      did-you-mean: the mapping is exact, so the diagnostic is a statement,
      not a guess.
 
+  4. Reserved id. An id decided never to mint (`gpu`, `stable`, `asil-b`).
+     The error prints the vocabulary's recorded `note` word for word, plus
+     the live ids its `see:` list points at, so the refusal reaches the
+     contributor at the moment of the mistake instead of living in review
+     folklore.
+
 The vocabulary itself is self-checked by registry_load.load_vocabulary (bad
 ids, unknown groups, replaced_by chains, ...); a broken vocabulary is a hard
 failure here, never a vacuous pass.
@@ -69,6 +75,7 @@ def check_package_tags(file: str, owner: str, tags: list, vocabulary: dict) -> l
     live = set(vocabulary["tags"])
     deprecated = vocabulary["deprecated"]
     aliases = vocabulary.get("aliases") or {}
+    reserved = vocabulary.get("reserved") or {}
     for tag in tags or []:
         if not isinstance(tag, str):
             # Shape defense for files that skip CI (same idiom as the
@@ -83,6 +90,16 @@ def check_package_tags(file: str, owner: str, tags: list, vocabulary: dict) -> l
                 f"{file}::{owner}: tag {tag!r} is a search alias of "
                 f"{aliases[tag]!r}; write {aliases[tag]!r} in the registry"
             )
+            continue
+        if tag in reserved:
+            # The recorded refusal, word for word (whitespace-normalized so a
+            # folded YAML scalar prints as one diagnostic line).
+            note = " ".join(reserved[tag].get("note", "").split())
+            see = reserved[tag].get("see") or []
+            message = f"{file}::{owner}: tag {tag!r} is reserved and will not be minted. {note}"
+            if see:
+                message += f" (see: {', '.join(see)})"
+            errors.append(message)
             continue
         if tag in deprecated:
             replacements = deprecated[tag].get("replaced_by") or []
