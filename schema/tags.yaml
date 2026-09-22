@@ -5,7 +5,11 @@
 # scripts/check_tags.py enforces it (validate.yaml + the check-tags
 # pre-commit hook). Ids are flat lowercase hyphen-separated strings;
 # the `group` field is display metadata for the browse site, never part
-# of the id.
+# of the id. An optional `label` is the chip text the site shows for the
+# id (the id stays the stored key); optional `aliases` are search
+# synonyms, valid in the site search and in `--tags` filters but NEVER in
+# distributions/*.yaml (check_tags.py rejects them naming the canonical
+# id). Live ids, deprecated ids, and aliases are pairwise disjoint.
 #
 # To add a tag (full criteria: CONTRIBUTING.md#package-tags), a PR
 # editing this file must include:
@@ -80,8 +84,10 @@ tags:
     disambiguation: Publishes raw device data; downstream processing of already-published data is `sensing`.
   ml:
     group: infrastructure
+    label: AI / ML
     summary: Learned-model inference (TensorRT/ONNX runtimes, model artifacts, GPU deployment).
     disambiguation: Pairs with a pipeline tag; a learned detector is `perception` + `ml`.
+    aliases: [ai, artificial-intelligence, deep-learning, dnn, neural-network]
 
   # --- Development & operations ---
   tool:

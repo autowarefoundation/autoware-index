@@ -925,6 +925,36 @@ def test_export_vocabulary_preserves_file_order_and_drops_deprecated(tmp_path):
     assert "deprecated" not in exported
 
 
+def test_export_vocabulary_includes_label_and_aliases_only_when_present(tmp_path):
+    import registry_load
+
+    vocab_file = tmp_path / "tags.yaml"
+    vocab_file.write_text(
+        "groups:\n"
+        "  infrastructure: Infrastructure & support\n"
+        "tags:\n"
+        "  ml:\n"
+        "    group: infrastructure\n"
+        "    label: AI / ML\n"
+        "    summary: Learned-model inference.\n"
+        "    aliases: [ai, deep-learning]\n"
+        "  middleware:\n"
+        "    group: infrastructure\n"
+        "    summary: Execution and transport infrastructure.\n"
+    )
+    exported = build.export_vocabulary(registry_load.load_vocabulary(vocab_file))
+    assert exported["tags"][0] == {
+        "id": "ml",
+        "group": "infrastructure",
+        "summary": "Learned-model inference.",
+        "label": "AI / ML",
+        "aliases": ["ai", "deep-learning"],
+    }
+    # No null-placeholder keys: an unlabeled tag exports without them.
+    assert "label" not in exported["tags"][1]
+    assert "aliases" not in exported["tags"][1]
+
+
 def test_export_vocabulary_includes_disambiguation_only_when_present(tmp_path):
     import registry_load
 

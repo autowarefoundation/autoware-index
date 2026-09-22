@@ -23,6 +23,8 @@ const state = {
   carts: new Map(), // distro -> Set<name>
   distributions: new Map(), // distro -> reconstructed distribution dict (memoized)
   tagSummaries: new Map(), // tag id -> one-line summary (vocabulary tooltips)
+  tagLabels: new Map(), // tag id -> display label (chip text; id when absent)
+  tagSearch: new Map(), // tag id -> "label alias…" search synonyms (lowercase)
   vocabulary: null, // data.json's tag_vocabulary block (groups + live tags)
   active: "jazzy",
   // Tag rail selection. Multiple tags combine as OR (union): that is the
@@ -152,7 +154,10 @@ function maintainers(list) {
 
 function searchBlob(pkg) {
   const names = (pkg.maintainers || []).map((m) => m.name || "").join(" ");
-  return `${pkg.name} ${pkg.description || ""} ${(pkg.tags || []).join(" ")} ${names} ${pkg.repository || ""} ${pkg.repo_name || ""}`.toLowerCase();
+  // Vocabulary labels and aliases ride along with each carried tag id, so a
+  // search for "ai" finds every `ml` package without `ai` being a stored id.
+  const synonyms = (pkg.tags || []).map((t) => state.tagSearch.get(t) || "").join(" ");
+  return `${pkg.name} ${pkg.description || ""} ${(pkg.tags || []).join(" ")} ${synonyms} ${names} ${pkg.repository || ""} ${pkg.repo_name || ""}`.toLowerCase();
 }
 
 // (distro, repo_name) -> number of registered packages from that repository,
@@ -234,8 +239,15 @@ function card(pkg, siblingCount) {
 
   const tags = el("div", { class: "tags" });
   for (const t of pkg.tags || []) {
-    // The vocabulary summary doubles as the chip tooltip; el() skips null.
-    tags.append(el("span", { class: "tag", text: t, title: state.tagSummaries.get(t) }));
+    // The chip shows the vocabulary label (falling back to the raw id); the
+    // vocabulary summary doubles as the chip tooltip; el() skips null.
+    tags.append(
+      el("span", {
+        class: "tag",
+        text: state.tagLabels.get(t) || t,
+        title: state.tagSummaries.get(t),
+      }),
+    );
   }
 
   const meta = el(
@@ -366,7 +378,9 @@ function renderTagRail() {
   rail.append(tagRow({ id: "", label: "all packages", count: scoped.length, summary: null }));
   for (const group of groups) {
     if (group.title) rail.append(el("h3", { class: "tagbar-group", text: group.title }));
-    for (const t of group.tags) rail.append(tagRow({ ...t, label: t.id }));
+    for (const t of group.tags) {
+      rail.append(tagRow({ ...t, label: state.tagLabels.get(t.id) || t.id }));
+    }
   }
 }
 
@@ -854,7 +868,15 @@ async function main() {
   state.siblings = repoSiblingCounts(packages);
   state.vocabulary = data.tag_vocabulary || null;
   const vocabTags = Array.isArray(state.vocabulary?.tags) ? state.vocabulary.tags : [];
-  for (const t of vocabTags) state.tagSummaries.set(t.id, t.summary);
+  for (const t of vocabTags) {
+    state.tagSummaries.set(t.id, t.summary);
+    if (t.label) state.tagLabels.set(t.id, t.label);
+    // Search synonyms: the display label plus every alias, lowercased once
+    // here so searchBlob can concatenate them as-is. Populated BEFORE any
+    // card renders (cards bake data-search at build time).
+    const synonyms = [t.label, ...(t.aliases || [])].filter(Boolean);
+    if (synonyms.length) state.tagSearch.set(t.id, synonyms.join(" ").toLowerCase());
+  }
 
   renderStats(document.getElementById("stats"), packages, data.built_at);
 

@@ -305,6 +305,105 @@ def test_load_vocabulary_rejects_deprecated_replaced_by_target(tmp_path):
     assert "`replaced_by` target 'c' is not a live tag" in str(exc.value)
 
 
+def test_load_vocabulary_label_and_aliases_returned(tmp_path):
+    content = (
+        "groups:\n  g: Title\n"
+        "tags:\n"
+        "  ml:\n"
+        "    group: g\n"
+        "    label: AI / ML\n"
+        "    summary: s\n"
+        "    aliases: [ai, artificial-intelligence]\n"
+        "  planning:\n    group: g\n    summary: s\n"
+    )
+    vocab = m.load_vocabulary(write_vocab(tmp_path, content))
+    assert vocab["tags"]["ml"]["label"] == "AI / ML"
+    assert vocab["aliases"] == {"ai": "ml", "artificial-intelligence": "ml"}
+
+
+def test_load_vocabulary_aliases_map_defaults_empty(tmp_path):
+    vocab = m.load_vocabulary(write_vocab(tmp_path, VOCAB_DOC))
+    assert vocab["aliases"] == {}
+
+
+def test_load_vocabulary_alias_may_exceed_id_length_cap(tmp_path):
+    # Aliases are search terms, never ids: the id grammar applies (so search
+    # stays lowercase-hyphen predictable) but the 20-character cap does not.
+    long_alias = "artificial-intelligence"
+    assert len(long_alias) > m.TAG_ID_MAX_LENGTH
+    content = (
+        f"groups:\n  g: Title\n"
+        f"tags:\n  ml:\n    group: g\n    summary: s\n    aliases: [{long_alias}]\n"
+    )
+    vocab = m.load_vocabulary(write_vocab(tmp_path, content))
+    assert vocab["aliases"] == {long_alias: "ml"}
+
+
+@pytest.mark.parametrize("label", ["''", "|-\n      two\n      lines", "[not, a, string]"])
+def test_load_vocabulary_rejects_bad_label(tmp_path, label):
+    content = (
+        f"groups:\n  g: Title\ntags:\n  a:\n    group: g\n    summary: s\n    label: {label}\n"
+    )
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_vocabulary(write_vocab(tmp_path, content))
+    assert "`label` must be a non-empty single-line string" in str(exc.value)
+
+
+@pytest.mark.parametrize("aliases", ["ai", "[]", "{a: b}"])
+def test_load_vocabulary_rejects_non_list_or_empty_aliases(tmp_path, aliases):
+    content = (
+        f"groups:\n  g: Title\ntags:\n  a:\n    group: g\n    summary: s\n    aliases: {aliases}\n"
+    )
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_vocabulary(write_vocab(tmp_path, content))
+    assert "`aliases` must be a non-empty list" in str(exc.value)
+
+
+@pytest.mark.parametrize("alias", ["AI", "a_b", "-ai", "9ai", "''"])
+def test_load_vocabulary_rejects_malformed_alias(tmp_path, alias):
+    content = (
+        f"groups:\n  g: Title\ntags:\n  a:\n    group: g\n    summary: s\n    aliases: [{alias}]\n"
+    )
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_vocabulary(write_vocab(tmp_path, content))
+    assert "must match" in str(exc.value)
+
+
+def test_load_vocabulary_rejects_alias_shadowing_live_id(tmp_path):
+    content = (
+        "groups:\n  g: Title\n"
+        "tags:\n"
+        "  a:\n    group: g\n    summary: s\n    aliases: [b]\n"
+        "  b:\n    group: g\n    summary: s\n"
+    )
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_vocabulary(write_vocab(tmp_path, content))
+    assert "alias 'b' is also a live tag id" in str(exc.value)
+
+
+def test_load_vocabulary_rejects_alias_shadowing_deprecated_id(tmp_path):
+    content = (
+        "groups:\n  g: Title\n"
+        "tags:\n  a:\n    group: g\n    summary: s\n    aliases: [old]\n"
+        "deprecated:\n  old:\n    replaced_by: [a]\n"
+    )
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_vocabulary(write_vocab(tmp_path, content))
+    assert "alias 'old' is also a deprecated id" in str(exc.value)
+
+
+def test_load_vocabulary_rejects_duplicate_alias_across_tags(tmp_path):
+    content = (
+        "groups:\n  g: Title\n"
+        "tags:\n"
+        "  a:\n    group: g\n    summary: s\n    aliases: [x]\n"
+        "  b:\n    group: g\n    summary: s\n    aliases: [x]\n"
+    )
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_vocabulary(write_vocab(tmp_path, content))
+    assert "alias 'x' is already an alias of 'a'" in str(exc.value)
+
+
 def test_load_vocabulary_real_committed_file(repo_root):
     # The committed vocabulary must always load: site/build.py and
     # check_tags.py both hard-fail on a broken schema/tags.yaml.

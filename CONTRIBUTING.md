@@ -117,6 +117,23 @@ tooltip) and, where a boundary is subtle, a `disambiguation` sentence.
 `scripts/check_tags.py` rejects unknown and deprecated tags at PR time with a
 did-you-mean suggestion.
 
+### Labels and aliases
+
+A tag id is a permanent engineering key. The word a person reads can differ
+from it, and two optional vocabulary fields carry that difference:
+
+- `label`: the chip text the browse site and the register wizard show for
+  the id (`ml` renders as "AI / ML"). Nothing stores a label, so it can
+  change at any time. The id stays the stored and filter key.
+- `aliases`: search synonyms. A search for "ai" on the site finds the `ml`
+  packages. An alias is NEVER valid in `distributions/*.yaml`:
+  `check_tags.py` rejects it and names the canonical id, which beats a
+  fuzzy did-you-mean because the mapping is exact.
+
+Live ids, deprecated ids, and aliases are pairwise disjoint, and the loader
+enforces it. Aliases follow the id grammar (lowercase, hyphen-separated) but
+not the 20-character cap.
+
 ### Choosing tags
 
 - Put the package's **primary identity first**: the site renders tag chips
