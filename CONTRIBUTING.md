@@ -24,11 +24,18 @@ author). The manual flow it automates:
    [`schema/distribution.schema.json`](schema/distribution.schema.json).
 3. **Validate locally** before opening a PR (see below).
 4. Open a pull request. The `validate` workflow runs automatically, and the
-   `build-check` workflow builds + tests the packages of every entry whose
+   `build-check` workflow reports separate build and test checks for every entry whose
    url, ref, or package set your PR adds or changes against the current
    Autoware release; metadata-only edits (tags, descriptions, maintainers,
    governance) skip the build. It is advisory: it informs the review rather
    than hard-blocking the merge. A maintainer reviews and merges.
+
+Build and test use separate reusable workflows. Tests restore the exact source and build
+outputs from that build attempt through Actions cache, then run in a fresh container against
+the same Autoware release. Only successfully built packages are tested; a test failure does
+not change the build check. Re-running a failed test reuses its original build cache. If the
+cache has expired or been evicted, re-run all jobs to produce it again; missing caches leave
+test outcomes inconclusive and do not record package failures.
 
 After merge, the **eager sweep** clones your repository once at its registered
 `ref`, validates every registered package against the current latest published

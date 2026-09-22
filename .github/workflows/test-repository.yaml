@@ -1,0 +1,227 @@
+name: test-repository
+
+# Tests run in a fresh container against the exact source/build/install tree
+# cached by build-repository. No checkout of a moving upstream branch and no
+# rebuild occurs here. A missing cache is an infrastructure failure, so it
+# leaves test outcomes null rather than inventing package failures.
+
+on:
+  workflow_call:
+    inputs:
+      ros_distro:
+        required: true
+        type: string
+      autoware_version:
+        required: true
+        type: string
+      repo_name:
+        required: true
+        type: string
+      cache_key:
+        description: Exact cache key output by the prerequisite build workflow.
+        required: true
+        type: string
+      base_image_stage:
+        required: false
+        type: string
+        default: core-devel
+      runs-on:
+        required: false
+        type: string
+        default: '["ubuntu-24.04"]'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ inputs.ros_distro }}, autoware ${{ inputs.autoware_version }}, ${{ inputs.repo_name }})
+    runs-on: ${{ fromJson(inputs.runs-on) }}
+    container:
+      image: ghcr.io/autowarefoundation/autoware:${{ inputs.base_image_stage }}-${{ inputs.ros_distro }}-${{ inputs.autoware_version }}
+    steps:
+      - name: Download build result
+        id: download
+        uses: actions/download-artifact@v8
+        with:
+          name: validate-result-${{ inputs.ros_distro }}-${{ inputs.repo_name }}-${{ inputs.autoware_version }}
+          path: _result
+
+      - name: Select successfully built packages
+        id: select
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'EOF'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path("_result/result.json")
+          result = json.loads(path.read_text())
+          packages = []
+          for name, outcome in result["packages"].items():
+              # A test-only rerun can download our previous attempt's result.
+              # Clear it before any fallible restore/setup step.
+              outcome["test_outcome"] = None
+              if outcome["present"] and outcome["build_outcome"] == "success":
+                  packages.append(name)
+          path.write_text(json.dumps(result, indent=2))
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"packages={' '.join(packages)}\n")
+          EOF
+
+      - name: Restore built workspace
+        id: cache
+        if: steps.select.outputs.packages != ''
+        uses: actions/cache/restore@v6
+        with:
+          key: ${{ inputs.cache_key }}
+          path: |
+            src
+            build
+            install
+          fail-on-cache-miss: true
+
+      - name: Verify restored build
+        if: steps.select.outputs.packages != ''
+        env:
+          CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${CACHE_HIT}" != true ]; then
+            echo "::error::the exact build cache was not restored"
+            exit 1
+          fi
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}/src/repository"
+          python3 - <<'EOF'
+          import json
+          from pathlib import Path
+          import subprocess
+
+          expected = json.loads(Path("_result/result.json").read_text())["resolved_sha"]
+          actual = subprocess.check_output(
+              ["git", "-C", "src/repository", "rev-parse", "HEAD"], text=True
+          ).strip()
+          if actual != expected:
+              raise SystemExit(f"cached source SHA {actual} differs from build SHA {expected}")
+          EOF
+
+      - name: Install test workspace dependencies
+        if: steps.select.outputs.packages != ''
+        env:
+          ROS_DISTRO_INPUT: ${{ inputs.ros_distro }}
+          PACKAGES: ${{ steps.select.outputs.packages }}
+        shell: bash
+        run: |
+          set -eo pipefail
+          # The workspace cache does not include apt-installed libraries.
+          # Install the same manifest dependencies in this fresh container,
+          # limited to successfully built packages and their closures.
+          apt-get -yqq update
+          rosdep update || echo "::warning::rosdep update failed; using the image's existing sources"
+          # shellcheck disable=SC1090
+          . "/opt/ros/${ROS_DISTRO_INPUT}/setup.sh"
+          if [ -f /opt/autoware/setup.sh ]; then
+            . /opt/autoware/setup.sh
+          fi
+          # shellcheck disable=SC2086
+          package_paths=$(colcon list -p --packages-up-to ${PACKAGES} --base-paths src)
+          # shellcheck disable=SC2086
+          DEBIAN_FRONTEND=noninteractive rosdep install -yqq \
+            --from-paths ${package_paths} --ignore-src --rosdistro "${ROS_DISTRO_INPUT}"
+
+      - name: Relax the CycloneDDS socket buffer minimum
+        if: steps.select.outputs.packages != ''
+        shell: bash
+        # The Autoware image exports CYCLONEDDS_URI pointing at a config that
+        # demands SocketReceiveBufferSize min="10MB". A job container cannot
+        # raise net.core.rmem_max past 2 MiB, so Cyclone refuses to create a
+        # domain and every gtest constructing an rclcpp::Node dies with
+        # "failed to initialize rcl node" -- reporting an honest package as a
+        # test failure. Upstream repos patch the same file in their own CI.
+        # The minimum only bounds DDS throughput, which no verdict depends on.
+        run: |
+          set -euo pipefail
+          config="${CYCLONEDDS_URI:-}"
+          config="${config#file://}"
+          if [ -z "${config}" ] || [ ! -f "${config}" ]; then
+            echo "::notice::no CycloneDDS config at '${config:-<unset>}'; nothing to relax"
+            exit 0
+          fi
+          if ! grep -q 'min="10MB"' "${config}"; then
+            echo "::notice::${config} pins no 10MB socket buffer minimum; leaving it alone"
+            exit 0
+          fi
+          sed -i 's|min="10MB"|min="default"|' "${config}"
+          echo "relaxed SocketReceiveBufferSize min in ${config}"
+
+      - name: Run package tests
+        if: steps.select.outputs.packages != ''
+        env:
+          ROS_DISTRO_INPUT: ${{ inputs.ros_distro }}
+        shell: bash
+        run: |
+          set -eo pipefail
+          # shellcheck disable=SC1090
+          . "/opt/ros/${ROS_DISTRO_INPUT}/setup.sh"
+          if [ -f /opt/autoware/setup.sh ]; then
+            . /opt/autoware/setup.sh
+          fi
+          python3 - <<'EOF'
+          import json
+          from pathlib import Path
+          import subprocess
+
+          path = Path("_result/result.json")
+          result = json.loads(path.read_text())
+          for package, outcome in result["packages"].items():
+              if not outcome["present"] or outcome["build_outcome"] != "success":
+                  continue
+              test = subprocess.run([
+                  "colcon", "test", "--event-handlers", "console_cohesion+",
+                  "--packages-select", package, "--executor", "sequential",
+                  "--return-code-on-test-failure",
+              ], check=False)
+              outcome["test_outcome"] = "success" if test.returncode == 0 else "failure"
+              # Preserve completed siblings if a later invocation is interrupted.
+              path.write_text(json.dumps(result, indent=2))
+              if test.returncode:
+                  print(f"::error::{package}: its own tests failed", flush=True)
+          EOF
+
+      - name: Upload result
+        if: always() && steps.download.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: validate-result-${{ inputs.ros_distro }}-${{ inputs.repo_name }}-${{ inputs.autoware_version }}
+          path: |
+            _result/result.json
+            _result/package-xmls/
+          if-no-files-found: error
+          overwrite: true
+
+      - name: Report tests
+        if: always() && steps.download.outcome == 'success'
+        shell: bash
+        run: |
+          python3 - <<'EOF'
+          import json
+          import os
+          from pathlib import Path
+
+          result = json.loads(Path("_result/result.json").read_text())
+          failed = False
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write(f"### test {result['repo_name']}\n\n")
+              summary.write("| package | test |\n|---|---|\n")
+              for package, outcome in result["packages"].items():
+                  if outcome["present"] and outcome["build_outcome"] == "success":
+                      status = outcome["test_outcome"] or "inconclusive"
+                      failed |= status != "success"
+                  else:
+                      status = "skipped (not built)"
+                  summary.write(f"| {package} | {status} |\n")
+          raise SystemExit(1 if failed else 0)
+          EOF

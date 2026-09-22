@@ -44,6 +44,9 @@ on:
       - distributions/**.yaml
       - scripts/diff_matrix.py
       - .github/workflows/build-check.yaml
+      - .github/workflows/sweep-repository.yaml
+      - .github/workflows/build-repository.yaml
+      - .github/workflows/test-repository.yaml
 
 permissions:
   contents: read

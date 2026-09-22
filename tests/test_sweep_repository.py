@@ -1,7 +1,7 @@
-"""Tests for .github/workflows/sweep-repository.yaml (the sweep's emit contract).
+"""Tests for the build/test workflows and the sweep's emit contract.
 
-result.json is the only payload that crosses a job boundary: the workflow's
-"Compose result.json" step writes it into an artifact, and the record job's
+The build workflow's "Compose result.json" step writes an artifact, the test
+workflow fills in test outcomes using the cached build, and the record job's
 scripts/build_envelopes.py reads it back. For as long as the workflow lived in
 another repository nothing could test the pair, and the two halves drifted
 silently -- a rosdep failure left build_outcome null, the recorder read that as
@@ -56,18 +56,18 @@ EXPRESSIONS = {
     "inputs.repository": REPOSITORY,
     "inputs.ref_kind": "tag",
     "inputs.ref_value": "1.2.0",
-    "needs.resolve.outputs.autoware_version": VERSION,
+    "inputs.autoware_version": VERSION,
     "steps.resolve.outputs.sha": SHA,
     "steps.scan.outputs.present": "",
     "inputs.packages": "pkg_a",
 }
 
 
-def workflow_step(repo_root: Path, name: str) -> dict:
-    workflow = yaml.safe_load((repo_root / ".github/workflows/sweep-repository.yaml").read_text())
-    steps = workflow["jobs"]["validate"]["steps"]
+def workflow_step(repo_root: Path, name: str, workflow_name="build-repository") -> dict:
+    workflow = yaml.safe_load((repo_root / f".github/workflows/{workflow_name}.yaml").read_text())
+    steps = next(iter(workflow["jobs"].values()))["steps"]
     step = next((s for s in steps if s.get("name") == name), None)
-    assert step is not None, f"no step named {name!r} in sweep-repository.yaml"
+    assert step is not None, f"no step named {name!r} in {workflow_name}.yaml"
     return step
 
 
@@ -96,6 +96,7 @@ def run_step(
     name: str,
     env: dict[str, str],
     stubs: dict[str, str] | None = None,
+    workflow_name="build-repository",
 ) -> subprocess.CompletedProcess:
     """Execute a workflow step's ENTIRE run: body under bash, in tmp_path.
 
@@ -111,7 +112,7 @@ def run_step(
         path.write_text("#!/bin/bash\n" + body)
         path.chmod(0o755)
     script = tmp_path / "step.sh"
-    script.write_text(workflow_step(repo_root, name)["run"])
+    script.write_text(workflow_step(repo_root, name, workflow_name)["run"])
     return subprocess.run(
         ["bash", str(script)],
         cwd=tmp_path,
@@ -268,9 +269,9 @@ def test_every_writer_of_sweep_results_uses_the_known_vocabulary(repo_root):
     (printf, tee, a plain >), and the tokens it wrote would sail through into
     build_outcome and blow up only in production.
     """
-    workflow = yaml.safe_load((repo_root / ".github/workflows/sweep-repository.yaml").read_text())
+    workflow = yaml.safe_load((repo_root / ".github/workflows/build-repository.yaml").read_text())
     body = "\n".join(
-        s["run"] for s in workflow["jobs"]["validate"]["steps"] if isinstance(s.get("run"), str)
+        s["run"] for s in workflow["jobs"]["build"]["steps"] if isinstance(s.get("run"), str)
     )
     writers = [
         ln.strip() for ln in body.splitlines() if re.search(r">>?\s*\.sweep-results\.txt", ln)
@@ -422,7 +423,7 @@ def test_empty_autoware_version_is_schema_valid_but_skips_the_row(repo_root, tmp
         packages="pkg_a",
         results="pkg_a success success\n",
         present="pkg_a\n",
-        expressions={"needs.resolve.outputs.autoware_version": ""},
+        expressions={"inputs.autoware_version": ""},
     )
     assert_valid(repo_root, result)
     _, skips = build_envelopes.envelopes_for_row(
@@ -656,3 +657,183 @@ def test_one_packages_drift_does_not_drop_its_siblings(repo_root, tmp_path):
     )
     assert [e["package_name"] for e in envelopes] == ["pkg_ok"]
     assert len(skips) == 1 and "pkg_bad" in skips[0] and "build_outcome" in skips[0]
+
+
+# ---------------------------------------------------------------------------
+# independent build/test checks and the cache/result handoff
+# ---------------------------------------------------------------------------
+
+
+def test_split_workflows_allow_testing_successful_siblings_after_build_failure(repo_root):
+    workflow = yaml.safe_load((repo_root / ".github/workflows/sweep-repository.yaml").read_text())
+    build = workflow["jobs"]["build"]
+    test = workflow["jobs"]["test"]
+    assert build["uses"] == "./.github/workflows/build-repository.yaml"
+    assert test["uses"] == "./.github/workflows/test-repository.yaml"
+    assert "build" in test["needs"]
+    assert "!cancelled()" in test["if"]
+    assert "needs.build.outputs.has-tests == 'true'" in test["if"]
+    assert test["with"]["cache_key"] == "${{ needs.build.outputs.cache-key }}"
+    for key in ("ros_distro", "autoware_version", "base_image_stage", "runs-on"):
+        assert build["with"][key] == test["with"][key]
+
+
+def test_cache_restores_exact_build_without_fallback_or_rebuild(repo_root):
+    save = workflow_step(repo_root, "Cache built workspace")
+    restore = workflow_step(repo_root, "Restore built workspace", "test-repository")
+    assert save["with"]["path"] == restore["with"]["path"]
+    assert {"src", "build", "install"} == set(save["with"]["path"].split())
+    assert restore["with"]["fail-on-cache-miss"] is True
+    assert "restore-keys" not in restore["with"]
+    handoff = workflow_step(repo_root, "Prepare build handoff")
+    for field in ("github.run_id", "github.run_attempt", "inputs.ros_distro", "inputs.repo_name"):
+        assert field in handoff["env"]["CACHE_KEY"]
+    test_body = (repo_root / ".github/workflows/test-repository.yaml").read_text()
+    assert "colcon build" not in test_body
+    assert "git clone" not in test_body
+
+
+def prepare_test_result(repo_root, tmp_path, results, present="pkg_a\npkg_b\n"):
+    result = compose(repo_root, tmp_path, "pkg_a pkg_b", results, present)
+    directory = tmp_path / "_result"
+    directory.mkdir()
+    path = directory / "result.json"
+    path.write_text(json.dumps(result))
+    return path
+
+
+def test_test_rerun_resets_previous_outcomes_before_cache_restore(repo_root, tmp_path):
+    path = prepare_test_result(
+        repo_root, tmp_path, "pkg_a success failure\npkg_b failure skipped\n"
+    )
+    output = tmp_path / "output"
+    proc = run_step(
+        repo_root,
+        tmp_path,
+        "Select successfully built packages",
+        {"GITHUB_OUTPUT": str(output)},
+        workflow_name="test-repository",
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert output.read_text() == "packages=pkg_a\n"
+    result = json.loads(path.read_text())
+    assert result["packages"]["pkg_a"] == {
+        "present": True,
+        "build_outcome": "success",
+        "test_outcome": None,
+    }
+    assert statuses(result, "pkg_a pkg_b") == {"pkg_b": "fail"}
+    # A cache miss or setup error now leaves a null test outcome, not the
+    # previous run's failure. The independent test check must still go red.
+    report = run_step(
+        repo_root,
+        tmp_path,
+        "Report tests",
+        {"GITHUB_STEP_SUMMARY": str(tmp_path / "summary")},
+        workflow_name="test-repository",
+    )
+    assert report.returncode == 1
+    assert "inconclusive" in (tmp_path / "summary").read_text()
+
+
+def test_restore_rejects_a_non_exact_cache_hit(repo_root, tmp_path):
+    proc = run_step(
+        repo_root,
+        tmp_path,
+        "Verify restored build",
+        {"CACHE_HIT": "false"},
+        workflow_name="test-repository",
+    )
+    assert proc.returncode != 0
+    assert "exact build cache was not restored" in proc.stdout
+
+
+def test_restore_rejects_a_different_source_commit(repo_root, tmp_path):
+    prepare_test_result(repo_root, tmp_path, "pkg_a success skipped\npkg_b failure skipped\n")
+    proc = run_step(
+        repo_root,
+        tmp_path,
+        "Verify restored build",
+        {"CACHE_HIT": "true"},
+        stubs={"git": 'if [ "$1" = "config" ]; then exit 0; fi; echo wrong-sha'},
+        workflow_name="test-repository",
+    )
+    assert proc.returncode != 0
+    assert "differs from build SHA" in proc.stderr
+
+
+@pytest.mark.parametrize("second_build,expected_calls", [("success", 2), ("failure", 1)])
+def test_test_failures_do_not_change_build_or_sibling_verdicts(
+    repo_root, tmp_path, second_build, expected_calls
+):
+    path = prepare_test_result(
+        repo_root, tmp_path, f"pkg_a success skipped\npkg_b {second_build} skipped\n"
+    )
+    # Stub only the image's setup files. The complete workflow body, including
+    # real subprocess calls to the stub colcon, is executed unchanged.
+    bash_env = tmp_path / "bash-env"
+    bash_env.write_text("function .() { :; }\n")
+    calls = tmp_path / "colcon-calls"
+    proc = run_step(
+        repo_root,
+        tmp_path,
+        "Run package tests",
+        {"ROS_DISTRO_INPUT": DISTRO, "BASH_ENV": str(bash_env), "CALLS": str(calls)},
+        stubs={"colcon": 'echo "$*" >> "$CALLS"\n[[ "$*" != *"pkg_a"* ]]'},
+        workflow_name="test-repository",
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert len(calls.read_text().splitlines()) == expected_calls
+    result = json.loads(path.read_text())
+    assert_valid(repo_root, result)
+    assert result["packages"]["pkg_a"]["build_outcome"] == "success"
+    assert result["packages"]["pkg_a"]["test_outcome"] == "failure"
+    assert result["packages"]["pkg_b"]["build_outcome"] == second_build
+    assert result["packages"]["pkg_b"]["test_outcome"] == (
+        "success" if second_build == "success" else None
+    )
+    assert statuses(result, "pkg_a pkg_b") == {
+        "pkg_a": "fail",
+        "pkg_b": "pass" if second_build == "success" else "fail",
+    }
+
+
+def test_build_check_reports_success_without_waiting_for_tests(repo_root, tmp_path):
+    (tmp_path / ".sweep-results.txt").write_text("pkg_a success skipped\n")
+    (tmp_path / ".sweep-present.txt").write_text("pkg_a\n")
+    env = step_env(workflow_step(repo_root, "Report"))
+    proc = run_step(
+        repo_root,
+        tmp_path,
+        "Report",
+        {**env, "GITHUB_STEP_SUMMARY": str(tmp_path / "summary")},
+    )
+    assert proc.returncode == 0, proc.stderr
+
+
+def test_partial_build_failure_preserves_the_successful_build_handoff(repo_root, tmp_path):
+    (tmp_path / ".sweep-results.txt").write_text("pkg_a failure skipped\npkg_b success skipped\n")
+    output = tmp_path / "output"
+    proc = run_step(
+        repo_root,
+        tmp_path,
+        "Prepare build handoff",
+        {"CACHE_KEY": "exact-build-attempt", "GITHUB_OUTPUT": str(output)},
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert output.read_text() == "has-tests=true\ncache-key=exact-build-attempt\n"
+
+
+@pytest.mark.parametrize("results", [None, "pkg_a failure skipped\n", ""])
+def test_no_test_job_when_nothing_built(repo_root, tmp_path, results):
+    if results is not None:
+        (tmp_path / ".sweep-results.txt").write_text(results)
+    output = tmp_path / "output"
+    proc = run_step(
+        repo_root,
+        tmp_path,
+        "Prepare build handoff",
+        {"CACHE_KEY": "unused", "GITHUB_OUTPUT": str(output)},
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert not output.exists()
