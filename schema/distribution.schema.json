@@ -2,14 +2,14 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/autowarefoundation/autoware-index/main/schema/distribution.schema.json",
   "title": "Autoware Index distribution file",
-  "description": "Schema for distributions/<distro>.yaml. Version 3 adds registered package dependencies to the repository-keyed version 2 format. Cross-entry target and cycle checks live in scripts/check_refs.py.",
+  "description": "Schema for distributions/<distro>.yaml. Version 4 uses a generic boolean reference-design marker and supports registered package dependencies. Cross-entry target and cycle checks live in scripts/check_refs.py.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "ros_distro", "repositories"],
   "properties": {
     "schema_version": {
       "type": "string",
-      "enum": ["2", "3"]
+      "const": "4"
     },
     "ros_distro": {
       "type": "string",
@@ -25,29 +25,6 @@
       }
     }
   },
-  "allOf": [
-    {
-      "if": {
-        "properties": { "schema_version": { "const": "2" } },
-        "required": ["schema_version"]
-      },
-      "then": {
-        "properties": {
-          "repositories": {
-            "additionalProperties": {
-              "properties": {
-                "packages": {
-                  "additionalProperties": {
-                    "not": { "required": ["index_dependencies"] }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  ],
   "$defs": {
     "repository": {
       "type": "object",
@@ -66,11 +43,8 @@
           "enum": ["community", "foundation"]
         },
         "reference_design": {
-          "type": "array",
-          "minItems": 1,
-          "items": { "type": "string", "enum": ["pov"] },
-          "uniqueItems": true,
-          "description": "Optional, reviewer-granted: the named AWF reference designs whose published documentation cites this repository ('pov' = the privately-owned-vehicles design). The grant test is that citation, so any reviewer can confirm or refuse a value from public documents. The enum grows one value per design whose owners confirm its spelling; it is display and filter metadata, never a ref selector, and stays outside the sweep diff tuple."
+          "type": "boolean",
+          "description": "Optional, reviewer-granted marker. True means this repository entry is a reference design; false or omission means it is not. The Index does not classify the kind of reference design. This is display and filter metadata, never a ref selector, and stays outside the sweep diff tuple."
         },
         "maintainers": {
           "type": "array",
@@ -110,7 +84,7 @@
           "type": "array",
           "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
           "uniqueItems": true,
-          "description": "Version 3 only: registered ROS package names in this same distribution required by this package. Consumers resolve the transitive closure and clone each owning repository once. Targets, self-dependencies, and cycles are checked by check_refs.py."
+          "description": "Registered ROS package names in this same distribution required by this package. Consumers resolve the transitive closure and clone each owning repository once. Targets, self-dependencies, and cycles are checked by check_refs.py."
         },
         "maintainers": {
           "type": "array",

@@ -78,7 +78,7 @@ A repository hosting several ROS packages is **one** `repositories:` entry:
 
 A PR cannot merge unless, for every changed entry:
 
-- the file conforms to `schema/distribution.schema.json` (schema_version "3");
+- the file conforms to `schema/distribution.schema.json` (schema_version "4");
 - `ros_distro` equals the filename stem;
 - the registered `ref` **actually resolves** in the named repository
   (`git ls-remote`): a `tag`/`branch` that does not exist is rejected;

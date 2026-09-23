@@ -155,8 +155,7 @@ reserved:
   reference-design:
     note: >-
       A repository property, not a package topic. Use the repository field
-      `reference_design`: the named designs are plural (PoV, LSA, Off-road),
-      and the field says which one.
+      `reference_design` to mark the entry without classifying its design.
   gpu:
     note: A build requirement, not a topic. Derivable from package.xml/CMake, so CI must own it, never a human.
   stable:

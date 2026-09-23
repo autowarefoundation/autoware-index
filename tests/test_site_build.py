@@ -117,7 +117,7 @@ def test_load_distributions_flattens_packages(tmp_path):
         "repository": "https://example.com/a",
         "description": "Package A",
         "governance": "core",
-        "reference_design": [],
+        "reference_design": False,
         "tags": ["planning"],
         "index_dependencies": [],
         "maintainers": ["alice"],
@@ -129,19 +129,19 @@ def test_load_distributions_carries_reference_design(tmp_path):
     # The repository-level grant flows onto every package record, so the
     # site can wear the badge next to the governance badge.
     (tmp_path / "humble.yaml").write_text(
-        'schema_version: "2"\n'
+        'schema_version: "4"\n'
         "ros_distro: humble\n"
         "repositories:\n"
         "  repo_a:\n"
         "    url: https://example.com/a\n"
-        "    reference_design: [pov]\n"
+        "    reference_design: true\n"
         "    ref: {kind: branch, value: main}\n"
         "    packages:\n"
         "      pkg_a:\n"
         "        tags: [planning]\n"
     )
     regs = build.load_distributions(tmp_path)
-    assert regs[0]["reference_design"] == ["pov"]
+    assert regs[0]["reference_design"] is True
 
 
 def test_load_distributions_defaults_for_sparse_spec(tmp_path):
@@ -164,7 +164,7 @@ def test_load_distributions_defaults_for_sparse_spec(tmp_path):
             "repository": "",
             "description": "",
             "governance": "community",
-            "reference_design": [],
+            "reference_design": False,
             "tags": [],
             "index_dependencies": [],
             "maintainers": [],
@@ -801,7 +801,7 @@ def test_main_shared_repo_two_packages_join_independently(tmp_path, monkeypatch)
     distributions = tmp_path / "distributions"
     distributions.mkdir()
     (distributions / "humble.yaml").write_text(
-        'schema_version: "3"\n'
+        'schema_version: "4"\n'
         "ros_distro: humble\n"
         "repositories:\n"
         "  shared_repo:\n"

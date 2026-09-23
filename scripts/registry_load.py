@@ -9,15 +9,16 @@ is a HARD, uniform failure everywhere. Before this gate existed,
 flipped every reader into a silent no-op (empty site, empty sweep matrices)
 with green CI.
 
-Format (schema_version "3", see schema/distribution.schema.json):
+Format (schema_version "4", see schema/distribution.schema.json):
 
-    schema_version: "3"
+    schema_version: "4"
     ros_distro: jazzy
     repositories:
       <repo_name>:                 # registry-unique key
         url: <git url>             # canonical-unique per distro file
         ref: {kind: tag|sha|branch, value: "..."}   # ONE ref per repository
         governance: community | foundation
+        reference_design: true     # optional generic marker
         maintainers: [...]         # repo-level default
         packages:                  # >= 1 registered package hosted by the repo
           <package_name>:
@@ -39,7 +40,9 @@ from urllib.parse import urlsplit
 
 import yaml
 
-SUPPORTED_SCHEMA_VERSIONS = ("2", "3")
+# Older versions remain readable only for internal comparisons with a PR's
+# merge base. The published schema and consumer CLI accept v4 only.
+SUPPORTED_SCHEMA_VERSIONS = ("2", "3", "4")
 
 TAG_ID_PATTERN = re.compile(r"^[a-z][a-z0-9-]*$")
 TAG_ID_MAX_LENGTH = 20
@@ -85,8 +88,15 @@ def load_distribution(path: Path) -> dict:
             for package, pkg_spec in ((spec or {}).get("packages") or {}).items():
                 if "index_dependencies" in (pkg_spec or {}):
                     raise RegistryError(
-                        f"{path}::{repo_name}.{package}: index_dependencies requires schema_version '3'"
+                        f"{path}::{repo_name}.{package}: index_dependencies requires "
+                        "schema_version '3' or newer"
                     )
+        marker = (spec or {}).get("reference_design")
+        if version == "4" and marker is not None and not isinstance(marker, bool):
+            raise RegistryError(
+                f"{path}::{repo_name}: reference_design must be a boolean "
+                f"(got {type(marker).__name__})"
+            )
         ref = (spec or {}).get("ref")
         if ref is not None:
             value = (ref or {}).get("value") if isinstance(ref, dict) else None
@@ -355,7 +365,7 @@ def flatten_packages(doc: dict, *, distro: str | None = None) -> list[dict]:
                     "repository": spec.get("url", ""),
                     "ref": spec.get("ref") or {},
                     "governance": spec.get("governance", "community"),
-                    "reference_design": spec.get("reference_design") or [],
+                    "reference_design": bool(spec.get("reference_design")),
                     "tags": pkg_spec.get("tags") or [],
                     "index_dependencies": pkg_spec.get("index_dependencies") or [],
                     "maintainers": pkg_spec.get("maintainers") or repo_maintainers,

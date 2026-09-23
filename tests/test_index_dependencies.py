@@ -18,7 +18,7 @@ def distribution(*, target_dependencies=None, dependency_ref="v1"):
     if target_dependencies is not None:
         target_spec["index_dependencies"] = target_dependencies
     return {
-        "schema_version": "3",
+        "schema_version": "4",
         "ros_distro": "jazzy",
         "repositories": {
             "consumer": {
@@ -46,12 +46,12 @@ def write_distribution(directory, doc):
     return path
 
 
-def test_v3_schema_and_legacy_v2_gate(tmp_path):
+def test_v4_schema_and_legacy_v2_gate(tmp_path):
     schema = json.loads(SCHEMA.read_text())
     doc = distribution(target_dependencies=["library_pkg"])
     jsonschema.validate(doc, schema)
     path = write_distribution(tmp_path / "d", doc)
-    assert registry_load.load_distribution(path)["schema_version"] == "3"
+    assert registry_load.load_distribution(path)["schema_version"] == "4"
     assert registry_load.flatten_packages(doc)[0]["index_dependencies"] == ["library_pkg"]
 
     doc["schema_version"] = "2"
@@ -60,7 +60,7 @@ def test_v3_schema_and_legacy_v2_gate(tmp_path):
     try:
         registry_load.load_distribution(path)
     except registry_load.RegistryError as exc:
-        assert "requires schema_version '3'" in str(exc)
+        assert "requires schema_version '3' or newer" in str(exc)
     else:
         raise AssertionError("v2 dependencies must fail loudly")
 

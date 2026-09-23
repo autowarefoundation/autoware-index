@@ -42,7 +42,7 @@ def test_registration_infers_index_sources_and_leaves_other_dependencies_to_rosd
     path.write_text(
         yaml.safe_dump(
             {
-                "schema_version": "3",
+                "schema_version": "4",
                 "ros_distro": "jazzy",
                 "repositories": {
                     "library": {"packages": {"indexed_pkg": {"tags": ["common-library"]}}}

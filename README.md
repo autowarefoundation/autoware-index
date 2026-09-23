@@ -43,7 +43,7 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full walkthrough and local vali
 ## Registry format
 
 ```yaml
-schema_version: "3"
+schema_version: "4"
 ros_distro: jazzy # MUST equal the filename stem
 
 repositories:
@@ -53,7 +53,7 @@ repositories:
       kind: tag | sha | branch
       value: "<tag-name | full-sha | branch-name>"
     governance: community | foundation
-    reference_design: [pov] # optional, reviewer-granted (see below)
+    reference_design: true # optional, reviewer-granted marker (see below)
     maintainers: # repo-level default
       - { name: ..., email: ..., github: ... }
     packages: # every registered package this repo hosts
@@ -80,9 +80,9 @@ Key rules:
   Dependencies without an Index match continue through rosdep.
   In particular, compile-time dependencies need `<build_depend>` or `<depend>` so colcon knows their build order; Index edges only select source repositories and packages.
 - **`description`** is optional; omit it to show the upstream `package.xml` `<description>`.
-- **`reference_design`** is optional and reviewer-granted: a repository lists a named AWF reference design (today only `pov`) exactly when that design's published documentation cites the repository.
-  The citation is the whole grant test, so any reviewer can confirm or refuse a value from public documents.
-  New design names enter the schema enum only after their owners confirm the spelling.
+- **`reference_design`** is an optional, reviewer-granted boolean marker.
+  `true` means the repository entry is a reference design; omission or `false` means it is not.
+  The Index does not classify the kind of reference design.
 
 | `ref` kind  | Sweep behaviour                                                                                    |
 | ----------- | -------------------------------------------------------------------------------------------------- |

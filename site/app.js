@@ -204,18 +204,15 @@ function card(pkg, siblingCount) {
       : null,
     el("span", { class: "badge badge-distro", text: pkg.distro }),
     el("span", { class: "badge badge-gov", text: pkg.governance }),
-    // Reference-design badges: one quiet outline pill per granted design,
-    // in the same family as the governance badge it follows. The grant rule
-    // (the design's published docs cite the repository) lives in the title.
-    ...(pkg.reference_design || []).map((d) =>
-      el("span", {
-        class: "badge badge-refdesign",
-        text: `${d} reference design`,
-        title:
-          `The published ${d.toUpperCase()} reference-design documentation ` +
-          `cites this repository.`,
-      }),
-    ),
+    // A generic reference-design marker; the Index deliberately does not
+    // classify which kind of reference design the entry represents.
+    pkg.reference_design
+      ? el("span", {
+          class: "badge badge-refdesign",
+          text: "reference design",
+          title: "This repository entry is marked as a reference design.",
+        })
+      : null,
     // Monorepo badge: the same quiet outline family as the governance badge,
     // but a button, closing the row. Clicking it filters the list to this
     // repository's packages (wireRepoBadges drops the repo name into the
@@ -609,7 +606,7 @@ function buildDistribution(distro) {
       index_dependencies: p.index_dependencies || [],
     };
   }
-  return { schema_version: "3", ros_distro: distro, repositories };
+  return { schema_version: "4", ros_distro: distro, repositories };
 }
 
 function distributionFor(distro) {

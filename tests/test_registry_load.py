@@ -110,6 +110,18 @@ def test_load_distribution_rejects_non_string_ref_value(tmp_path):
     assert "must be a string" in str(exc.value)
 
 
+def test_load_distribution_rejects_named_reference_design_list_in_v4(tmp_path):
+    path = write(
+        tmp_path,
+        "jazzy.yaml",
+        'schema_version: "4"\nros_distro: jazzy\nrepositories:\n'
+        "  r:\n    reference_design: [pov]\n    packages: {}\n",
+    )
+    with pytest.raises(m.RegistryError) as exc:
+        m.load_distribution(path)
+    assert "reference_design must be a boolean" in str(exc.value)
+
+
 def test_load_distributions_dir_sorted_and_gated(tmp_path):
     write(tmp_path, "humble.yaml", V2_DOC.replace("jazzy", "humble"))
     write(tmp_path, "jazzy.yaml", V2_DOC)
@@ -557,7 +569,7 @@ def test_flatten_packages_tolerates_sparse_specs():
     assert records[0]["tags"] == []
     assert records[0]["maintainers"] == []
     assert records[0]["governance"] == "community"
-    assert records[0]["reference_design"] == []
+    assert records[0]["reference_design"] is False
 
 
 def test_flatten_packages_carries_reference_design():
@@ -566,10 +578,10 @@ def test_flatten_packages_carries_reference_design():
         "repositories": {
             "r": {
                 "url": "u",
-                "reference_design": ["pov"],
+                "reference_design": True,
                 "packages": {"p": {"tags": ["planning"]}},
             },
         },
     }
     records = m.flatten_packages(doc)
-    assert records[0]["reference_design"] == ["pov"]
+    assert records[0]["reference_design"] is True

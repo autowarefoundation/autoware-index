@@ -57,7 +57,7 @@ function rejectUnknown(singular, plural, missing) {
  * Return `[key, spec, selectedNames]` triples sorted by repo key.
  *
  * The three optional filters (`tags`, `packages`, `repository`) are ANDed;
- * omit all to select the whole distribution. In a v3 distribution, the
+ * omit all to select the whole distribution. In a v4 distribution, the
  * filtered roots include their transitive `index_dependencies` regardless of
  * the filters. Set `includeDependencies: false` for roots-only listing. An
  * explicit `repository` key or `packages` name absent from the *whole*
@@ -68,18 +68,6 @@ export function selectRepositories(
   { tags = null, packages = null, repository = null, includeDependencies = true } = {},
 ) {
   const allRepos = (distribution && distribution.repositories) || {};
-  if (distribution?.schema_version === "2") {
-    for (const [key, spec] of Object.entries(allRepos)) {
-      if (!isMapping(spec?.packages)) continue;
-      for (const [name, packageSpec] of Object.entries(spec.packages)) {
-        if (isMapping(packageSpec) && Object.hasOwn(packageSpec, "index_dependencies")) {
-          throw new ComposeError(
-            `package '${name}' in repository '${key}' declares 'index_dependencies' under schema_version '2'; use schema_version '3'`,
-          );
-        }
-      }
-    }
-  }
   const wantedTags = new Set(tags || []);
   const wantedPkgs = new Set(packages || []);
   const wantedRepos = new Set(repository || []);
@@ -123,7 +111,7 @@ export function selectRepositories(
       .sort(cmp);
     if (names.length) selected.push([key, spec, names]);
   }
-  if (includeDependencies && distribution?.schema_version === "3" && selected.length) {
+  if (includeDependencies && distribution?.schema_version === "4" && selected.length) {
     return withIndexDependencies(allRepos, selected);
   }
   return selected;
