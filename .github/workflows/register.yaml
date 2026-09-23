@@ -78,7 +78,7 @@ jobs:
           python-version: "3.12"
 
       - name: install validators
-        run: python -m pip install --upgrade pyyaml check-jsonschema
+        run: python -m pip install --upgrade pyyaml check-jsonschema catkin_pkg
 
       - name: save the issue body
         env:
@@ -92,6 +92,7 @@ jobs:
           if ! python scripts/apply_registration.py \
               --issue-body /tmp/issue-body.md \
               --distributions-dir distributions \
+              --infer-dependencies \
               >/tmp/outputs.txt 2>/tmp/apply-errors.txt; then
             {
               echo "The registration could not be applied:"

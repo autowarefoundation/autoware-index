@@ -682,7 +682,7 @@ def test_cache_restores_exact_build_without_fallback_or_rebuild(repo_root):
     save = workflow_step(repo_root, "Cache built workspace")
     restore = workflow_step(repo_root, "Restore built workspace", "test-repository")
     assert save["with"]["path"] == restore["with"]["path"]
-    assert {"src", "build", "install"} == set(save["with"]["path"].split())
+    assert {"src", "build", "install", ".index-closures"} == set(save["with"]["path"].split())
     assert restore["with"]["fail-on-cache-miss"] is True
     assert "restore-keys" not in restore["with"]
     handoff = workflow_step(repo_root, "Prepare build handoff")

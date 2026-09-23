@@ -1,12 +1,12 @@
 # yaml-language-server: $schema=../schema/distribution.schema.json
 # Autoware Index: jazzy distribution
 #
-# Repositories are first-class (schema_version 2): each entry owns one URL and
+# Repositories are first-class (schema_version 3): each entry owns one URL and
 # ONE ref, and lists the registered packages it hosts under `packages:`.
 # A monorepo registers several packages in one entry, all validated in
 # lockstep at the repository's single ref.
 
-schema_version: "2"
+schema_version: "3"
 ros_distro: jazzy
 
 repositories:

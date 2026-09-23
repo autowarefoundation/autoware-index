@@ -157,7 +157,7 @@ function searchBlob(pkg) {
   // Vocabulary labels and aliases ride along with each carried tag id, so a
   // search for "ai" finds every `ml` package without `ai` being a stored id.
   const synonyms = (pkg.tags || []).map((t) => state.tagSearch.get(t) || "").join(" ");
-  return `${pkg.name} ${pkg.description || ""} ${(pkg.tags || []).join(" ")} ${synonyms} ${names} ${pkg.repository || ""} ${pkg.repo_name || ""}`.toLowerCase();
+  return `${pkg.name} ${pkg.description || ""} ${(pkg.tags || []).join(" ")} ${(pkg.index_dependencies || []).join(" ")} ${synonyms} ${names} ${pkg.repository || ""} ${pkg.repo_name || ""}`.toLowerCase();
 }
 
 // (distro, repo_name) -> number of registered packages from that repository,
@@ -269,6 +269,15 @@ function card(pkg, siblingCount) {
     el("div", { class: "muted" }, "registered ref: ", el("code", { text: refText(pkg.ref) })),
   );
 
+  const dependencies = (pkg.index_dependencies || []).length
+    ? el(
+        "p",
+        { class: "index-dependencies" },
+        "Requires index packages: ",
+        el("code", { text: pkg.index_dependencies.join(", ") }),
+      )
+    : null;
+
   const details = el(
     "details",
     {},
@@ -298,6 +307,7 @@ function card(pkg, siblingCount) {
     ),
     pkg.description ? el("p", { class: "description", text: pkg.description }) : null,
     meta,
+    dependencies,
     maintainers(pkg.maintainers),
     details,
     (pkg.tags || []).length ? tags : null,
@@ -594,9 +604,12 @@ function buildDistribution(distro) {
     if (!repositories[key]) {
       repositories[key] = { url: p.repository, ref: p.ref, packages: {} };
     }
-    repositories[key].packages[p.name] = { tags: p.tags || [] };
+    repositories[key].packages[p.name] = {
+      tags: p.tags || [],
+      index_dependencies: p.index_dependencies || [],
+    };
   }
-  return { schema_version: "2", ros_distro: distro, repositories };
+  return { schema_version: "3", ros_distro: distro, repositories };
 }
 
 function distributionFor(distro) {
@@ -678,7 +691,33 @@ function cartRepoBlock(group) {
     ),
   );
   for (const name of group.names) {
-    block.append(el("div", { class: "cart-pkg" }, el("span", { text: name })));
+    const pkg = state.pkgIndex.get(keyOf(state.active, name));
+    const dependencies = pkg?.index_dependencies || [];
+    block.append(
+      el(
+        "div",
+        { class: "cart-pkg" },
+        el("span", { text: name }),
+        dependencies.length
+          ? el("span", {
+              class: "muted cart-pkg-deps",
+              text: `requires ${dependencies.join(", ")}`,
+            })
+          : null,
+      ),
+    );
+  }
+  if (
+    group.names.some(
+      (name) => state.pkgIndex.get(keyOf(state.active, name))?.index_dependencies?.length,
+    )
+  ) {
+    block.append(
+      el("p", {
+        class: "cart-note",
+        text: "Required index packages are included when you download the repos file.",
+      }),
+    );
   }
   if (group.names.length > 1) {
     block.append(

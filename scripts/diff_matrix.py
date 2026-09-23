@@ -5,7 +5,7 @@ Diffs the HEAD registry (the PR's test-merge distributions/) against the BASE
 registry (the same merge's base parent, checked out by build-check.yaml)
 and emits one row per repository entry whose sweep tuple was added or changed
 by the PR. The tuple is (url, ref{kind, value}, sorted registered package
-names), imported from sweep_matrix so the two diffs can never drift. Metadata-only
+names, index dependency closure), imported from sweep_matrix so the two diffs can never drift. Metadata-only
 edits (tags, descriptions, maintainers, governance) emit nothing, and entries
 the PR does not touch are never blamed for being stale: that is what
 distinguishes this diff from `sweep_matrix.py --mode eager`, which compares
@@ -29,6 +29,8 @@ import sys
 from registry_load import RegistryError
 from registry_load import load_distributions_dir
 from sweep_matrix import MAX_ROWS_DEFAULT
+from sweep_matrix import dependency_context
+from sweep_matrix import matrix_row
 from sweep_matrix import registered_state
 
 
@@ -42,7 +44,9 @@ def base_states(base_dir: Path) -> dict[tuple[str, str], dict]:
     for path, doc in load_distributions_dir(base_dir):
         distro = doc.get("ros_distro") or path.stem
         for repo_name, spec in (doc.get("repositories") or {}).items():
-            states[(distro, repo_name)] = registered_state(spec or {})
+            states[(distro, repo_name)] = registered_state(
+                spec or {}, dependency_context(doc, repo_name)
+            )
     return states
 
 
@@ -60,7 +64,7 @@ def build_matrix(base_dir: Path, head_dir: Path) -> list[dict]:
         distro = doc.get("ros_distro") or path.stem
         for repo_name, spec in sorted((doc.get("repositories") or {}).items()):
             spec = spec or {}
-            desired = registered_state(spec)
+            desired = registered_state(spec, dependency_context(doc, repo_name))
             ref = spec.get("ref") or {}
             if not (
                 desired["url"]
@@ -76,16 +80,7 @@ def build_matrix(base_dir: Path, head_dir: Path) -> list[dict]:
 
             if base.get((distro, repo_name)) == desired:
                 continue
-            rows.append(
-                {
-                    "ros_distro": distro,
-                    "repo_name": repo_name,
-                    "repository": desired["url"],
-                    "ref_kind": ref["kind"],
-                    "ref_value": desired["ref"]["value"],
-                    "packages": " ".join(desired["packages"]),
-                }
-            )
+            rows.append(matrix_row(distro, repo_name, desired))
 
     if malformed:
         raise RegistryError(

@@ -4,7 +4,7 @@ Imported as ``import build`` because conftest puts site/ on sys.path.
 
 Covers the real signatures verified by reading build.py:
   semver_key, parse_description, load_distributions (via the shared
-  version-gated v2 loader), load_history, load_metadata, summarize,
+  version-gated v2/v3 loader), load_history, load_metadata, summarize,
   build_packages, and main(). Includes the shared-repo case: one repository
   entry hosting two packages must yield two independent cards.
 """
@@ -88,7 +88,7 @@ def test_parse_description_empty_description_returns_empty():
 
 
 # --------------------------------------------------------------------------- #
-# load_distributions: flattening the v2 repository-keyed format
+# load_distributions: flattening the v2/v3 repository-keyed format
 # --------------------------------------------------------------------------- #
 
 
@@ -119,6 +119,7 @@ def test_load_distributions_flattens_packages(tmp_path):
         "governance": "core",
         "reference_design": [],
         "tags": ["planning"],
+        "index_dependencies": [],
         "maintainers": ["alice"],
         "ref": {"kind": "branch", "value": "main"},
     }
@@ -165,6 +166,7 @@ def test_load_distributions_defaults_for_sparse_spec(tmp_path):
             "governance": "community",
             "reference_design": [],
             "tags": [],
+            "index_dependencies": [],
             "maintainers": [],
             "ref": {},
         }
@@ -799,7 +801,7 @@ def test_main_shared_repo_two_packages_join_independently(tmp_path, monkeypatch)
     distributions = tmp_path / "distributions"
     distributions.mkdir()
     (distributions / "humble.yaml").write_text(
-        'schema_version: "2"\n'
+        'schema_version: "3"\n'
         "ros_distro: humble\n"
         "repositories:\n"
         "  shared_repo:\n"
@@ -808,6 +810,7 @@ def test_main_shared_repo_two_packages_join_independently(tmp_path, monkeypatch)
         "    packages:\n"
         "      pkg_one:\n"
         "        tags: [planning]\n"
+        "        index_dependencies: [pkg_two]\n"
         "        description: One\n"
         "      pkg_two:\n"
         "        tags: [sensing]\n"
@@ -847,6 +850,7 @@ def test_main_shared_repo_two_packages_join_independently(tmp_path, monkeypatch)
     # ...but fully independent registration + history joins.
     assert one["description"] == "One" and two["description"] == "Two"
     assert one["tags"] == ["planning"] and two["tags"] == ["sensing"]
+    assert one["index_dependencies"] == ["pkg_two"] and two["index_dependencies"] == []
     assert one["current_status"] == "pass" and two["current_status"] == "fail"
     assert [v["autoware_version"] for v in one["versions"]] == ["1.6.0"]
     assert [v["autoware_version"] for v in two["versions"]] == ["1.7.0"]

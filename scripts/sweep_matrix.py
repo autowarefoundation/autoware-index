@@ -8,7 +8,7 @@ RECORDED state (state/<distro>/<repo_name>.json on the data branch, written by
 append_history.py in the same commit as the history records):
 
   --mode eager     rows for every repository entry whose (url, ref, registered
-                   package set) differs from its state file, or that has no
+                   package set, index dependency closure) differs from its state file, or that has no
                    state file yet. A run that was cancelled, lost to
                    concurrency, or interrupted before recording leaves its
                    state stale, so the NEXT eager or nightly run re-detects
@@ -18,11 +18,11 @@ append_history.py in the same commit as the history records):
                    git diff missed them.
 
   --mode nightly   every `kind: branch` repository (tips move under a fixed
-                   ref value), UNION the eager state-diff as catch-up.
+                   ref value), plus consumers of a branch dependency, UNION
+                   the eager state-diff as catch-up.
 
 Pinned tag/sha repositories with an up-to-date state file are swept by
-neither mode: re-testing the same immutable ref adds nothing (a new Autoware
-release is picked up when the ref next changes, or nightly for branch refs).
+neither mode unless they consume a branch dependency.
 
 Row shape (consumed by sweep-repository.yaml in the actions repo and by
 scripts/build_envelopes.py; `packages` is space-separated for workflow_call
@@ -61,14 +61,76 @@ from registry_load import load_distributions_dir
 MAX_ROWS_DEFAULT = 250
 
 
-def registered_state(spec: dict) -> dict:
-    """Build the (url, ref, package set) tuple a state file is diffed against."""
-    ref = spec.get("ref") or {}
+def dependency_context(doc: dict, repo_name: str) -> dict:
+    """Resolve a repository's registered package dependencies within one distro.
+
+    The context is part of the sweep state: changing a dependency edge or a
+    transitive repository ref must revalidate packages that consume it.
+    """
+    repositories = doc.get("repositories") or {}
+    owners = {
+        package: (name, spec)
+        for name, spec in repositories.items()
+        for package in (spec.get("packages") or {})
+    }
+    # Pre-validation PR fixtures may contain duplicate package keys. The
+    # semantic gate rejects them, but a row's own packages must still be
+    # attributed to that row while the build-check matrix is computed.
+    for package in repositories[repo_name].get("packages") or {}:
+        owners[package] = (repo_name, repositories[repo_name])
+    graph: dict[str, list[str]] = {}
+    external: dict[str, dict] = {}
+    required_packages: set[str] = set()
+    visited: set[str] = set()
+    active: list[str] = []
+
+    def visit(package: str) -> None:
+        if package not in owners:
+            raise RegistryError(f"index dependency {package!r} is not registered")
+        if package in active:
+            cycle = active[active.index(package) :] + [package]
+            raise RegistryError(f"index dependency cycle: {' -> '.join(cycle)}")
+        if package in visited:
+            return
+        active.append(package)
+        owner, spec = owners[package]
+        if owner != repo_name:
+            external[owner] = {
+                "repo_name": owner,
+                "repository": spec.get("url", ""),
+                "ref_kind": (spec.get("ref") or {}).get("kind", ""),
+                "ref_value": str((spec.get("ref") or {}).get("value", "")),
+            }
+        dependencies = ((spec.get("packages") or {})[package] or {}).get("index_dependencies") or []
+        if dependencies:
+            graph[package] = sorted(dependencies)
+            required_packages.update(dependencies)
+        for target in dependencies:
+            visit(target)
+        active.pop()
+        visited.add(package)
+
+    for package in sorted((repositories[repo_name].get("packages") or {})):
+        visit(package)
     return {
+        "index_dependencies": {name: graph[name] for name in sorted(graph)},
+        "dependency_repositories": [external[name] for name in sorted(external)],
+        "dependency_packages": sorted(required_packages),
+    }
+
+
+def registered_state(spec: dict, context: dict | None = None) -> dict:
+    """Build the source/dependency tuple a state file is diffed against."""
+    ref = spec.get("ref") or {}
+    state = {
         "url": spec.get("url", ""),
         "ref": {"kind": ref.get("kind", ""), "value": str(ref.get("value", ""))},
         "packages": sorted((spec.get("packages") or {}).keys()),
     }
+    for key in ("index_dependencies", "dependency_repositories", "dependency_packages"):
+        if context and context.get(key):
+            state[key] = context[key]
+    return state
 
 
 def recorded_state(state_dir: Path, distro: str, repo_name: str) -> dict | None:
@@ -81,11 +143,34 @@ def recorded_state(state_dir: Path, distro: str, repo_name: str) -> dict | None:
     if not isinstance(doc, dict):
         return None
     ref = doc.get("ref") or {}
-    return {
+    state = {
         "url": doc.get("url", ""),
         "ref": {"kind": ref.get("kind", ""), "value": str(ref.get("value", ""))},
         "packages": sorted(doc.get("packages") or []),
     }
+    for key in ("index_dependencies", "dependency_repositories", "dependency_packages"):
+        if doc.get(key):
+            state[key] = doc[key]
+    return state
+
+
+def matrix_row(distro: str, repo_name: str, desired: dict) -> dict:
+    """Build one workflow_call row, retaining dependency state for recording."""
+    row = {
+        "ros_distro": distro,
+        "repo_name": repo_name,
+        "repository": desired["url"],
+        "ref_kind": desired["ref"]["kind"],
+        "ref_value": desired["ref"]["value"],
+        "packages": " ".join(desired["packages"]),
+    }
+    if desired.get("index_dependencies"):
+        row["index_dependencies"] = desired["index_dependencies"]
+    if desired.get("dependency_repositories"):
+        row["dependency_repositories"] = desired["dependency_repositories"]
+    if desired.get("dependency_packages"):
+        row["dependency_packages"] = " ".join(desired["dependency_packages"])
+    return row
 
 
 def build_matrix(distributions_dir: Path, state_dir: Path, mode: str) -> list[dict]:
@@ -95,7 +180,7 @@ def build_matrix(distributions_dir: Path, state_dir: Path, mode: str) -> list[di
         distro = doc.get("ros_distro") or path.stem
         for repo_name, spec in sorted((doc.get("repositories") or {}).items()):
             spec = spec or {}
-            desired = registered_state(spec)
+            desired = registered_state(spec, dependency_context(doc, repo_name))
             ref = spec.get("ref") or {}
             if not (
                 desired["url"]
@@ -112,19 +197,12 @@ def build_matrix(distributions_dir: Path, state_dir: Path, mode: str) -> list[di
                 malformed.append(f"{path}::{repo_name}: missing url/ref/packages")
                 continue
 
-            is_branch = ref.get("kind") == "branch"
+            is_branch = ref.get("kind") == "branch" or any(
+                dep["ref_kind"] == "branch" for dep in desired.get("dependency_repositories", [])
+            )
             differs = recorded_state(state_dir, distro, repo_name) != desired
             if (mode == "eager" and differs) or (mode == "nightly" and (is_branch or differs)):
-                rows.append(
-                    {
-                        "ros_distro": distro,
-                        "repo_name": repo_name,
-                        "repository": desired["url"],
-                        "ref_kind": ref["kind"],
-                        "ref_value": desired["ref"]["value"],
-                        "packages": " ".join(desired["packages"]),
-                    }
-                )
+                rows.append(matrix_row(distro, repo_name, desired))
 
     if malformed:
         raise RegistryError(

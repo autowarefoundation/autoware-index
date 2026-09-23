@@ -145,7 +145,10 @@
           <p class="station-lead">
             Which ROS packages are you registering? Each name must equal a real
             <code>package.xml</code> <code>&lt;name&gt;</code> at the ref above; the sweep resolves
-            every one with <code>colcon list</code> and fails loudly when a name is absent.
+            every one with <code>colcon list</code> and fails loudly when a name is absent. If a
+            package requires another package already registered for this ROS distro, the page
+            detects it from <code>package.xml</code> and includes its Index source automatically.
+            Other dependencies are resolved by <code>rosdep</code> during the build.
           </p>
 
           <div id="scan-zone" class="scan-zone" hidden>
