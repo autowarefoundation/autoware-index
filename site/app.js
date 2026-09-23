@@ -387,7 +387,7 @@ function renderTagRail() {
     if (!available.has(t)) state.activeTags.delete(t);
   }
 
-  rail.append(tagRow({ id: "", label: "all packages", count: scoped.length, summary: null }));
+  rail.append(tagRow({ id: "", label: "All packages", count: scoped.length, summary: null }));
   for (const group of groups) {
     if (group.title) rail.append(el("h3", { class: "tagbar-group", text: group.title }));
     for (const t of group.tags) {
