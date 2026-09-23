@@ -52,8 +52,8 @@ jobs:
       - name: Fetch the latest aw-index-cli compose.mjs
         # The repos builder reuses aw-index-cli's compose module. Rather than
         # vendoring a pinned copy, bake in the latest release at deploy time so
-        # it stays current with no manual updates. The committed site/compose.mjs
-        # is a local/offline fallback, used only if this fetch fails.
+        # it stays current with no manual updates. Use the committed fallback
+        # until a release supports this registry's schema v4 contract.
         run: |
           repo=autowarefoundation/aw-index-cli
           tag="$(git ls-remote --tags "https://github.com/$repo.git" 2>/dev/null \
@@ -63,12 +63,15 @@ jobs:
             && curl -fsSL "https://raw.githubusercontent.com/$repo/$tag/js/compose.mjs" -o /tmp/compose.mjs \
             && [ -s /tmp/compose.mjs ] \
             && node --check /tmp/compose.mjs \
-            && grep -q 'index_dependencies' /tmp/compose.mjs; then
+            && node site/check-compose-compat.mjs /tmp/compose.mjs; then
             cp /tmp/compose.mjs site/compose.mjs
             echo "repos builder: using aw-index-cli@$tag js/compose.mjs"
           else
-            echo "::warning::latest aw-index-cli compose.mjs is unavailable or lacks index dependency support; using the committed site/compose.mjs fallback"
+            echo "::warning::latest aw-index-cli compose.mjs is unavailable or incompatible with schema v4; using the committed site/compose.mjs fallback"
           fi
+
+      - name: Check repos builder compatibility
+        run: node site/check-compose-compat.mjs site/compose.mjs
 
       - name: Build site
         run: |

@@ -10,6 +10,7 @@ site/
   styles.css    # styling (brand: white bg, primary #7290E5, secondary #EED45B)
   app.js        # fetch data.json -> render cards + compatibility tables, filters + repos builder
   compose.mjs   # aw-index-cli's registry->.repos composer, reused by the repos builder (see below)
+  check-compose-compat.mjs # deployment check for a fetched composer (not a site asset)
   register.html # registration page shell (linked from the browse header)
   register.css  # registration page styles (shares the brand tokens from styles.css)
   register.js   # registration wizard: live YAML entry + client-side mirror of the PR gates
@@ -18,8 +19,8 @@ site/
 ```
 
 `compose.mjs` is the browser copy of aw-index-cli's canonical `js/compose.mjs`, so the "repos builder" produces the exact same `.repos` file as the CLI.
-The Pages deploy **fetches the latest aw-index-cli release** and bakes it in (see Deployment), so it stays current without manual updates.
-The committed copy is only a local/offline fallback.
+The Pages deploy **fetches the latest compatible aw-index-cli release** and bakes it in (see Deployment), so it stays current without manual updates.
+The committed copy is used until a release supports registry schema v4, and whenever the fetch fails.
 
 `build.py` only loads the data and writes `data.json` next to copies of the static assets (`STATIC_ASSETS`) in `--out`; everything you see is rendered in the browser by `app.js` / `register.js`.
 To change the look or behaviour, edit the static files directly; no Python is involved.
@@ -84,6 +85,7 @@ The `sample-data/` fixture is for local preview only; CI never reads it.
 ## Deployment
 
 `.github/workflows/pages.yaml` builds and deploys to GitHub Pages.
-It checks out `main` and the `data` branch (into `_data/`), fetches the latest aw-index-cli release's `js/compose.mjs` into `site/compose.mjs` (falling back to the committed copy if unreachable), runs `build.py`, and publishes `_site/`.
+It checks out `main` and the `data` branch (into `_data/`), fetches the latest aw-index-cli release's `js/compose.mjs` into `site/compose.mjs` only if it passes a schema v4 composition check, runs `build.py`, and publishes `_site/`.
+An incompatible or unavailable release leaves the committed fallback in place.
 It triggers on pushes to `main` (registry/site changes), `workflow_dispatch`, and a periodic schedule that picks up new `data`-branch sweep records (the `data` branch can't trigger this workflow itself: it's an orphan branch with no workflow files).
 GitHub Pages must be enabled with "GitHub Actions" as the source.

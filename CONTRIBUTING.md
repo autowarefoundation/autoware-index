@@ -27,8 +27,9 @@ author). The manual flow it automates:
    `build-check` workflow reports separate build and test checks for every entry whose
    url, ref, package set, or index dependency closure your PR adds or changes against the current
    Autoware release; metadata-only edits (tags, descriptions, maintainers,
-   governance) skip the build. It is advisory: it informs the review rather
-   than hard-blocking the merge. A maintainer reviews and merges.
+   governance, reference-design marker) skip the build. It is advisory: it
+   informs the review rather than hard-blocking the merge. A maintainer reviews
+   and merges.
 
 The registration page previews Index dependencies from each scanned
 `package.xml`. The registration workflow checks out the submitted ref and

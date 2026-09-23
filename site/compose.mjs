@@ -12,7 +12,7 @@
 // the browser via `<script type="module">` and by Node's built-in test runner.
 
 /** Keep equal to `src/aw_index_cli/__init__.py` `__version__` (asserted by conformance). */
-export const VERSION = "0.4.0";
+export const VERSION = "0.5.0";
 
 /** Registry defaults, mirroring `registry.py` `DEFAULT_REPO`/`DEFAULT_REF`. */
 export const DEFAULT_REPO = "autowarefoundation/autoware-index";
@@ -56,7 +56,8 @@ function rejectUnknown(singular, plural, missing) {
 /**
  * Return `[key, spec, selectedNames]` triples sorted by repo key.
  *
- * The three optional filters (`tags`, `packages`, `repository`) are ANDed;
+ * The four optional filters (`tags`, `packages`, `repository`,
+ * `referenceDesign`) are ANDed;
  * omit all to select the whole distribution. In a v4 distribution, the
  * filtered roots include their transitive `index_dependencies` regardless of
  * the filters. Set `includeDependencies: false` for roots-only listing. An
@@ -65,8 +66,19 @@ function rejectUnknown(singular, plural, missing) {
  */
 export function selectRepositories(
   distribution,
-  { tags = null, packages = null, repository = null, includeDependencies = true } = {},
+  {
+    tags = null,
+    packages = null,
+    repository = null,
+    referenceDesign = false,
+    includeDependencies = true,
+  } = {},
 ) {
+  if (distribution?.schema_version !== "4") {
+    throw new ComposeError(
+      `unsupported schema_version ${JSON.stringify(distribution?.schema_version) ?? "undefined"} (expected '4')`,
+    );
+  }
   const allRepos = (distribution && distribution.repositories) || {};
   const wantedTags = new Set(tags || []);
   const wantedPkgs = new Set(packages || []);
@@ -94,6 +106,13 @@ export function selectRepositories(
   for (const key of Object.keys(allRepos).sort(cmp)) {
     if (wantedRepos.size && !wantedRepos.has(key)) continue;
     const spec = allRepos[key] || {};
+    const marker = spec.reference_design;
+    if (marker != null && typeof marker !== "boolean") {
+      throw new ComposeError(
+        `repository '${key}' has 'reference_design' that is not a boolean (got ${Array.isArray(marker) ? "array" : typeof marker})`,
+      );
+    }
+    if (referenceDesign && !marker) continue;
     const specPkgs = mappingOrEmpty(spec.packages);
     if (!isMapping(specPkgs)) {
       throw new ComposeError(
@@ -111,7 +130,7 @@ export function selectRepositories(
       .sort(cmp);
     if (names.length) selected.push([key, spec, names]);
   }
-  if (includeDependencies && distribution?.schema_version === "4" && selected.length) {
+  if (includeDependencies && selected.length) {
     return withIndexDependencies(allRepos, selected);
   }
   return selected;
@@ -220,6 +239,7 @@ export function provenanceHeader({
   tags = null,
   packages = null,
   repository = null,
+  referenceDesign = false,
   autoware = null,
   generatedAt = null,
   selection = null,
@@ -232,6 +252,7 @@ export function provenanceHeader({
   ];
   if (packages && packages.length) lines.push(`# packages: ${packages.join(", ")}`);
   if (repository && repository.length) lines.push(`# repository: ${repository.join(", ")}`);
+  if (referenceDesign) lines.push("# reference_design: true");
   if (autoware != null) {
     lines.push(
       `# autoware: ${autoware} (informational only, not a ref selector; the registry tracks one ref per repository)`,
@@ -256,9 +277,14 @@ export function provenanceHeader({
  */
 export function renderRepos(
   distribution,
-  { tags = null, packages = null, repository = null, headerLines } = {},
+  { tags = null, packages = null, repository = null, referenceDesign = false, headerLines } = {},
 ) {
-  const repositories = selectRepositories(distribution, { tags, packages, repository });
+  const repositories = selectRepositories(distribution, {
+    tags,
+    packages,
+    repository,
+    referenceDesign,
+  });
   const entries = toReposEntries(repositories);
   return headerLines.join("\n") + "\n\n" + dumpBody(entries);
 }
@@ -284,14 +310,18 @@ export function composeReposFile(
     tags = null,
     packages = null,
     repository = null,
+    referenceDesign = false,
     autoware = null,
     generatedAt = null,
   } = {},
 ) {
   const src = source != null ? source : defaultSource();
-  const selection = selectRepositories(distribution, { tags, packages, repository }).map(
-    ([key, , names]) => [key, names],
-  );
+  const selection = selectRepositories(distribution, {
+    tags,
+    packages,
+    repository,
+    referenceDesign,
+  }).map(([key, , names]) => [key, names]);
   const headerLines = provenanceHeader({
     toolVersion,
     rosDistro,
@@ -299,11 +329,12 @@ export function composeReposFile(
     tags,
     packages,
     repository,
+    referenceDesign,
     autoware,
     generatedAt,
     selection,
   });
-  return renderRepos(distribution, { tags, packages, repository, headerLines });
+  return renderRepos(distribution, { tags, packages, repository, referenceDesign, headerLines });
 }
 
 /**

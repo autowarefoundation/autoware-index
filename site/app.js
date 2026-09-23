@@ -599,7 +599,12 @@ function buildDistribution(distro) {
     if (p.distro !== distro) continue;
     const key = p.repo_name || p.repository;
     if (!repositories[key]) {
-      repositories[key] = { url: p.repository, ref: p.ref, packages: {} };
+      repositories[key] = {
+        url: p.repository,
+        ref: p.ref,
+        reference_design: p.reference_design,
+        packages: {},
+      };
     }
     repositories[key].packages[p.name] = {
       tags: p.tags || [],
