@@ -25,10 +25,17 @@ author). The manual flow it automates:
 3. **Validate locally** before opening a PR (see below).
 4. Open a pull request. The `validate` workflow runs automatically, and the
    `build-check` workflow reports separate build and test checks for every entry whose
-   url, ref, or package set your PR adds or changes against the current
+   url, ref, package set, or index dependency closure your PR adds or changes against the current
    Autoware release; metadata-only edits (tags, descriptions, maintainers,
    governance) skip the build. It is advisory: it informs the review rather
    than hard-blocking the merge. A maintainer reviews and merges.
+
+The registration page previews Index dependencies from each scanned
+`package.xml`. The registration workflow checks out the submitted ref and
+regenerates them from the actual source before opening a PR. A dependency
+whose package name is registered in the same ROS distro uses the Index source,
+including when a ROS build farm binary exists; other dependencies use rosdep.
+Package names remain unique within each distro file.
 
 Build and test use separate reusable workflows. Tests restore the exact source and build
 outputs from that build attempt through Actions cache, then run in a fresh container against
@@ -71,13 +78,14 @@ A repository hosting several ROS packages is **one** `repositories:` entry:
 
 A PR cannot merge unless, for every changed entry:
 
-- the file conforms to `schema/distribution.schema.json` (schema_version "2");
+- the file conforms to `schema/distribution.schema.json` (schema_version "3");
 - `ros_distro` equals the filename stem;
 - the registered `ref` **actually resolves** in the named repository
   (`git ls-remote`): a `tag`/`branch` that does not exist is rejected;
 - no two entries register the same repository URL (spelling variants like a
   `.git` suffix or the ssh form count as the same URL);
 - every package name appears in exactly ONE repository entry per distro;
+- every `index_dependencies` target exists in that distro, with no self-reference or cycle;
 - every package tag is a live id in [`schema/tags.yaml`](schema/tags.yaml)
   (at least one per package): unknown and deprecated tags are rejected, with
   a did-you-mean suggestion;

@@ -72,6 +72,9 @@ jobs:
       ref_kind: ${{ matrix.ref_kind }}
       ref_value: ${{ matrix.ref_value }}
       packages: ${{ matrix.packages }}
+      dependency_repositories: ${{ toJSON(matrix.dependency_repositories || fromJSON('[]')) }}
+      dependency_packages: ${{ matrix.dependency_packages || '' }}
+      index_dependencies: ${{ toJSON(matrix.index_dependencies || fromJSON('{}')) }}
 
   record:
     name: record history

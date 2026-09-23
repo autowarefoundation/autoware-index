@@ -35,6 +35,16 @@ Community packages register themselves here; the browse site,
 2. Open its **repos builder** and download your selection as a
    [vcs2l](https://github.com/ros-infrastructure/vcs2l) `.repos` file.
 3. Import the file into your workspace: `vcs import src < autoware-index.repos`.
+4. Install remaining dependencies with
+   `rosdep install --from-paths src --ignore-src --rosdistro <distro> -y`, then
+   build the selected packages with colcon.
+
+If a package name is available from both the ROS build farm and the Index,
+composition imports the Index source and `--ignore-src` makes rosdep skip the
+binary dependency. The source package in the workspace takes precedence over
+an installed binary during the colcon build.
+If an already-built underlay package depends on that binary, rebuild it in the
+source workspace when the Index version changes its API or ABI.
 
 Or do the same from the command line with
 [`aw-index-cli`](https://github.com/autowarefoundation/aw-index-cli) (`pipx install aw-index-cli`).
@@ -56,7 +66,7 @@ full walkthrough and local validation.
 ## Registry format
 
 ```yaml
-schema_version: "2"
+schema_version: "3"
 ros_distro: jazzy # MUST equal the filename stem
 
 repositories:
@@ -72,6 +82,7 @@ repositories:
     packages: # every registered package this repo hosts
       <package_name>: # key MUST equal the package.xml <name>
         tags: [sensing, perception, planning, ...]
+        index_dependencies: [other_registered_package] # optional, same distro
         description: ... # optional; overrides the cached package.xml text
         maintainers: [...] # optional per-package override
 ```
@@ -84,6 +95,15 @@ Key rules:
 - **`packages:` keys are real ROS package names**: each must equal the `package.xml` `<name>`
   at the registered ref, never the repository name (unless they genuinely coincide).
 - **`tags`** are one or more entries from the closed vocabulary in [`schema/tags.yaml`](schema/tags.yaml).
+- **`index_dependencies`** names other registered packages in the same ROS distro. The CLI and
+  repos builder include their transitive repository closure when you select a package. Names
+  must exist in the distribution; self-dependencies and cycles are rejected. The registration
+  workflow derives these names from the upstream `package.xml` at the selected ref, matching
+  exact package names in the same distro. For a dependency available both as an Index source
+  package and from the ROS build farm, the Index source is selected. Dependencies without an
+  Index match continue through rosdep. In
+  particular, compile-time dependencies need `<build_depend>` or `<depend>` so colcon knows
+  their build order; Index edges only select source repositories and packages.
 - **`description`** is optional; omit it to show the upstream `package.xml` `<description>`.
 - **`reference_design`** is optional and reviewer-granted: a repository lists a named AWF
   reference design (today only `pov`) exactly when that design's published documentation cites

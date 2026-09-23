@@ -351,19 +351,19 @@ def main() -> None:
             # may advance, so the level-triggered discover stops re-sweeping
             # this row. Partial rows stay stale on purpose: they re-sweep
             # (and re-annotate) until the registry or the pipeline is fixed.
-            states.append(
-                {
-                    "ros_distro": distro,
-                    "repo_name": repo_name,
-                    "state": {
-                        "url": row["repository"],
-                        "ref": {"kind": row["ref_kind"], "value": row["ref_value"]},
-                        "packages": sorted(registered),
-                        "last_run_url": args.actions_run_url,
-                        "at": now,
-                    },
-                }
-            )
+            state = {
+                "url": row["repository"],
+                "ref": {"kind": row["ref_kind"], "value": row["ref_value"]},
+                "packages": sorted(registered),
+                "last_run_url": args.actions_run_url,
+                "at": now,
+            }
+            for key in ("index_dependencies", "dependency_repositories"):
+                if row.get(key):
+                    state[key] = row[key]
+            if row.get("dependency_packages"):
+                state["dependency_packages"] = row["dependency_packages"].split()
+            states.append({"ros_distro": distro, "repo_name": repo_name, "state": state})
         else:
             print(
                 f"::warning::{distro}/{repo_name}: {len(valid)}/{len(registered)} package(s) "

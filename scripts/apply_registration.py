@@ -47,6 +47,8 @@ from pathlib import Path
 import re
 import sys
 
+from infer_index_dependencies import DependencyInferenceError
+from infer_index_dependencies import infer_from_repository
 import yaml
 
 HEADING_RE = re.compile(r"^###\s+(.+?)\s*$")
@@ -198,7 +200,7 @@ def insert_entry(path: Path, name: str, spec: dict) -> None:
     path.write_text(new_text, encoding="utf-8")
 
 
-def apply(body: str, distributions_dir: Path) -> tuple[str, str]:
+def apply(body: str, distributions_dir: Path, infer_dependencies: bool = False) -> tuple[str, str]:
     """Full pipeline: issue body -> edited distro file -> (distro, name)."""
     sections = split_sections(body)
 
@@ -223,6 +225,17 @@ def apply(body: str, distributions_dir: Path) -> tuple[str, str]:
     path = distributions_dir / f"{distro}.yaml"
     if not path.is_file():
         raise RegistrationError(f"no registry file for distro {distro!r} ({path} does not exist)")
+    if infer_dependencies:
+        try:
+            current = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            registered_names = {
+                package
+                for repository in (current.get("repositories") or {}).values()
+                for package in (repository.get("packages") or {})
+            }
+            infer_from_repository(spec, registered_names, distro)
+        except (DependencyInferenceError, yaml.YAMLError, OSError) as exc:
+            raise RegistrationError(f"cannot infer Index dependencies: {exc}") from exc
     insert_entry(path, name, spec)
     return distro, name
 
@@ -231,11 +244,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--issue-body", required=True, help="file containing the issue body")
     parser.add_argument("--distributions-dir", default="distributions")
+    parser.add_argument(
+        "--infer-dependencies",
+        action="store_true",
+        help="derive Index dependencies from package.xml at the submitted ref",
+    )
     args = parser.parse_args()
 
     body = Path(args.issue_body).read_text(encoding="utf-8")
     try:
-        distro, name = apply(body, Path(args.distributions_dir))
+        distro, name = apply(body, Path(args.distributions_dir), args.infer_dependencies)
     except RegistrationError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

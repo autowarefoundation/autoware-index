@@ -62,11 +62,12 @@ jobs:
           if [ -n "$tag" ] \
             && curl -fsSL "https://raw.githubusercontent.com/$repo/$tag/js/compose.mjs" -o /tmp/compose.mjs \
             && [ -s /tmp/compose.mjs ] \
-            && node --check /tmp/compose.mjs; then
+            && node --check /tmp/compose.mjs \
+            && grep -q 'index_dependencies' /tmp/compose.mjs; then
             cp /tmp/compose.mjs site/compose.mjs
             echo "repos builder: using aw-index-cli@$tag js/compose.mjs"
           else
-            echo "::warning::could not fetch the latest aw-index-cli compose.mjs; using the committed site/compose.mjs fallback"
+            echo "::warning::latest aw-index-cli compose.mjs is unavailable or lacks index dependency support; using the committed site/compose.mjs fallback"
           fi
 
       - name: Build site

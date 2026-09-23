@@ -9,9 +9,9 @@ is a HARD, uniform failure everywhere. Before this gate existed,
 flipped every reader into a silent no-op (empty site, empty sweep matrices)
 with green CI.
 
-Format (schema_version "2", see schema/distribution.schema.json):
+Format (schema_version "3", see schema/distribution.schema.json):
 
-    schema_version: "2"
+    schema_version: "3"
     ros_distro: jazzy
     repositories:
       <repo_name>:                 # registry-unique key
@@ -23,6 +23,7 @@ Format (schema_version "2", see schema/distribution.schema.json):
           <package_name>:
             tags: [...]            # required; live ids from schema/tags.yaml
             description: "..."     # optional card-description override
+            index_dependencies: [] # optional names in this distribution
             maintainers: [...]     # optional per-package override
 
 One repository = one ref: every package registered from a repository is
@@ -38,7 +39,7 @@ from urllib.parse import urlsplit
 
 import yaml
 
-SUPPORTED_SCHEMA_VERSION = "2"
+SUPPORTED_SCHEMA_VERSIONS = ("2", "3")
 
 TAG_ID_PATTERN = re.compile(r"^[a-z][a-z0-9-]*$")
 TAG_ID_MAX_LENGTH = 20
@@ -69,10 +70,10 @@ def load_distribution(path: Path) -> dict:
         raise RegistryError(f"{path}: expected a YAML mapping, got {type(doc).__name__}")
 
     version = doc.get("schema_version")
-    if version != SUPPORTED_SCHEMA_VERSION:
+    if version not in SUPPORTED_SCHEMA_VERSIONS:
         raise RegistryError(
             f"{path}: schema_version {version!r} is not supported by this tooling "
-            f"(supported: {SUPPORTED_SCHEMA_VERSION!r}); please upgrade"
+            f"(supported: {SUPPORTED_SCHEMA_VERSIONS!r}); please upgrade"
         )
 
     repositories = doc.get("repositories")
@@ -80,6 +81,12 @@ def load_distribution(path: Path) -> dict:
         raise RegistryError(f"{path}: `repositories` must be a mapping of repo entries")
 
     for repo_name, spec in repositories.items():
+        if version == "2":
+            for package, pkg_spec in ((spec or {}).get("packages") or {}).items():
+                if "index_dependencies" in (pkg_spec or {}):
+                    raise RegistryError(
+                        f"{path}::{repo_name}.{package}: index_dependencies requires schema_version '3'"
+                    )
         ref = (spec or {}).get("ref")
         if ref is not None:
             value = (ref or {}).get("value") if isinstance(ref, dict) else None
@@ -321,12 +328,12 @@ def canonical_url(url: str) -> str:
 
 
 def flatten_packages(doc: dict, *, distro: str | None = None) -> list[dict]:
-    """Flatten a v2 document into one record per registered package.
+    """Flatten a repository-keyed document into one record per registered package.
 
     Each record carries the repository context the package inherits:
 
         {distro, package, repo_name, repository, ref, governance,
-         reference_design, tags, maintainers, description}
+         reference_design, tags, index_dependencies, maintainers, description}
 
     `maintainers` resolves the per-package override over the repo-level
     default. The package -> repository mapping is COMPUTED here at load time,
@@ -350,6 +357,7 @@ def flatten_packages(doc: dict, *, distro: str | None = None) -> list[dict]:
                     "governance": spec.get("governance", "community"),
                     "reference_design": spec.get("reference_design") or [],
                     "tags": pkg_spec.get("tags") or [],
+                    "index_dependencies": pkg_spec.get("index_dependencies") or [],
                     "maintainers": pkg_spec.get("maintainers") or repo_maintainers,
                     "description": pkg_spec.get("description") or "",
                 }

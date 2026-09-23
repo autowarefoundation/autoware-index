@@ -356,6 +356,14 @@ button.badge-repo:focus-visible {
   font-size: 13px;
   margin-top: 8px;
 }
+.index-dependencies {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.index-dependencies code {
+  color: var(--fg);
+}
 .repo {
   color: var(--link);
   text-decoration: none;
@@ -583,12 +591,14 @@ footer .sep {
   font-size: 12px;
 }
 .cart-pkg {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
   font-size: 13px;
   padding: 2px 0;
+  overflow-wrap: anywhere;
+}
+.cart-pkg-deps {
+  display: block;
+  padding-left: 10px;
+  font-size: 11px;
 }
 .cart-remove {
   position: absolute;

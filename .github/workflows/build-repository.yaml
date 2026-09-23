@@ -42,6 +42,21 @@ on:
         description: Space-separated registered ROS package names hosted by this repository.
         required: true
         type: string
+      dependency_repositories:
+        description: JSON array of transitive registered repository dependencies.
+        required: false
+        type: string
+        default: "[]"
+      dependency_packages:
+        description: Space-separated registered package dependencies to build explicitly.
+        required: false
+        type: string
+        default: ""
+      index_dependencies:
+        description: JSON mapping of registered package dependency edges.
+        required: false
+        type: string
+        default: "{}"
       base_image_stage:
         description: Container image stage. Defaults to core-devel.
         required: false
@@ -96,6 +111,55 @@ jobs:
           git clone "${REPOSITORY}" src/repository
           git -C src/repository checkout "${REF_VALUE}"
 
+      - name: Clone index dependencies
+        env:
+          DEPENDENCY_REPOSITORIES: ${{ inputs.dependency_repositories }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'EOF'
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+
+          dependencies = json.loads(os.environ["DEPENDENCY_REPOSITORIES"] or "[]") or []
+          for dependency in dependencies:
+              name = dependency["repo_name"]
+              path = Path(os.environ["GITHUB_WORKSPACE"]) / "src" / "index-dependencies" / name
+              path.parent.mkdir(parents=True, exist_ok=True)
+              subprocess.run(["git", "config", "--global", "--add", "safe.directory", str(path)], check=True)
+              subprocess.run(["git", "clone", dependency["repository"], str(path)], check=True)
+              subprocess.run(["git", "-C", str(path), "checkout", dependency["ref_value"]], check=True)
+          EOF
+
+      - name: Record index dependency closures
+        env:
+          INDEX_DEPENDENCIES: ${{ inputs.index_dependencies }}
+          PACKAGES: ${{ inputs.packages }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'EOF'
+          import json
+          import os
+          from pathlib import Path
+
+          graph = json.loads(os.environ["INDEX_DEPENDENCIES"] or "{}") or {}
+          directory = Path(".index-closures")
+          directory.mkdir()
+          for package in os.environ["PACKAGES"].split():
+              closure = set()
+              pending = list(graph.get(package, []))
+              while pending:
+                  dependency = pending.pop()
+                  if dependency in closure:
+                      continue
+                  closure.add(dependency)
+                  pending.extend(graph.get(dependency, []))
+              (directory / package).write_text("".join(f"{name}\n" for name in sorted(closure)))
+          EOF
+
       - name: Resolve commit SHA
         id: resolve
         shell: bash
@@ -110,6 +174,7 @@ jobs:
         id: scan
         env:
           PACKAGES: ${{ inputs.packages }}
+          DEPENDENCY_PACKAGES: ${{ inputs.dependency_packages }}
         shell: bash
         run: |
           set -euo pipefail
@@ -139,8 +204,20 @@ jobs:
             fi
           done
 
+          deps_present=()
+          : > .sweep-index-missing.txt
+          for pkg in ${DEPENDENCY_PACKAGES}; do
+            if [[ -n "${pkg_path[$pkg]:-}" ]]; then
+              deps_present+=("$pkg")
+            else
+              echo "$pkg" >> .sweep-index-missing.txt
+              echo "::error::index dependency '${pkg}' not found in the imported source tree"
+            fi
+          done
+
           echo "present=${present[*]:-}" >> "${GITHUB_OUTPUT}"
           echo "absent=${absent[*]:-}" >> "${GITHUB_OUTPUT}"
+          echo "deps_present=${deps_present[*]:-}" >> "${GITHUB_OUTPUT}"
           printf '%s\n' "${present[@]:-}" | sed '/^$/d' > .sweep-present.txt
           printf '%s\n' "${absent[@]:-}" | sed '/^$/d' > .sweep-absent.txt
           echo "found ${#present[@]} present / ${#absent[@]} absent of $(wc -w <<< "${PACKAGES}") registered package(s)"
@@ -154,6 +231,7 @@ jobs:
         env:
           ROS_DISTRO_INPUT: ${{ inputs.ros_distro }}
           PRESENT: ${{ steps.scan.outputs.present }}
+          DEPS_PRESENT: ${{ steps.scan.outputs.deps_present }}
         shell: bash
         # No nounset here or in the build/verdict steps: colcon- and
         # ament-generated setup.sh scripts reference unset variables
@@ -166,7 +244,7 @@ jobs:
           apt-get -yqq update
           rosdep update || echo "::warning::rosdep update failed; using the image's existing sources"
           # shellcheck disable=SC2086
-          package_paths=$(colcon list -p --packages-up-to ${PRESENT} --base-paths src)
+          package_paths=$(colcon list -p --packages-up-to ${PRESENT} ${DEPS_PRESENT} --base-paths src)
           if [ -f /opt/autoware/setup.sh ]; then
             . /opt/autoware/setup.sh
           fi
@@ -203,6 +281,7 @@ jobs:
         env:
           ROS_DISTRO_INPUT: ${{ inputs.ros_distro }}
           PRESENT: ${{ steps.scan.outputs.present }}
+          DEPS_PRESENT: ${{ steps.scan.outputs.deps_present }}
         shell: bash
         run: |
           set -eo pipefail
@@ -223,7 +302,7 @@ jobs:
           # shellcheck disable=SC2086
           colcon build \
             --event-handlers console_cohesion+ \
-            --packages-up-to ${PRESENT} \
+            --packages-up-to ${PRESENT} ${DEPS_PRESENT} \
             --continue-on-error \
             --cmake-args -DCMAKE_BUILD_TYPE=Release \
             --base-paths src 2>&1 | tee .sweep-build.log
@@ -264,10 +343,22 @@ jobs:
           : > .sweep-results.txt
           while IFS= read -r pkg; do
             closure=$(colcon list --names-only --packages-up-to "${pkg}" --base-paths src)
+            # Index edges can include exec-only ROS dependencies removed from
+            # package.xml before the build. Include the registered closure
+            # explicitly when attributing failed or missing prerequisites.
+            closure="${closure}"$'\n'"$(cat ".index-closures/${pkg}" 2>/dev/null || true)"
             failed_dep=$(grep -Fx -f .sweep-failed.txt <<< "${closure}" | head -n1 || true)
-            if [ -n "${failed_dep}" ] || [ ! -d "install/${pkg}" ]; then
+            missing_dep=$(grep -Fx -f .sweep-index-missing.txt <<< "${closure}" | head -n1 || true)
+            uninstalled_dep=""
+            while IFS= read -r member; do
+              if [ -n "${member}" ] && [ ! -d "install/${member}" ]; then
+                uninstalled_dep="${member}"
+                break
+              fi
+            done <<< "${closure}"
+            if [ -n "${failed_dep}" ] || [ -n "${missing_dep}" ] || [ -n "${uninstalled_dep}" ]; then
               echo "${pkg} failure skipped" >> .sweep-results.txt
-              echo "::error::${pkg}: build failure (closure member: ${failed_dep:-${pkg} itself, no install dir})"
+              echo "::error::${pkg}: build failure (closure member: ${failed_dep:-${missing_dep:-${uninstalled_dep}}})"
               continue
             fi
             echo "${pkg} success skipped" >> .sweep-results.txt
@@ -372,6 +463,7 @@ jobs:
             src
             build
             install
+            .index-closures
 
       - name: Report
         if: always()

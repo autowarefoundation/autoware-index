@@ -24,6 +24,9 @@ Four classes of defect the schema cannot catch:
      name, so a package name may appear in exactly ONE repository entry per
      distro file (rosdistro's `_add_package` invariant).
 
+  5. Index dependency graph. Targets must be registered in the same distro;
+     self references and cycles cannot be composed or swept.
+
 Resolvability needs network access, so it is opt-out via --no-network (used by
 the pre-commit mirror, which runs the offline checks only). CI runs the full
 check.
@@ -138,6 +141,7 @@ def check_file(path: Path, network: bool, resolve_cache: dict) -> list[str]:
 
     seen_urls: dict[str, str] = {}
     seen_packages: dict[str, str] = {}
+    dependency_graph: dict[str, list[str]] = {}
     for repo_name, spec in (doc.get("repositories") or {}).items():
         spec = spec or {}
         url = (spec.get("url") or "").strip()
@@ -161,6 +165,11 @@ def check_file(path: Path, network: bool, resolve_cache: dict) -> list[str]:
 
         for package, pkg_spec in (spec.get("packages") or {}).items():
             pkg_spec = pkg_spec or {}
+            dependencies = pkg_spec.get("index_dependencies") or []
+            if not isinstance(dependencies, list):
+                errors.append(f"{path}::{repo_name}.{package}: index_dependencies must be a list")
+                dependencies = []
+            dependency_graph[package] = dependencies
             if package in seen_packages:
                 errors.append(
                     f"{path}::{repo_name}: package {package!r} is already registered by "
@@ -176,6 +185,42 @@ def check_file(path: Path, network: bool, resolve_cache: dict) -> list[str]:
         ref = spec.get("ref") or {}
         if ref and url:
             errors.extend(check_ref(str(path), repo_name, url, ref, network, resolve_cache))
+
+    for package, dependencies in dependency_graph.items():
+        seen: set[str] = set()
+        for target in dependencies:
+            if not isinstance(target, str):
+                errors.append(
+                    f"{path}::{package}: index dependency {target!r} must be a package name"
+                )
+                continue
+            elif target == package:
+                errors.append(f"{path}::{package}: cannot depend on itself")
+            elif target not in seen_packages:
+                errors.append(f"{path}::{package}: index dependency {target!r} is not registered")
+            elif target in seen:
+                errors.append(f"{path}::{package}: duplicate index dependency {target!r}")
+            seen.add(target)
+
+    visited: set[str] = set()
+    active: list[str] = []
+
+    def visit(package: str) -> None:
+        if package in visited:
+            return
+        if package in active:
+            cycle = active[active.index(package) :] + [package]
+            errors.append(f"{path}: index dependency cycle: {' -> '.join(cycle)}")
+            return
+        active.append(package)
+        for target in dependency_graph.get(package, []):
+            if isinstance(target, str) and target in dependency_graph and target != package:
+                visit(target)
+        active.pop()
+        visited.add(package)
+
+    for package in sorted(dependency_graph):
+        visit(package)
     return errors
 
 

@@ -81,6 +81,7 @@ jobs:
             src
             build
             install
+            .index-closures
           fail-on-cache-miss: true
 
       - name: Verify restored build
@@ -126,8 +127,9 @@ jobs:
           if [ -f /opt/autoware/setup.sh ]; then
             . /opt/autoware/setup.sh
           fi
+          dependency_packages=$(for pkg in ${PACKAGES}; do cat ".index-closures/${pkg}"; done | sort -u | paste -sd' ')
           # shellcheck disable=SC2086
-          package_paths=$(colcon list -p --packages-up-to ${PACKAGES} --base-paths src)
+          package_paths=$(colcon list -p --packages-up-to ${PACKAGES} ${dependency_packages} --base-paths src)
           # shellcheck disable=SC2086
           DEBIAN_FRONTEND=noninteractive rosdep install -yqq \
             --from-paths ${package_paths} --ignore-src --rosdistro "${ROS_DISTRO_INPUT}"
@@ -169,6 +171,10 @@ jobs:
           if [ -f /opt/autoware/setup.sh ]; then
             . /opt/autoware/setup.sh
           fi
+          # Index dependencies are built in the cached workspace, including
+          # exec-only edges stripped from package.xml for the build. Expose
+          # their installed resources to the package tests.
+          . "${GITHUB_WORKSPACE}/install/setup.sh"
           python3 - <<'EOF'
           import json
           from pathlib import Path

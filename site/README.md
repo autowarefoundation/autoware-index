@@ -41,6 +41,8 @@ the list to that repository's packages (clicking again clears), hovering one
 softly highlights the sibling cards that arrive in the same clone, and the
 repos builder treats the group as one unit: selecting any member selects them
 all, and deselecting any member releases them all.
+Package cards and the repos builder show direct Index dependencies. Composing
+or downloading a `.repos` file includes their transitive dependencies.
 
 ## The registration page
 
@@ -52,11 +54,20 @@ the pull request: schema shape (`check-jsonschema`), tag vocabulary
 (`check_tags`), and uniqueness / placeholder-maintainer / ref-resolution rules
 (`check_refs`). Registrations that already exist in `data.json` are rejected
 client-side exactly like `check_refs.py` would (canonical-URL folding included).
+The GitHub `package.xml` scan matches dependency names against packages already
+registered for the selected ROS distro and packages in the new entry. The
+preview emits those matches as `index_dependencies`, and the pre-flight checks
+reject missing targets, duplicates, self-dependencies, and cycles. The
+registration workflow reads `package.xml` at the submitted ref and regenerates
+these edges before opening the PR, including for non-GitHub repositories or
+when the browser scan is unavailable. Other dependencies remain with rosdep.
+The workflow evaluates standard ROS distro/version conditions; dependencies
+guarded by unknown variables are included conservatively.
 
 For github.com repositories the page also auto-discovers through the public
 GitHub API (no token, 60 requests/hour): repository metadata, branches and tags
 for the ref picker, and a tree scan that finds and parses `package.xml` files to
-prefill package names, descriptions, and maintainer suggestions (GitHub handles
+prefill package names, descriptions, Index dependencies, and maintainer suggestions (GitHub handles
 are resolved from the maintainer emails via the repo's commit history,
 noreply-address parsing, or public-profile search, where possible). Everything
 degrades to manual entry: the API is a convenience; CI remains the authority.

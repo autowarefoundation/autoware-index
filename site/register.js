@@ -72,7 +72,7 @@ const state = {
     governance: "community",
     refKind: "tag",
     refValue: "",
-    packages: [], // {id, name, tags: [], description: "", maintainers: [] (override; empty = inherit), upstream: {description, path} | null}
+    packages: [], // {id, name, tags: [], indexDependencies: [], description: "", maintainers: [], upstream: ...}
     maintainers: [blankMaintainer()],
   },
   github: {
@@ -291,6 +291,26 @@ function maintainerLines(list, indent) {
   return lines;
 }
 
+function syncIndexDependencies() {
+  const scan = state.github.scan;
+  const found = scan.status === "done" && scan.key === scanKey() ? scan.found : [];
+  const byName = new Map(found.map((pkg) => [pkg.name, pkg]));
+  const names = new Set([
+    ...existingFor(state.distro).packages.keys(),
+    ...state.form.packages.map((pkg) => pkg.name.trim()),
+  ]);
+  for (const pkg of state.form.packages) {
+    const source = byName.get(pkg.name.trim());
+    pkg.indexDependencies = source
+      ? [
+          ...new Set(
+            source.dependencies.filter((name) => names.has(name) && name !== pkg.name.trim()),
+          ),
+        ].sort()
+      : [];
+  }
+}
+
 // The entry as YAML lines (2-space base indent, ready to append under
 // `repositories:`). Missing required values render as comment hints naming
 // the station that provides them; the buffer doubles as the progress view.
@@ -340,6 +360,12 @@ function entryLines() {
     } else {
       lines.push(`          # pick at least one tag (station 3)`);
     }
+    if (pkg.indexDependencies.length) {
+      lines.push(`        index_dependencies:`);
+      for (const dependency of pkg.indexDependencies) {
+        lines.push(`          - ${yamlScalar(dependency)}`);
+      }
+    }
     lines.push(...descriptionLines(pkg.description, "        "));
     const overrides = maintainerLines(pkg.maintainers, "          ");
     if (overrides.length) {
@@ -359,6 +385,56 @@ function existingFor(distro) {
   return (
     state.existing.get(distro) || { urls: new Map(), repoNames: new Set(), packages: new Map() }
   );
+}
+
+function indexDependencyProblems(packages, registered) {
+  const problems = [];
+  const entryNames = new Set(packages.map((pkg) => pkg.name.trim()).filter(Boolean));
+  const graph = new Map();
+  for (const pkg of packages) {
+    const name = pkg.name.trim();
+    const seen = new Set();
+    graph.set(name, []);
+    for (const dependency of pkg.indexDependencies) {
+      if (!PKG_NAME_RE.test(dependency)) {
+        problems.push(`“${dependency}” must be a valid ROS package name`);
+      } else if (dependency === name) {
+        problems.push(`“${name}” cannot depend on itself`);
+      } else if (seen.has(dependency)) {
+        problems.push(`“${name}” lists “${dependency}” more than once`);
+      } else if (!registered.packages.has(dependency) && !entryNames.has(dependency)) {
+        problems.push(`“${dependency}” is not registered in ${state.distro} or in this entry`);
+      }
+      seen.add(dependency);
+      if (entryNames.has(dependency)) graph.get(name).push(dependency);
+    }
+  }
+
+  const visiting = new Set();
+  const visited = new Set();
+  const path = [];
+  function visit(name) {
+    if (visiting.has(name)) {
+      problems.push(
+        `circular index dependency: ${[...path.slice(path.indexOf(name)), name].join(" → ")}`,
+      );
+      return true;
+    }
+    if (visited.has(name)) return false;
+    visiting.add(name);
+    path.push(name);
+    for (const dependency of graph.get(name) || []) {
+      if (visit(dependency)) return true;
+    }
+    path.pop();
+    visiting.delete(name);
+    visited.add(name);
+    return false;
+  }
+  for (const name of graph.keys()) {
+    if (visit(name)) break;
+  }
+  return problems;
 }
 
 function validate() {
@@ -464,6 +540,18 @@ function validate() {
       msg = "waiting on station 1";
     }
     gates.push({ id: "unique", name: "check_refs · uniqueness", status, msg });
+  }
+
+  // Index dependencies may point to registered packages in this distro or
+  // to another package in this entry. A cycle would make composition fail.
+  {
+    const problems = indexDependencyProblems(f.packages, registered);
+    gates.push({
+      id: "index-dependencies",
+      name: "index dependencies",
+      status: problems.length ? "fail" : "ok",
+      msg: problems[0] || "every index dependency resolves and there are no cycles",
+    });
   }
 
   // Gate 4 (check_refs · maintainers): no placeholders, anywhere.
@@ -837,7 +925,21 @@ function parsePackageXml(text, path) {
     email: (m.getAttribute("email") || "").trim(),
     github: "",
   }));
-  return { name, description, path, maintainers };
+  const dependencyTags = new Set([
+    "depend",
+    "build_depend",
+    "build_export_depend",
+    "buildtool_depend",
+    "buildtool_export_depend",
+    "exec_depend",
+    "test_depend",
+    "doc_depend",
+  ]);
+  const dependencies = [...root.children]
+    .filter((child) => dependencyTags.has(child.tagName) && !child.hasAttribute("condition"))
+    .map((child) => child.textContent.trim())
+    .filter(Boolean);
+  return { name, description, path, maintainers, dependencies };
 }
 
 async function scanPackages(force = false) {
@@ -919,6 +1021,7 @@ async function scanPackages(force = false) {
   }
 
   gh.scan = { key, status: "done", found, maintainers: harvested, note };
+  renderPackages();
   renderFoundPackages();
   renderMaintainerSuggestions();
   refresh();
@@ -1393,6 +1496,7 @@ function addPackage(prefill = {}) {
     id: `p${++pkgSeq}`,
     name: prefill.name || "",
     tags: [],
+    indexDependencies: [],
     description: "",
     maintainers: [],
     upstream: prefill.upstream || null,
@@ -1501,6 +1605,8 @@ function packageCard(pkg) {
       "Leave empty to show the description the sweep caches from the upstream package.xml.";
   }
 
+  const indexDeps = el("p", { class: "hint", id: `${pkg.id}-index-deps` });
+
   const overrideRows = el("div", {});
   const overrideAdd = el("button", {
     type: "button",
@@ -1537,6 +1643,12 @@ function packageCard(pkg) {
       descHint,
     ),
     el(
+      "div",
+      { class: "field" },
+      el("p", { class: "field-label", text: "Index source dependencies" }),
+      indexDeps,
+    ),
+    el(
       "details",
       { class: "pkg-advanced" },
       el("summary", {
@@ -1547,7 +1659,7 @@ function packageCard(pkg) {
       overrideAdd,
     ),
   );
-  pkgNodes.set(pkg.id, { root, nameInput, nameStatus, picker });
+  pkgNodes.set(pkg.id, { root, nameInput, nameStatus, picker, indexDeps });
   return root;
 }
 
@@ -1596,6 +1708,17 @@ function updatePackageCards() {
     else nodes.nameInput.removeAttribute("aria-describedby");
     if (tone === "bad") nodes.nameInput.setAttribute("aria-invalid", "true");
     else nodes.nameInput.removeAttribute("aria-invalid");
+
+    const scan = state.github.scan;
+    const scanned =
+      scan.status === "done" &&
+      scan.key === scanKey() &&
+      scan.found.some((source) => source.name === name);
+    nodes.indexDeps.textContent = scanned
+      ? pkg.indexDependencies.length
+        ? `${pkg.indexDependencies.join(", ")} (matched from package.xml). Conditional dependencies are checked during registration; other dependencies use rosdep.`
+        : "No unconditional Index matches in package.xml. Conditional dependencies are checked during registration; other dependencies use rosdep."
+      : "The registration workflow will read package.xml at this ref and fill these automatically.";
 
     // Tag chips: pressed state.
     for (const [id, chip] of nodes.picker.chipRefs) {
@@ -1669,8 +1792,7 @@ function renderFoundPackagesInto(status, list, scan) {
         "data-fkey": "add-all",
       });
       all.addEventListener("click", () => {
-        for (const f of addable)
-          addPackage({ name: f.name, upstream: { description: f.description, path: f.path } });
+        for (const f of addable) addPackage({ name: f.name, upstream: f });
       });
       status.append(all);
     }
@@ -1699,7 +1821,7 @@ function renderFoundPackagesInto(status, list, scan) {
     });
     btn.disabled = added.has(f.name) || taken;
     btn.addEventListener("click", () => {
-      addPackage({ name: f.name, upstream: { description: f.description, path: f.path } });
+      addPackage({ name: f.name, upstream: f });
     });
     list.append(
       el(
@@ -1907,6 +2029,7 @@ function renderMaintainerSuggestionsInto(zone) {
 // --- Refresh cycle -----------------------------------------------------------------
 
 function refresh() {
+  syncIndexDependencies();
   const result = validate();
   renderBuffer();
   renderGates(result);

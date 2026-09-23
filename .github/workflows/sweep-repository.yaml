@@ -43,6 +43,21 @@ on:
         description: Space-separated registered ROS package names hosted by this repository.
         required: true
         type: string
+      dependency_repositories:
+        description: JSON array of transitive registered repository dependencies.
+        required: false
+        type: string
+        default: "[]"
+      dependency_packages:
+        description: Space-separated registered package dependencies to build explicitly.
+        required: false
+        type: string
+        default: ""
+      index_dependencies:
+        description: JSON mapping of registered package dependency edges.
+        required: false
+        type: string
+        default: "{}"
       base_image_stage:
         description: Container image stage. Defaults to core-devel.
         required: false
@@ -90,6 +105,9 @@ jobs:
       ref_kind: ${{ inputs.ref_kind }}
       ref_value: ${{ inputs.ref_value }}
       packages: ${{ inputs.packages }}
+      dependency_repositories: ${{ inputs.dependency_repositories }}
+      dependency_packages: ${{ inputs.dependency_packages }}
+      index_dependencies: ${{ inputs.index_dependencies }}
       base_image_stage: ${{ inputs.base_image_stage }}
       runs-on: ${{ inputs.runs-on }}
 
