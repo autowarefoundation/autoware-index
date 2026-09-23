@@ -86,9 +86,7 @@ def test_package_name_is_unique_within_distro(tmp_path):
     doc = distribution()
     doc["repositories"]["library"]["packages"] = {"consumer_pkg": {"tags": ["common-library"]}}
     path = write_distribution(tmp_path / "d", doc)
-    assert "package names are unique per distro" in " ".join(
-        check_refs.check_file(path, False, {})
-    )
+    assert "package names are unique per distro" in " ".join(check_refs.check_file(path, False, {}))
 
 
 def test_sweep_clones_transitive_repository_and_tracks_ref(tmp_path):
