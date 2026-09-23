@@ -32,31 +32,40 @@ tags:
   # --- Autonomy pipeline ---
   sensing:
     group: pipeline
+    label: Sensing
     summary: Processes already-published sensor data (filtering, preprocessing, distortion correction).
     disambiguation: Talks to topics, not hardware; packages that talk to a device or vendor SDK are `driver`.
   perception:
     group: pipeline
+    label: Perception
     summary: Detection, tracking, prediction, and segmentation, turning sensor data into scene understanding.
   localization:
     group: pipeline
+    label: Localization
     summary: Ego-pose estimation (scan matching, pose fusion, GNSS integration, localization monitors).
   map:
     group: pipeline
+    label: Map
     summary: Map loading, formats, projections, and map manipulation (lanelet2, point-cloud maps).
   planning:
     group: pipeline
+    label: Planning
     summary: Mission, behavior, and motion planning (route and trajectory generation).
   control:
     group: pipeline
+    label: Control
     summary: Trajectory-following control and actuation command generation (MPC, pure pursuit).
   vehicle:
     group: pipeline
+    label: Vehicle
     summary: Vehicle-interface nodes, vehicle descriptions, and individual-parameter packages.
   system:
     group: pipeline
+    label: System
     summary: Runtime health (diagnostics aggregation, monitoring, MRM/fail-safe, command-mode arbitration).
   v2x:
     group: pipeline
+    label: V2X
     summary: Vehicle-to-everything communication (ETSI ITS stacks, V2I bridges and mocks).
   e2e-driving:
     group: pipeline
@@ -68,24 +77,30 @@ tags:
   # --- Infrastructure & support ---
   common-library:
     group: infrastructure
+    label: Common library
     summary: Code other packages link or import (shared utils, math, geometry, CMake helpers).
     disambiguation: Executables you run are `tool`; IPC/executor infrastructure is `middleware`.
   middleware:
     group: infrastructure
+    label: Middleware
     summary: Execution and transport infrastructure (IPC, executors, GPU memory transport, TF buffering).
   interface:
     group: infrastructure
+    label: Interface
     summary: Message, service, and action definitions (contracts only, no logic).
     disambiguation: The bridge node exposing an external surface is `api` (`autoware_adapi_msgs` is `interface`; its adaptor node is `api`).
   api:
     group: infrastructure
+    label: API
     summary: Adapter and bridge nodes exposing an external surface (AD API adaptors, REST/DDS bridges).
   launch:
     group: infrastructure
+    label: Launch
     summary: Packages whose primary deliverable is launch/parameter composition (the `*_launch` convention).
     disambiguation: Not for packages that merely ship a launch/ directory (nearly all do).
   driver:
     group: infrastructure
+    label: Driver
     summary: Talks to hardware or a vendor SDK (sensor/actuator drivers, CAN interfaces).
     disambiguation: Publishes raw device data; downstream processing of already-published data is `sensing`.
   ml:
@@ -98,24 +113,30 @@ tags:
   # --- Development & operations ---
   tool:
     group: operations
+    label: Tool
     summary: An executable developer utility you run.
     disambiguation: Code you link is `common-library`; rarely a package's only tag, so add the domain it serves.
   testing:
     group: operations
+    label: Testing
     summary: Software and scenario correctness checking (harnesses, scenario runners, fixtures).
     disambiguation: Metric/KPI computation is `evaluation`; the simulated world is `simulator`.
   simulator:
     group: operations
+    label: Simulator
     summary: Provides a simulated environment or simulated sensor/vehicle data.
   visualization:
     group: operations
+    label: Visualization
     summary: RViz plugins, viewers, and visual debugging displays.
   evaluation:
     group: operations
+    label: Evaluation
     summary: Metric/KPI computation (driving-quality scoring, benchmarking, runtime-performance analysis).
     disambiguation: "`testing` checks correctness; `simulator` provides the environment; `evaluation` scores the result."
   calibration:
     group: operations
+    label: Calibration
     summary: Sensor and vehicle calibration tools and managers (intrinsic/extrinsic, time-delay, dynamics).
 
 # Retired ids live here forever (append-only; never re-minted). Shape:

@@ -62,7 +62,7 @@ const state = {
   distros: ["jazzy"],
   distro: "jazzy",
   vocabulary: { groups: [], tags: [] },
-  tagInfo: new Map(), // id -> {group, summary, disambiguation?}
+  tagInfo: new Map(), // id -> vocabulary tag metadata
   // Per-distro index of what data.json says is already registered, so the
   // uniqueness gate mirrors check_refs.py before the PR exists.
   existing: new Map(), // distro -> {urls: Map(canon->repo_name), repoNames: Set, packages: Map(name->repo_name)}
@@ -1606,7 +1606,11 @@ function updatePackageCards() {
     nodes.picker.meta.append(`${pkg.tags.length} selected`);
     if (pkg.tags.length) {
       nodes.picker.meta.append(" · order: ");
-      nodes.picker.meta.append(el("b", { text: pkg.tags.join(" → ") }));
+      nodes.picker.meta.append(
+        el("b", {
+          text: pkg.tags.map((id) => state.tagInfo.get(id)?.label || id).join(" → "),
+        }),
+      );
     }
   }
 }
