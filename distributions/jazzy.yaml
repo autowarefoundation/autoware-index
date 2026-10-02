@@ -10,6 +10,24 @@ schema_version: "4"
 ros_distro: jazzy
 
 repositories:
+  autoware_bluetooth_monitor:
+    url: https://github.com/autowarefoundation/autoware_bluetooth_monitor
+    ref:
+      kind: branch
+      value: main
+    governance: foundation
+    maintainers:
+      - name: Fumihito Ito
+        email: fumihito.ito@tier4.jp
+        github: ito-san
+      - name: Junya Sasaki
+        email: junya.sasaki@tier4.jp
+        github: sasakisasaki
+    packages:
+      autoware_bluetooth_monitor:
+        tags:
+          - system
+        description: Bluetooth connection monitoring through an L2ping service.
   autoware_livox_tag_filter:
     url: https://github.com/autowarefoundation/autoware_livox_tag_filter
     ref:
