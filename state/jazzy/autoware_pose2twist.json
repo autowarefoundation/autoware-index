@@ -1,0 +1,12 @@
+{
+  "url": "https://github.com/autowarefoundation/autoware_pose2twist",
+  "ref": {
+    "kind": "tag",
+    "value": "1.0.0"
+  },
+  "packages": [
+    "autoware_pose2twist"
+  ],
+  "last_run_url": "https://github.com/autowarefoundation/autoware-index/actions/runs/37326757130",
+  "at": "2026-10-05T14:45:57Z"
+}
