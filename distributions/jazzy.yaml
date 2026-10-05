@@ -13,8 +13,8 @@ repositories:
   autoware_bluetooth_monitor:
     url: https://github.com/autowarefoundation/autoware_bluetooth_monitor
     ref:
-      kind: branch
-      value: main
+      kind: tag
+      value: 1.0.0
     governance: foundation
     maintainers:
       - name: Fumihito Ito
