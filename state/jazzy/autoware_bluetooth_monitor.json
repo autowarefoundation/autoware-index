@@ -1,12 +1,12 @@
 {
   "url": "https://github.com/autowarefoundation/autoware_bluetooth_monitor",
   "ref": {
-    "kind": "branch",
-    "value": "main"
+    "kind": "tag",
+    "value": "1.0.0"
   },
   "packages": [
     "autoware_bluetooth_monitor"
   ],
-  "last_run_url": "https://github.com/autowarefoundation/autoware-index/actions/runs/37315482473",
-  "at": "2026-10-05T13:20:51Z"
+  "last_run_url": "https://github.com/autowarefoundation/autoware-index/actions/runs/37320259049",
+  "at": "2026-10-05T13:57:19Z"
 }
