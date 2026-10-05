@@ -3,7 +3,7 @@
 <package format="3">
   <name>tamagawa_imu_driver</name>
   <version>0.1.0</version>
-  <description>The ROS2 driver for TAMAGAWA SEIKI IMUs</description>
+  <description>The ROS 2 driver for TAMAGAWA SEIKI IMUs</description>
 
   <maintainer email="yamato.ando@tier4.jp">Yamato Ando</maintainer>
   <maintainer email="ryo.watanabe@tier4.jp">Ryo Watanabe</maintainer>
