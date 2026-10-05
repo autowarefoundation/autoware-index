@@ -52,8 +52,8 @@ repositories:
   autoware_pose2twist:
     url: https://github.com/autowarefoundation/autoware_pose2twist
     ref:
-      kind: branch
-      value: main
+      kind: tag
+      value: 1.0.0
     governance: foundation
     maintainers:
       - name: Yamato Ando
