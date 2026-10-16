@@ -28,6 +28,26 @@ repositories:
         tags:
           - system
         description: Bluetooth connection monitoring through an L2ping service.
+  autoware_component_monitor:
+    url: https://github.com/autowarefoundation/autoware_component_monitor
+    ref:
+      kind: tag
+      value: 1.0.0
+    governance: foundation
+    maintainers:
+      - name: Mehmet Emin Başoğlu
+        email: mehmeteminbasoglu@hotmail.com
+        github: mebasoglu
+      - name: Yavuz Köseoğlu
+        email: yvzksgl@proton.me
+        github: yvzksgl
+    packages:
+      autoware_component_monitor:
+        tags:
+          - system
+        description: >-
+          Publishes the CPU and memory usage of the component container that
+          loads this composable node, as an autoware_internal_msgs/ResourceUsageReport.
   autoware_livox_tag_filter:
     url: https://github.com/autowarefoundation/autoware_livox_tag_filter
     ref:
