@@ -43,7 +43,7 @@ jobs:
     # Only issues from the automatic-PR form carry this section heading; the
     # older free-form registration template does not.
     if: contains(github.event.issue.body, '### Registry entry')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       HAS_APP_ID: ${{ secrets.APP_ID != '' }}
       # Comments always go through the workflow token (issues: write above);
