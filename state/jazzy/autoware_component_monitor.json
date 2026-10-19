@@ -1,0 +1,12 @@
+{
+  "url": "https://github.com/autowarefoundation/autoware_component_monitor",
+  "ref": {
+    "kind": "tag",
+    "value": "1.0.0"
+  },
+  "packages": [
+    "autoware_component_monitor"
+  ],
+  "last_run_url": "https://github.com/autowarefoundation/autoware-index/actions/runs/39237911678",
+  "at": "2026-10-19T10:43:40Z"
+}
