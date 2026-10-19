@@ -48,6 +48,34 @@ repositories:
         description: >-
           Publishes the CPU and memory usage of the component container that
           loads this composable node, as an autoware_internal_msgs/ResourceUsageReport.
+  autoware_image_diagnostics:
+    url: https://github.com/autowarefoundation/autoware_image_diagnostics
+    ref:
+      kind: tag
+      value: 1.0.0
+    governance: foundation
+    maintainers:
+      - name: Dai Nguyen
+        email: dai.nguyen@tier4.jp
+        github: badai-nguyen
+      - name: Yoshi Ri
+        email: yoshi.ri@tier4.jp
+        github: YoshiRi
+      - name: Masato Saeki
+        email: masato.saeki@tier4.jp
+        github: MasatoSaeki
+      - name: Yi-Hsiang Fang
+        email: yihsiang.fang@tier4.jp
+        github: vividf
+    packages:
+      autoware_image_diagnostics:
+        tags:
+          - sensing
+          - system
+        description: >-
+          Checks raw camera images for blockage, shadow clipping, highlight
+          clipping, and low visibility, block by block, and reports the image
+          state on /diagnostics.
   autoware_livox_tag_filter:
     url: https://github.com/autowarefoundation/autoware_livox_tag_filter
     ref:
