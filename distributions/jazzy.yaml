@@ -151,6 +151,24 @@ repositories:
           - planning
           - control
         description: Open-Source End-to-End L2 ADAS System
+  autoware_oneplanner:
+    url: https://github.com/autowarefoundation/autoware_oneplanner
+    ref:
+      kind: tag
+      value: 1.0.1
+    governance: foundation
+    maintainers:
+      - name: Max-Bin
+        email: vborisw@gmail.com
+        github: Max-Bin
+    packages:
+      autoware_oneplanner:
+        tags:
+          - e2e-driving
+          - ml
+          - sensing
+          - perception
+          - planning
   tamagawa_imu_driver:
     url: https://github.com/tier4/tamagawa_imu_driver.git
     ref:
@@ -166,21 +184,3 @@ repositories:
         tags:
           - sensing
           - driver
-  autoware_oneplanner:
-    url: https://github.com/autowarefoundation/autoware_oneplanner
-    ref:
-      kind: tag
-      value: v1.0
-    governance: foundation
-    maintainers:
-      - name: Max-Bin
-        email: vborisw@gmail.com
-        github: Max-Bin
-    packages:
-      autoware_oneplanner:
-        tags:
-          - e2e-driving
-          - ml
-          - sensing
-          - perception
-          - planning
