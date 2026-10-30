@@ -166,3 +166,17 @@ repositories:
         tags:
           - sensing
           - driver
+  autoware_oneplanner:
+    url: https://github.com/autowarefoundation/autoware_oneplanner
+    ref:
+      kind: tag
+      value: v1.0
+    governance: foundation
+    maintainers:
+      - name: Max-Bin
+        email: vborisw@gmail.com
+        github: Max-Bin
+    packages:
+      autoware_oneplanner:
+        tags:
+          - e2e-driving
