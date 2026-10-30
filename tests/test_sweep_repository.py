@@ -60,6 +60,8 @@ EXPRESSIONS = {
     "steps.resolve.outputs.sha": SHA,
     "steps.scan.outputs.present": "",
     "inputs.packages": "pkg_a",
+    "toJSON(steps)": "{}",
+    "steps.logs.outputs.artifact-url": "",
 }
 
 
@@ -798,17 +800,94 @@ def test_test_failures_do_not_change_build_or_sibling_verdicts(
     }
 
 
-def test_build_check_reports_success_without_waiting_for_tests(repo_root, tmp_path):
-    (tmp_path / ".sweep-results.txt").write_text("pkg_a success skipped\n")
-    (tmp_path / ".sweep-present.txt").write_text("pkg_a\n")
+def run_report_step(repo_root, tmp_path, checked_out=True):
+    # The job checks out this repository at _index; point it at the work tree.
+    if checked_out:
+        (tmp_path / "_index").symlink_to(repo_root)
     env = step_env(workflow_step(repo_root, "Report"))
-    proc = run_step(
+    return run_step(
         repo_root,
         tmp_path,
         "Report",
-        {**env, "GITHUB_STEP_SUMMARY": str(tmp_path / "summary")},
+        {
+            **env,
+            "GITHUB_STEP_SUMMARY": str(tmp_path / "summary"),
+            "GITHUB_SERVER_URL": "https://github.com",
+            "GITHUB_REPOSITORY": "autowarefoundation/autoware-index",
+            "GITHUB_RUN_ID": "42",
+        },
+    )
+
+
+def test_build_check_reports_success_without_waiting_for_tests(repo_root, tmp_path):
+    (tmp_path / ".sweep-results.txt").write_text("pkg_a success skipped\n")
+    (tmp_path / ".sweep-present.txt").write_text("pkg_a\n")
+    proc = run_report_step(repo_root, tmp_path)
+    assert proc.returncode == 0, proc.stderr
+
+
+def test_report_step_fails_and_names_the_cause_of_a_build_failure(repo_root, tmp_path):
+    (tmp_path / ".sweep-results.txt").write_text("pkg_a failure skipped\n")
+    (tmp_path / ".sweep-present.txt").write_text("pkg_a\n")
+    (tmp_path / ".sweep-reasons.txt").write_text("pkg_a\tfailed\tpkg_a\n")
+    (tmp_path / ".sweep-build.log").write_text(
+        "--- output: pkg_a\nsrc/a.cpp:3:1: error: expected ';'\n---\n"
+    )
+    proc = run_report_step(repo_root, tmp_path)
+    assert proc.returncode == 1, proc.stderr
+    assert "::error title=pkg_a build failed::src/a.cpp:3:1: error: expected ';'" in proc.stdout
+    assert "src/a.cpp:3:1: error: expected ';'" in (tmp_path / "summary").read_text()
+
+
+def test_report_step_keeps_the_verdicts_when_the_scripts_checkout_failed(repo_root, tmp_path):
+    (tmp_path / ".sweep-results.txt").write_text("pkg_a failure skipped\n")
+    proc = run_report_step(repo_root, tmp_path, checked_out=False)
+    assert proc.returncode == 1
+    assert "checkout of the index scripts failed" in proc.stdout
+    assert "pkg_a failure skipped" in (tmp_path / "summary").read_text()
+
+
+@pytest.mark.parametrize(
+    "failed,missing,installed,expected",
+    [
+        ("pkg_a\n", "", {"pkg_dep"}, "pkg_a\tfailed\tpkg_a\n"),
+        ("pkg_dep\n", "", {"pkg_a"}, "pkg_a\tfailed\tpkg_dep\n"),
+        ("", "pkg_dep\n", {"pkg_a"}, "pkg_a\tmissing\tpkg_dep\n"),
+        ("", "", {"pkg_a"}, "pkg_a\tnot-installed\tpkg_dep\n"),
+        ("", "", {"pkg_a", "pkg_dep"}, ""),
+    ],
+)
+def test_verdict_step_records_why_each_package_failed(
+    repo_root, tmp_path, failed, missing, installed, expected
+):
+    """The Report step reads the cause from .sweep-reasons.txt, never guesses it."""
+    (tmp_path / ".sweep-present.txt").write_text("pkg_a\n")
+    (tmp_path / ".sweep-failed.txt").write_text(failed)
+    (tmp_path / ".sweep-index-missing.txt").write_text(missing)
+    (tmp_path / ".index-closures").mkdir()
+    (tmp_path / ".index-closures" / "pkg_a").write_text("pkg_dep\n")
+    for pkg in installed:
+        (tmp_path / "install" / pkg).mkdir(parents=True)
+    bash_env = tmp_path / "bash-env"
+    bash_env.write_text("function .() { :; }\n")
+    proc = run_step(
+        repo_root,
+        tmp_path,
+        "Derive per-package build verdicts",
+        {
+            "ROS_DISTRO_INPUT": DISTRO,
+            "BASH_ENV": str(bash_env),
+            "GITHUB_OUTPUT": str(tmp_path / "output"),
+        },
+        # `colcon list --names-only --packages-up-to pkg_a ...`: the closure
+        # edge to pkg_dep comes from .index-closures, as for exec-only edges.
+        stubs={"colcon": 'echo "$4"'},
     )
     assert proc.returncode == 0, proc.stderr
+    assert (tmp_path / ".sweep-reasons.txt").read_text() == expected
+    # The logs upload runs only on this output.
+    output = tmp_path / "output"
+    assert (output.read_text() if output.exists() else "") == ("failed=true\n" if expected else "")
 
 
 def test_partial_build_failure_preserves_the_successful_build_handoff(repo_root, tmp_path):
