@@ -727,15 +727,52 @@ def test_test_rerun_resets_previous_outcomes_before_cache_restore(repo_root, tmp
     assert statuses(result, "pkg_a pkg_b") == {"pkg_b": "fail"}
     # A cache miss or setup error now leaves a null test outcome, not the
     # previous run's failure. The independent test check must still go red.
-    report = run_step(
+    report = run_test_report_step(repo_root, tmp_path)
+    assert report.returncode == 1
+    assert "inconclusive" in (tmp_path / "summary").read_text()
+
+
+def run_test_report_step(repo_root, tmp_path, checked_out=True):
+    # The job checks out this repository at _index; point it at the work tree.
+    if checked_out:
+        (tmp_path / "_index").symlink_to(repo_root)
+    env = step_env(workflow_step(repo_root, "Report tests", "test-repository"))
+    return run_step(
         repo_root,
         tmp_path,
         "Report tests",
-        {"GITHUB_STEP_SUMMARY": str(tmp_path / "summary")},
+        {
+            **env,
+            "GITHUB_STEP_SUMMARY": str(tmp_path / "summary"),
+            "GITHUB_SERVER_URL": "https://github.com",
+            "GITHUB_REPOSITORY": "autowarefoundation/autoware-index",
+            "GITHUB_RUN_ID": "42",
+        },
         workflow_name="test-repository",
     )
-    assert report.returncode == 1
-    assert "inconclusive" in (tmp_path / "summary").read_text()
+
+
+def test_test_report_names_the_failed_case(repo_root, tmp_path):
+    prepare_test_result(repo_root, tmp_path, "pkg_a success failure\npkg_b success success\n")
+    results = tmp_path / "build" / "pkg_a" / "test_results" / "pkg_a"
+    results.mkdir(parents=True)
+    (results / "test_a.gtest.xml").write_text(
+        '<testsuites><testsuite name="A"><testcase classname="A" name="works"/>'
+        '<testcase classname="A" name="breaks"><failure message="a.cpp:9&#10;'
+        'Expected equality of these values"/></testcase></testsuite></testsuites>'
+    )
+    proc = run_test_report_step(repo_root, tmp_path)
+    assert proc.returncode == 1, proc.stderr
+    assert "::error title=pkg_a tests failed::1 of 2 test cases failed: `A.breaks`" in proc.stdout
+    assert "Expected equality of these values" in (tmp_path / "summary").read_text()
+
+
+def test_test_report_keeps_the_result_when_the_scripts_checkout_failed(repo_root, tmp_path):
+    prepare_test_result(repo_root, tmp_path, "pkg_a success failure\npkg_b success success\n")
+    proc = run_test_report_step(repo_root, tmp_path, checked_out=False)
+    assert proc.returncode == 1
+    assert "checkout of the index scripts failed" in proc.stdout
+    assert '"repo_name"' in (tmp_path / "summary").read_text()
 
 
 def test_restore_rejects_a_non_exact_cache_hit(repo_root, tmp_path):
@@ -780,12 +817,19 @@ def test_test_failures_do_not_change_build_or_sibling_verdicts(
         repo_root,
         tmp_path,
         "Run package tests",
-        {"ROS_DISTRO_INPUT": DISTRO, "BASH_ENV": str(bash_env), "CALLS": str(calls)},
+        {
+            "ROS_DISTRO_INPUT": DISTRO,
+            "BASH_ENV": str(bash_env),
+            "CALLS": str(calls),
+            "GITHUB_OUTPUT": str(tmp_path / "output"),
+        },
         stubs={"colcon": 'echo "$*" >> "$CALLS"\n[[ "$*" != *"pkg_a"* ]]'},
         workflow_name="test-repository",
     )
     assert proc.returncode == 0, proc.stderr
     assert len(calls.read_text().splitlines()) == expected_calls
+    # The test logs upload runs only on this output.
+    assert (tmp_path / "output").read_text() == "failed=true\n"
     result = json.loads(path.read_text())
     assert_valid(repo_root, result)
     assert result["packages"]["pkg_a"]["build_outcome"] == "success"
