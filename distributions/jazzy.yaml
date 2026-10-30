@@ -155,7 +155,7 @@ repositories:
     url: https://github.com/autowarefoundation/autoware_oneplanner
     ref:
       kind: tag
-      value: 1.0.1
+      value: 1.1.0
     governance: foundation
     maintainers:
       - name: Max-Bin
