@@ -202,10 +202,12 @@ jobs:
               if test.returncode:
                   # Report tests writes the annotation, with the failed cases.
                   print(f"{package}: its own tests failed", flush=True)
+                  if not failed:
+                      # Now, not after the loop: a job timeout cancels the
+                      # loop, and the logs upload still needs this output.
+                      with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+                          output.write("failed=true\n")
                   failed = True
-          if failed:
-              with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-                  output.write("failed=true\n")
           EOF
 
       - name: Upload result
@@ -225,7 +227,7 @@ jobs:
         # Only when there is something to explain. The Report step reads the
         # step conclusions, so a failed upload must not look like a pipeline
         # fault.
-        if: failure() || steps.tests.outputs.failed == 'true'
+        if: failure() || cancelled() || steps.tests.outputs.failed == 'true'
         continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
@@ -253,21 +255,37 @@ jobs:
       - name: Report tests
         if: always() && steps.download.outcome == 'success'
         env:
+          REPO_NAME: ${{ inputs.repo_name }}
           STEPS: ${{ toJSON(steps) }}
           LOGS_URL: ${{ steps.logs.outputs.artifact-url }}
         shell: bash
         run: |
           set -euo pipefail
           if [ ! -f _index/scripts/test_report.py ]; then
-            echo "::error::checkout of the index scripts failed; the summary has the raw result only"
+            # Keep the verdict of the old report: name each package that did
+            # not pass, and fail only for those.
+            echo "::warning::checkout of the index scripts failed; the summary has the raw result only"
             {
-              echo "### test"
+              echo "### test ${REPO_NAME}"
               echo ""
               echo '```json'
               cat _result/result.json
               echo '```'
             } >> "${GITHUB_STEP_SUMMARY}"
-            exit 1
+            python3 - <<'EOF'
+          import json
+          from pathlib import Path
+
+          result = json.loads(Path("_result/result.json").read_text())
+          failed = False
+          for package, outcome in result["packages"].items():
+              if outcome["present"] and outcome["build_outcome"] == "success":
+                  if outcome["test_outcome"] != "success":
+                      print(f"::error::{package}: tests {outcome['test_outcome'] or 'inconclusive'}")
+                      failed = True
+          raise SystemExit(1 if failed else 0)
+          EOF
+            exit 0
           fi
           python3 _index/scripts/test_report.py \
             --steps "${STEPS}" --logs-url "${LOGS_URL}" \

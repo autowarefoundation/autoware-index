@@ -763,16 +763,23 @@ def test_test_report_names_the_failed_case(repo_root, tmp_path):
     )
     proc = run_test_report_step(repo_root, tmp_path)
     assert proc.returncode == 1, proc.stderr
-    assert "::error title=pkg_a tests failed::1 of 2 test cases failed: `A.breaks`" in proc.stdout
+    assert "::error title=pkg_a tests failed::1 of 2 test cases failed: A.breaks" in proc.stdout
     assert "Expected equality of these values" in (tmp_path / "summary").read_text()
 
 
-def test_test_report_keeps_the_result_when_the_scripts_checkout_failed(repo_root, tmp_path):
-    prepare_test_result(repo_root, tmp_path, "pkg_a success failure\npkg_b success success\n")
+@pytest.mark.parametrize("second_test,code", [("failure", 1), ("success", 0)])
+def test_test_report_keeps_the_verdict_when_the_scripts_checkout_failed(
+    repo_root, tmp_path, second_test, code
+):
+    prepare_test_result(
+        repo_root, tmp_path, f"pkg_a success success\npkg_b success {second_test}\n"
+    )
     proc = run_test_report_step(repo_root, tmp_path, checked_out=False)
-    assert proc.returncode == 1
+    assert proc.returncode == code, proc.stderr
     assert "checkout of the index scripts failed" in proc.stdout
-    assert '"repo_name"' in (tmp_path / "summary").read_text()
+    assert ("::error::pkg_b: tests failure" in proc.stdout) == (second_test == "failure")
+    assert "::error::pkg_a" not in proc.stdout
+    assert f"### test {REPO_NAME}" in (tmp_path / "summary").read_text()
 
 
 def test_restore_rejects_a_non_exact_cache_hit(repo_root, tmp_path):

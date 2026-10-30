@@ -25,6 +25,7 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import xml.etree.ElementTree as ElementTree
 
@@ -47,6 +48,8 @@ CASE_LINES = 30
 MAX_CASES_LISTED = 5
 # A JUnit file larger than this is not parsed; its package falls back to the log.
 MAX_XML_BYTES = 10 * 1024 * 1024
+# gtest puts "<absolute path>:<line>" on the first line of a failure message.
+LOCATION_RE = re.compile(r"^(\S+):(\d+):?$")
 
 STEP_NAMES = {
     "download": "Download build result",
@@ -65,6 +68,28 @@ class FailedCase:
     name: str
     message: str
     details: str
+
+    @property
+    def missing_result(self) -> bool:
+        """Whether ament_cmake made this case up for a test that wrote no result.
+
+        That happens when the test binary crashed or aborted; the reason is
+        then in the colcon test log, not in the XML.
+        """
+        return self.name.endswith(".missing_result") or self.message.startswith(
+            "Result file not found"
+        )
+
+    def first_line(self) -> str:
+        """Return the first line of the failure, with a gtest location shortened."""
+        lines = [line.strip() for line in (self.message or self.details).splitlines()]
+        lines = [line for line in lines if line]
+        if not lines:
+            return ""
+        location = LOCATION_RE.match(lines[0])
+        if location and len(lines) > 1:
+            return f"{Path(location.group(1)).name}:{location.group(2)}: {lines[1]}"
+        return lines[0]
 
 
 def junit_cases(build_dir: Path) -> tuple[int, list[FailedCase]]:
@@ -107,29 +132,39 @@ def package_test_log(workspace: Path, pkg: str) -> list[str]:
     return read_lines(logs[-1]) if logs else []
 
 
+def case_list(cases: list[FailedCase]) -> str:
+    names = ", ".join(case.name for case in cases[:MAX_CASES_LISTED])
+    more = len(cases) - MAX_CASES_LISTED
+    return names + (f" and {more} more" if more > 0 else "")
+
+
 def package_test_cause(workspace: Path, pkg: str) -> Cause:
     total, failed = junit_cases(workspace / "build" / pkg)
-    if failed:
-        names = ", ".join(f"`{case.name}`" for case in failed[:MAX_CASES_LISTED])
-        more = len(failed) - MAX_CASES_LISTED
-        headline = f"{len(failed)} of {total} test cases failed: {names}"
-        if more > 0:
-            headline += f" and {more} more"
-        # gtest repeats the message in the element text; pytest puts the
-        # traceback there. Use the message for the headline, the text below.
-        first = ((failed[0].message or failed[0].details).splitlines() or [""])[0]
+    real = [case for case in failed if not case.missing_result]
+    crashed = [case for case in failed if case.missing_result]
+    parts, blocks = [], []
+    if real:
+        part = f"{len(real)} of {total} test cases failed: {case_list(real)}"
+        first = real[0].first_line()
         if first:
-            headline += f" (first: {shorten(first, 150)})"
-        blocks = []
-        for case in failed:
+            part += f" (first: {shorten(first, 150)})"
+        parts.append(part)
+        for case in real:
+            # gtest repeats the message in the element text; pytest puts the
+            # traceback there. The text is the fuller of the two.
             lines = (case.details or case.message).splitlines()[:CASE_LINES]
             blocks.append("\n".join([case.name, *("  " + line for line in lines)]))
-        return Cause(headline, cap("\n\n".join(blocks), BLOCK_BYTES))
-    lines = package_test_log(workspace, pkg)
-    return Cause(
-        "tests failed, but no failed case is in the JUnit results; see the log tail",
-        cap("\n".join(lines[-TAIL_LINES:]), BLOCK_BYTES),
-    )
+    if crashed:
+        parts.append(
+            f"{len(crashed)} test(s) wrote no result, likely a crash: {case_list(crashed)}"
+        )
+    if crashed or not real:
+        if not failed:
+            parts.append("tests failed, but no failed case is in the JUnit results")
+        lines = package_test_log(workspace, pkg)
+        if lines:
+            blocks.append("\n".join(["colcon test log, last lines:", *lines[-TAIL_LINES:]]))
+    return Cause("; ".join(parts), cap("\n\n".join(blocks), BLOCK_BYTES))
 
 
 def report(
@@ -147,7 +182,8 @@ def report(
             causes[pkg] = package_test_cause(workspace, pkg)
             rows.append((pkg, "failure", causes[pkg].headline))
         elif status == "success":
-            rows.append((pkg, "success", ""))
+            total, _ = junit_cases(workspace / "build" / pkg)
+            rows.append((pkg, "success", "" if total else "no test cases found"))
         else:
             inconclusive.append(pkg)
             rows.append((pkg, "inconclusive", "no test outcome"))
@@ -158,7 +194,13 @@ def report(
         listed = ", ".join(causes)
         out += [f"**{len(causes)} of {tested} tested packages failed:** {cell(listed)}", ""]
     broken = failed_steps(steps_json, STEP_NAMES)
-    if broken:
+    if broken == [f"`{STEP_NAMES['upload']}` (failure)"]:
+        out += [
+            f"> [!WARNING]\n> The step {broken[0]} did not finish, so the record job will"
+            " not see these outcomes." + (f" See the [run log]({run_url})." if run_url else ""),
+            "",
+        ]
+    elif broken:
         out += [
             f"> [!WARNING]\n> The step {', '.join(broken)} did not finish. This is not a"
             " package fault, so packages without a test outcome are inconclusive."
