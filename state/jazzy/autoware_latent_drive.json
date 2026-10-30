@@ -1,0 +1,12 @@
+{
+  "url": "https://github.com/autowarefoundation/autoware_latent_drive",
+  "ref": {
+    "kind": "tag",
+    "value": "1.0.1"
+  },
+  "packages": [
+    "autoware_latent_drive"
+  ],
+  "last_run_url": "https://github.com/autowarefoundation/autoware-index/actions/runs/41094697169",
+  "at": "2026-10-30T17:00:58Z"
+}
