@@ -188,14 +188,14 @@ repositories:
     url: https://github.com/autowarefoundation/autoware_latent_drive
     ref:
       kind: tag
-      value: v1.0.0
+      value: 1.0.1
     governance: foundation
     maintainers:
       - name: Jixin Han
         email: cld-jixin.han@tier4.jp
         github: kalfazed
     packages:
-      latentdrive_ros:
+      autoware_latent_drive:
         tags:
           - e2e-driving
           - ml
