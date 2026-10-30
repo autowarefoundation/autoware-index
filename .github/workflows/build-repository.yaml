@@ -95,7 +95,17 @@ jobs:
       has-tests: ${{ steps.handoff.outputs.has-tests }}
       cache-key: ${{ steps.handoff.outputs.cache-key }}
     steps:
+      # Only for scripts/build_report.py. Kept outside src/, so colcon never
+      # sees it, and outside the cached paths.
+      - name: Check out index scripts
+        uses: actions/checkout@v7
+        with:
+          path: _index
+          sparse-checkout: scripts
+          persist-credentials: false
+
       - name: Clone repository
+        id: clone
         env:
           REPOSITORY: ${{ inputs.repository }}
           REF_VALUE: ${{ inputs.ref_value }}
@@ -112,6 +122,7 @@ jobs:
           git -C src/repository checkout "${REF_VALUE}"
 
       - name: Clone index dependencies
+        id: clone-dependencies
         env:
           DEPENDENCY_REPOSITORIES: ${{ inputs.dependency_repositories }}
         shell: bash
@@ -134,6 +145,7 @@ jobs:
           EOF
 
       - name: Record index dependency closures
+        id: closures
         env:
           INDEX_DEPENDENCIES: ${{ inputs.index_dependencies }}
           PACKAGES: ${{ inputs.packages }}
@@ -227,6 +239,7 @@ jobs:
         uses: autowarefoundation/autoware-github-actions/remove-exec-depend@v1
 
       - name: Install dependencies (rosdep)
+        id: rosdep
         if: steps.scan.outputs.present != ''
         env:
           ROS_DISTRO_INPUT: ${{ inputs.ros_distro }}
@@ -277,6 +290,7 @@ jobs:
           fi
 
       - name: Build (union of registered packages)
+        id: build
         if: steps.scan.outputs.present != ''
         env:
           ROS_DISTRO_INPUT: ${{ inputs.ros_distro }}
@@ -328,6 +342,7 @@ jobs:
           echo "build exited ${build_rc}; failed/aborted: $(paste -sd' ' .sweep-failed.txt || true)"
 
       - name: Derive per-package build verdicts
+        id: verdict
         if: steps.scan.outputs.present != ''
         env:
           ROS_DISTRO_INPUT: ${{ inputs.ros_distro }}
@@ -341,6 +356,7 @@ jobs:
             . /opt/autoware/setup.sh
           fi
           : > .sweep-results.txt
+          : > .sweep-reasons.txt
           while IFS= read -r pkg; do
             closure=$(colcon list --names-only --packages-up-to "${pkg}" --base-paths src)
             # Index edges can include exec-only ROS dependencies removed from
@@ -358,12 +374,19 @@ jobs:
             done <<< "${closure}"
             if [ -n "${failed_dep}" ] || [ -n "${missing_dep}" ] || [ -n "${uninstalled_dep}" ]; then
               echo "${pkg} failure skipped" >> .sweep-results.txt
-              echo "::error::${pkg}: build failure (closure member: ${failed_dep:-${missing_dep:-${uninstalled_dep}}})"
+              # The Report step turns this into the cause shown to readers.
+              if [ -n "${failed_dep}" ]; then
+                printf '%s\tfailed\t%s\n' "${pkg}" "${failed_dep}"
+              elif [ -n "${missing_dep}" ]; then
+                printf '%s\tmissing\t%s\n' "${pkg}" "${missing_dep}"
+              else
+                printf '%s\tnot-installed\t%s\n' "${pkg}" "${uninstalled_dep}"
+              fi >> .sweep-reasons.txt
               continue
             fi
             echo "${pkg} success skipped" >> .sweep-results.txt
           done < .sweep-present.txt
-          column -t .sweep-results.txt || cat .sweep-results.txt
+          cat .sweep-results.txt
 
       - name: Compose result.json
         if: always()
@@ -465,39 +488,33 @@ jobs:
             install
             .index-closures
 
+      - name: Upload build logs
+        id: logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          # Not validate-result-*, so the record jobs never download it.
+          name: build-logs-${{ inputs.ros_distro }}-${{ inputs.repo_name }}-${{ inputs.autoware_version }}
+          path: |
+            log/
+            .sweep-*.log
+            .sweep-*.txt
+          if-no-files-found: ignore
+          overwrite: true
+
       - name: Report
         if: always()
         env:
           REPO_NAME: ${{ inputs.repo_name }}
           REF_KIND: ${{ inputs.ref_kind }}
           REF_VALUE: ${{ inputs.ref_value }}
+          STEPS: ${{ toJSON(steps) }}
+          LOGS_URL: ${{ steps.logs.outputs.artifact-url }}
         shell: bash
         run: |
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}"
-          fail=0
-          if [ -s .sweep-absent.txt ]; then
-            echo "::error::registered package(s) missing from the tree: $(paste -sd' ' .sweep-absent.txt)"
-            fail=1
-          fi
-          if [ -f .sweep-results.txt ] && grep -qE ' (failure)( |$)' .sweep-results.txt; then
-            fail=1
-          fi
-          {
-            echo "### build ${REPO_NAME} @ ${REF_KIND} ${REF_VALUE}"
-            echo ""
-            echo "| package | present | build |"
-            echo "|---|---|---|"
-            while IFS= read -r pkg; do
-              line=$(grep "^${pkg} " .sweep-results.txt 2>/dev/null || true)
-              if [ -n "${line}" ]; then
-                echo "| ${pkg} | yes | $(awk '{print $2}' <<< "${line}") |"
-              else
-                echo "| ${pkg} | yes | - |"
-              fi
-            done < <(cat .sweep-present.txt 2>/dev/null || true)
-            while IFS= read -r pkg; do
-              echo "| ${pkg} | **no** | - |"
-            done < <(cat .sweep-absent.txt 2>/dev/null || true)
-          } >> "${GITHUB_STEP_SUMMARY}"
-          exit "${fail}"
+          python3 _index/scripts/build_report.py \
+            --repo-name "${REPO_NAME}" --ref-kind "${REF_KIND}" --ref-value "${REF_VALUE}" \
+            --steps "${STEPS}" --logs-url "${LOGS_URL}" \
+            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"

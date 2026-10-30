@@ -43,6 +43,7 @@ on:
     paths:
       - distributions/**.yaml
       - scripts/diff_matrix.py
+      - scripts/build_report.py
       - .github/workflows/build-check.yaml
       - .github/workflows/sweep-repository.yaml
       - .github/workflows/build-repository.yaml
