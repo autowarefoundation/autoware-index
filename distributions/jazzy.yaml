@@ -180,3 +180,7 @@ repositories:
       latentdrive_ros:
         tags:
           - e2e-driving
+          - ml
+          - sensing
+          - perception
+          - planning
