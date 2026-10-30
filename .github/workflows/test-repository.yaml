@@ -85,6 +85,7 @@ jobs:
           fail-on-cache-miss: true
 
       - name: Verify restored build
+        id: verify
         if: steps.select.outputs.packages != ''
         env:
           CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
@@ -110,6 +111,7 @@ jobs:
           EOF
 
       - name: Install test workspace dependencies
+        id: install
         if: steps.select.outputs.packages != ''
         env:
           ROS_DISTRO_INPUT: ${{ inputs.ros_distro }}
@@ -135,6 +137,7 @@ jobs:
             --from-paths ${package_paths} --ignore-src --rosdistro "${ROS_DISTRO_INPUT}"
 
       - name: Relax the CycloneDDS socket buffer minimum
+        id: relax
         if: steps.select.outputs.packages != ''
         shell: bash
         # The Autoware image exports CYCLONEDDS_URI pointing at a config that
@@ -160,6 +163,7 @@ jobs:
           echo "relaxed SocketReceiveBufferSize min in ${config}"
 
       - name: Run package tests
+        id: tests
         if: steps.select.outputs.packages != ''
         env:
           ROS_DISTRO_INPUT: ${{ inputs.ros_distro }}
@@ -177,11 +181,13 @@ jobs:
           . "${GITHUB_WORKSPACE}/install/setup.sh"
           python3 - <<'EOF'
           import json
+          import os
           from pathlib import Path
           import subprocess
 
           path = Path("_result/result.json")
           result = json.loads(path.read_text())
+          failed = False
           for package, outcome in result["packages"].items():
               if not outcome["present"] or outcome["build_outcome"] != "success":
                   continue
@@ -194,10 +200,16 @@ jobs:
               # Preserve completed siblings if a later invocation is interrupted.
               path.write_text(json.dumps(result, indent=2))
               if test.returncode:
-                  print(f"::error::{package}: its own tests failed", flush=True)
+                  # Report tests writes the annotation, with the failed cases.
+                  print(f"{package}: its own tests failed", flush=True)
+                  failed = True
+          if failed:
+              with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+                  output.write("failed=true\n")
           EOF
 
       - name: Upload result
+        id: upload
         if: always() && steps.download.outcome == 'success'
         uses: actions/upload-artifact@v7
         with:
@@ -208,26 +220,55 @@ jobs:
           if-no-files-found: error
           overwrite: true
 
+      - name: Upload test logs
+        id: logs
+        # Only when there is something to explain. The Report step reads the
+        # step conclusions, so a failed upload must not look like a pipeline
+        # fault.
+        if: failure() || steps.tests.outputs.failed == 'true'
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          # Not validate-result-*, so the record jobs never download it.
+          name: test-logs-${{ inputs.ros_distro }}-${{ inputs.repo_name }}-${{ inputs.autoware_version }}
+          # log/latest* are symlinks to the same files.
+          path: |
+            log/test_*/
+            build/*/test_results/
+            build/*/pytest.xml
+          if-no-files-found: ignore
+          retention-days: 14
+          overwrite: true
+
+      # Only for scripts/test_report.py. Here and not first, so a failed
+      # checkout cannot cost the tests their outcomes. Kept outside src/.
+      - name: Check out index scripts
+        if: always() && steps.download.outcome == 'success'
+        uses: actions/checkout@v7
+        with:
+          path: _index
+          sparse-checkout: scripts
+          persist-credentials: false
+
       - name: Report tests
         if: always() && steps.download.outcome == 'success'
+        env:
+          STEPS: ${{ toJSON(steps) }}
+          LOGS_URL: ${{ steps.logs.outputs.artifact-url }}
         shell: bash
         run: |
-          python3 - <<'EOF'
-          import json
-          import os
-          from pathlib import Path
-
-          result = json.loads(Path("_result/result.json").read_text())
-          failed = False
-          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
-              summary.write(f"### test {result['repo_name']}\n\n")
-              summary.write("| package | test |\n|---|---|\n")
-              for package, outcome in result["packages"].items():
-                  if outcome["present"] and outcome["build_outcome"] == "success":
-                      status = outcome["test_outcome"] or "inconclusive"
-                      failed |= status != "success"
-                  else:
-                      status = "skipped (not built)"
-                  summary.write(f"| {package} | {status} |\n")
-          raise SystemExit(1 if failed else 0)
-          EOF
+          set -euo pipefail
+          if [ ! -f _index/scripts/test_report.py ]; then
+            echo "::error::checkout of the index scripts failed; the summary has the raw result only"
+            {
+              echo "### test"
+              echo ""
+              echo '```json'
+              cat _result/result.json
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY}"
+            exit 1
+          fi
+          python3 _index/scripts/test_report.py \
+            --steps "${STEPS}" --logs-url "${LOGS_URL}" \
+            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
