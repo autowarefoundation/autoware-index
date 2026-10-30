@@ -800,9 +800,10 @@ def test_test_failures_do_not_change_build_or_sibling_verdicts(
     }
 
 
-def run_report_step(repo_root, tmp_path):
+def run_report_step(repo_root, tmp_path, checked_out=True):
     # The job checks out this repository at _index; point it at the work tree.
-    (tmp_path / "_index").symlink_to(repo_root)
+    if checked_out:
+        (tmp_path / "_index").symlink_to(repo_root)
     env = step_env(workflow_step(repo_root, "Report"))
     return run_step(
         repo_root,
@@ -836,6 +837,14 @@ def test_report_step_fails_and_names_the_cause_of_a_build_failure(repo_root, tmp
     assert proc.returncode == 1, proc.stderr
     assert "::error title=pkg_a build failed::src/a.cpp:3:1: error: expected ';'" in proc.stdout
     assert "src/a.cpp:3:1: error: expected ';'" in (tmp_path / "summary").read_text()
+
+
+def test_report_step_keeps_the_verdicts_when_the_scripts_checkout_failed(repo_root, tmp_path):
+    (tmp_path / ".sweep-results.txt").write_text("pkg_a failure skipped\n")
+    proc = run_report_step(repo_root, tmp_path, checked_out=False)
+    assert proc.returncode == 1
+    assert "checkout of the index scripts failed" in proc.stdout
+    assert "pkg_a failure skipped" in (tmp_path / "summary").read_text()
 
 
 @pytest.mark.parametrize(

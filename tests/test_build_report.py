@@ -57,9 +57,16 @@ def layout(tmp_path: Path, **files: str) -> Path:
     return tmp_path
 
 
-def run(tmp_path: Path, steps: str = "{}", logs_url: str = ""):
+def run(tmp_path: Path, steps: str = "{}", logs_url: str = "", packages=None):
     return build_report.report(
-        tmp_path, "awesome_tools", "tag", "1.2.0", steps, logs_url, "https://example.com/run/42"
+        tmp_path,
+        "awesome_tools",
+        "tag",
+        "1.2.0",
+        steps,
+        logs_url,
+        "https://example.com/run/42",
+        packages,
     )
 
 
@@ -173,7 +180,7 @@ def test_pipeline_fault_names_the_step_and_blames_no_package(tmp_path):
     summary, annotations, code = run(tmp_path, steps=steps)
     assert code == 0
     assert annotations == []
-    assert "The step `Install dependencies (rosdep)` did not finish" in summary
+    assert "The step `Install dependencies (rosdep)` (failure) did not finish" in summary
     assert "[run log](https://example.com/run/42)" in summary
     assert "| pkg_a | yes | - | inconclusive: no verdict |" in summary
     assert "**1 of 1 packages have no verdict.**" in summary
@@ -226,7 +233,7 @@ def test_compiler_text_is_escaped_for_html(tmp_path):
     )
     summary, annotations, _ = run(tmp_path)
     assert (
-        "<summary>pkg_a: /src/a.cpp:1:1: error: no match for std::vector&lt;int&gt; \\| x</summary>"
+        "<summary>pkg_a: /src/a.cpp:1:1: error: no match for std::vector&lt;int&gt; | x</summary>"
         in summary
     )
     assert "std::vector<int>" in summary  # the fenced excerpt stays verbatim
@@ -256,12 +263,14 @@ def test_no_error_line_falls_back_to_the_log_tail(tmp_path):
     assert "line 40\n" in summary
 
 
-def test_colcon_package_log_is_the_fallback(tmp_path):
+def test_colcon_package_log_comes_before_the_console_block(tmp_path):
+    # A bare `---` in the output would end the console block before the error.
     layout(
         tmp_path,
         sweep_present_txt="pkg_a\n",
         sweep_results_txt="pkg_a failure skipped\n",
         sweep_reasons_txt="pkg_a\tfailed\tpkg_a\n",
+        sweep_build_log="--- output: pkg_a\nsome\n---\n",
     )
     path = tmp_path / "log" / "latest_build" / "pkg_a"
     path.mkdir(parents=True)
@@ -301,3 +310,34 @@ def test_annotations_stay_under_the_per_step_limit(tmp_path):
 )
 def test_annotation_properties_are_escaped(text, expected):
     assert build_report.escape_property(text) == expected
+
+
+def test_early_fault_still_lists_every_registered_package(tmp_path):
+    steps = '{"clone": {"conclusion": "failure"}}'
+    summary, _, code = run(tmp_path, steps=steps, packages=["pkg_a", "pkg_b"])
+    assert code == 0
+    assert "**2 of 2 packages have no verdict.**" in summary
+    assert "| pkg_a | ? | - | inconclusive: no verdict |" in summary
+    assert "| pkg_b | ? | - | inconclusive: no verdict |" in summary
+
+
+def test_logs_link_is_shown_on_a_pipeline_fault(tmp_path):
+    layout(tmp_path, sweep_present_txt="pkg_a\n")
+    steps = '{"build": {"conclusion": "cancelled"}}'
+    summary, _, _ = run(tmp_path, steps=steps, logs_url="https://example.com/artifact/7")
+    assert "`Build (union of registered packages)` (cancelled)" in summary
+    assert "[build logs artifact](https://example.com/artifact/7)" in summary
+
+
+def test_dependents_of_one_failure_share_one_excerpt(tmp_path):
+    pkgs = [f"pkg_{i}" for i in range(3)]
+    layout(
+        tmp_path,
+        sweep_present_txt="".join(f"{p}\n" for p in pkgs),
+        sweep_results_txt="".join(f"{p} failure skipped\n" for p in pkgs),
+        sweep_reasons_txt="".join(f"{p}\tfailed\tpkg_dep\n" for p in pkgs),
+        sweep_build_log="--- output: pkg_dep\n/src/d.cpp:1:1: error: boom\n---\n",
+    )
+    summary, annotations, _ = run(tmp_path)
+    assert summary.count("<details>") == 1
+    assert len(annotations) == 3

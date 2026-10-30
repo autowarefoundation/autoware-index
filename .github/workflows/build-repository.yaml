@@ -520,13 +520,25 @@ jobs:
           REPO_NAME: ${{ inputs.repo_name }}
           REF_KIND: ${{ inputs.ref_kind }}
           REF_VALUE: ${{ inputs.ref_value }}
+          PACKAGES: ${{ inputs.packages }}
           STEPS: ${{ toJSON(steps) }}
           LOGS_URL: ${{ steps.logs.outputs.artifact-url }}
         shell: bash
         run: |
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}"
+          if [ ! -f _index/scripts/build_report.py ]; then
+            echo "::error::checkout of the index scripts failed; the summary has the raw verdicts only"
+            {
+              echo "### build ${REPO_NAME} @ ${REF_KIND} ${REF_VALUE}"
+              echo ""
+              echo '```text'
+              cat .sweep-results.txt .sweep-absent.txt 2>/dev/null || true
+              echo '```'
+            } >> "${GITHUB_STEP_SUMMARY}"
+            exit 1
+          fi
           python3 _index/scripts/build_report.py \
             --repo-name "${REPO_NAME}" --ref-kind "${REF_KIND}" --ref-value "${REF_VALUE}" \
-            --steps "${STEPS}" --logs-url "${LOGS_URL}" \
+            --packages "${PACKAGES}" --steps "${STEPS}" --logs-url "${LOGS_URL}" \
             --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"

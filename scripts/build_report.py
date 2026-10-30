@@ -83,17 +83,20 @@ def read_words(path: Path) -> list[str]:
 def package_log(workspace: Path, pkg: str) -> list[str]:
     """Return the build output of one package.
 
-    console_cohesion+ prints a package's whole output as one
-    `--- output: <pkg>` block that ends with a bare `---`. colcon's own
-    per-package log is the fallback, for a package that printed nothing there.
+    colcon's own per-package log has clear bounds. The `--- output: <pkg>`
+    block of console_cohesion+ is the fallback: it ends at the first bare
+    `---`, which the package output itself can contain.
     """
+    own_log = read_lines(workspace / "log" / "latest_build" / pkg / "stdout_stderr.log")
+    if own_log:
+        return own_log
     lines = read_lines(workspace / ".sweep-build.log")
     for marker in (f"--- output: {pkg}", f"--- stderr: {pkg}"):
         if marker in lines:
             start = lines.index(marker) + 1
             end = next((i for i in range(start, len(lines)) if lines[i] == "---"), len(lines))
             return lines[start:end]
-    return read_lines(workspace / "log" / "latest_build" / pkg / "stdout_stderr.log")
+    return []
 
 
 def excerpt_of(lines: list[str]) -> str:
@@ -185,7 +188,7 @@ def failure_cause(
 
 
 def failed_steps(steps_json: str) -> list[str]:
-    """Return the names of the steps that failed or were cancelled.
+    """Return the steps that failed or were cancelled, with the conclusion.
 
     `conclusion`, not `outcome`: a step with continue-on-error, such as the
     logs upload, does not take the verdicts with it.
@@ -195,7 +198,7 @@ def failed_steps(steps_json: str) -> list[str]:
     except json.JSONDecodeError:
         return []
     return [
-        STEP_NAMES.get(step_id, step_id)
+        f"`{STEP_NAMES.get(step_id, step_id)}` ({step['conclusion']})"
         for step_id, step in steps.items()
         if isinstance(step, dict) and step.get("conclusion") in ("failure", "cancelled")
     ]
@@ -209,9 +212,13 @@ def escape_property(text: str) -> str:
     return escape_data(text).replace(":", "%3A").replace(",", "%2C")
 
 
+def inline(text: str) -> str:
+    """Make compiler text safe inside HTML, e.g. `vector<int>`."""
+    return html.escape(text, quote=False).replace("\n", " ")
+
+
 def cell(text: str) -> str:
-    """Make compiler text safe for a table cell or a <summary>, e.g. `vector<int>`."""
-    return html.escape(text, quote=False).replace("|", "\\|").replace("\n", " ")
+    return inline(text).replace("|", "\\|")
 
 
 def fence(text: str) -> str:
@@ -228,10 +235,13 @@ def report(
     steps_json: str,
     logs_url: str,
     run_url: str,
+    packages: list[str] | None = None,
 ) -> tuple[str, list[str], int]:
     """Return the summary Markdown, the annotation lines, and the exit code."""
     present = read_words(workspace / ".sweep-present.txt")
     absent = read_words(workspace / ".sweep-absent.txt")
+    # Registered packages that the scan never reached, after an early fault.
+    unscanned = [pkg for pkg in packages or [] if pkg not in present and pkg not in absent]
     results = {}
     for line in read_lines(workspace / ".sweep-results.txt"):
         fields = line.split()
@@ -256,7 +266,7 @@ def report(
     for pkg in absent:
         causes[pkg] = Cause("not found in the repository tree at this ref")
 
-    total = len(present) + len(absent)
+    total = len(present) + len(absent) + len(unscanned)
     out = [f"### build {repo_name} @ {ref_kind} {ref_value}", ""]
     if causes:
         listed = []
@@ -268,14 +278,13 @@ def report(
         out += [f"**{len(causes)} of {total} packages failed:** {cell(', '.join(listed))}", ""]
     broken_steps = failed_steps(steps_json)
     if broken_steps:
-        names = ", ".join(f"`{name}`" for name in broken_steps)
         out += [
-            f"> [!WARNING]\n> The step {names} did not finish. This is a pipeline fault, not a package"
-            " fault, so packages without a verdict are inconclusive."
+            f"> [!WARNING]\n> The step {', '.join(broken_steps)} did not finish. This is not a"
+            " package fault, so packages without a verdict are inconclusive."
             + (f" See the [run log]({run_url})." if run_url else ""),
             "",
         ]
-    no_verdict = [pkg for pkg in present if pkg not in results]
+    no_verdict = [pkg for pkg in present if pkg not in results] + unscanned
     if no_verdict:
         out += [f"**{len(no_verdict)} of {total} packages have no verdict.**", ""]
     elif total and not causes:
@@ -290,15 +299,20 @@ def report(
         out.append(f"| {pkg} | yes | {build} | {cell(reason)} |")
     for pkg in absent:
         out.append(f"| {pkg} | **no** | - | {cell(causes[pkg].headline)} |")
+    for pkg in unscanned:
+        out.append(f"| {pkg} | ? | - | inconclusive: no verdict |")
     out.append("")
 
     size = sum(len(line.encode()) + 1 for line in out)
+    # Packages blocked by the same dependency share its excerpt; show it once.
+    shown: set[str] = set()
     for pkg, cause in causes.items():
-        if not cause.excerpt:
+        if not cause.excerpt or cause.excerpt in shown:
             continue
+        shown.add(cause.excerpt)
         marker = fence(cause.excerpt)
         block = (
-            f"<details><summary>{pkg}: {cell(shorten(cause.headline, 200))}</summary>\n\n"
+            f"<details><summary>{pkg}: {inline(shorten(cause.headline, 200))}</summary>\n\n"
             f"{marker}text\n{cause.excerpt}\n{marker}\n\n</details>\n"
         )
         if size + len(block.encode()) > SUMMARY_BYTES:
@@ -306,7 +320,7 @@ def report(
             break
         out.append(block)
         size += len(block.encode())
-    if causes and logs_url:
+    if logs_url:
         out.append(f"Full logs: [build logs artifact]({logs_url})\n")
 
     annotations = []
@@ -329,6 +343,7 @@ def main() -> int:
     parser.add_argument("--steps", default="{}", help="toJSON(steps) of the build job")
     parser.add_argument("--logs-url", default="")
     parser.add_argument("--run-url", default="")
+    parser.add_argument("--packages", default="", help="space-separated registered packages")
     parser.add_argument("--summary", default=os.environ.get("GITHUB_STEP_SUMMARY"))
     args = parser.parse_args()
 
@@ -340,6 +355,7 @@ def main() -> int:
         args.steps,
         args.logs_url,
         args.run_url,
+        args.packages.split(),
     )
     for line in annotations:
         print(line)
