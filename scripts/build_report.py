@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import html
 import json
 import os
 from pathlib import Path
@@ -56,6 +57,7 @@ STEP_NAMES = {
     "closures": "Record index dependency closures",
     "resolve": "Resolve commit SHA",
     "scan": "Scan workspace for registered packages",
+    "remove-exec-depend": "Remove exec_depend",
     "rosdep": "Install dependencies (rosdep)",
     "build": "Build (union of registered packages)",
     "verdict": "Derive per-package build verdicts",
@@ -183,6 +185,11 @@ def failure_cause(
 
 
 def failed_steps(steps_json: str) -> list[str]:
+    """Return the names of the steps that failed or were cancelled.
+
+    `conclusion`, not `outcome`: a step with continue-on-error, such as the
+    logs upload, does not take the verdicts with it.
+    """
     try:
         steps = json.loads(steps_json or "{}")
     except json.JSONDecodeError:
@@ -190,7 +197,7 @@ def failed_steps(steps_json: str) -> list[str]:
     return [
         STEP_NAMES.get(step_id, step_id)
         for step_id, step in steps.items()
-        if isinstance(step, dict) and step.get("outcome") == "failure"
+        if isinstance(step, dict) and step.get("conclusion") in ("failure", "cancelled")
     ]
 
 
@@ -203,7 +210,8 @@ def escape_property(text: str) -> str:
 
 
 def cell(text: str) -> str:
-    return text.replace("|", "\\|").replace("\n", " ")
+    """Make compiler text safe for a table cell or a <summary>, e.g. `vector<int>`."""
+    return html.escape(text, quote=False).replace("|", "\\|").replace("\n", " ")
 
 
 def fence(text: str) -> str:
@@ -251,17 +259,25 @@ def report(
     total = len(present) + len(absent)
     out = [f"### build {repo_name} @ {ref_kind} {ref_value}", ""]
     if causes:
-        listed = ", ".join(f"{pkg} ({causes[pkg].headline})" for pkg in causes)
-        out += [f"**{len(causes)} of {total} packages failed:** {cell(shorten(listed, 1000))}", ""]
+        listed = []
+        for pkg, cause in causes.items():
+            if sum(len(entry) for entry in listed) > 1000:
+                listed.append(f"and {len(causes) - len(listed)} more")
+                break
+            listed.append(f"{pkg} ({cause.headline})")
+        out += [f"**{len(causes)} of {total} packages failed:** {cell(', '.join(listed))}", ""]
     broken_steps = failed_steps(steps_json)
     if broken_steps:
         names = ", ".join(f"`{name}`" for name in broken_steps)
         out += [
-            f"> [!WARNING]\n> The step {names} failed. This is a pipeline fault, not a package"
+            f"> [!WARNING]\n> The step {names} did not finish. This is a pipeline fault, not a package"
             " fault, so packages without a verdict are inconclusive."
             + (f" See the [run log]({run_url})." if run_url else ""),
             "",
         ]
+    no_verdict = [pkg for pkg in present if pkg not in results]
+    if no_verdict:
+        out += [f"**{len(no_verdict)} of {total} packages have no verdict.**", ""]
     elif total and not causes:
         out += [f"**All {total} packages built.**", ""]
 

@@ -865,13 +865,20 @@ def test_verdict_step_records_why_each_package_failed(
         repo_root,
         tmp_path,
         "Derive per-package build verdicts",
-        {"ROS_DISTRO_INPUT": DISTRO, "BASH_ENV": str(bash_env)},
+        {
+            "ROS_DISTRO_INPUT": DISTRO,
+            "BASH_ENV": str(bash_env),
+            "GITHUB_OUTPUT": str(tmp_path / "output"),
+        },
         # `colcon list --names-only --packages-up-to pkg_a ...`: the closure
         # edge to pkg_dep comes from .index-closures, as for exec-only edges.
         stubs={"colcon": 'echo "$4"'},
     )
     assert proc.returncode == 0, proc.stderr
     assert (tmp_path / ".sweep-reasons.txt").read_text() == expected
+    # The logs upload runs only on this output.
+    output = tmp_path / "output"
+    assert (output.read_text() if output.exists() else "") == ("failed=true\n" if expected else "")
 
 
 def test_partial_build_failure_preserves_the_successful_build_handoff(repo_root, tmp_path):

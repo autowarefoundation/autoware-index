@@ -11,6 +11,7 @@ from pathlib import Path
 
 import build_report
 import pytest
+import yaml
 
 # The output of a real failure: autoware_latent_drive at 1.0.1 on Jazzy,
 # https://github.com/autowarefoundation/autoware-index/actions/runs/41093229072
@@ -168,13 +169,68 @@ def test_absent_package_says_why(tmp_path):
 
 def test_pipeline_fault_names_the_step_and_blames_no_package(tmp_path):
     layout(tmp_path, sweep_present_txt="pkg_a\n")
-    steps = '{"scan": {"outcome": "success"}, "rosdep": {"outcome": "failure"}}'
+    steps = '{"scan": {"conclusion": "success"}, "rosdep": {"conclusion": "failure"}}'
     summary, annotations, code = run(tmp_path, steps=steps)
     assert code == 0
     assert annotations == []
-    assert "The step `Install dependencies (rosdep)` failed" in summary
+    assert "The step `Install dependencies (rosdep)` did not finish" in summary
     assert "[run log](https://example.com/run/42)" in summary
     assert "| pkg_a | yes | - | inconclusive: no verdict |" in summary
+    assert "**1 of 1 packages have no verdict.**" in summary
+    assert "All 1 packages built" not in summary
+
+
+@pytest.mark.parametrize(
+    "steps",
+    [
+        # A new push to the PR cancels the running build.
+        '{"build": {"conclusion": "cancelled"}}',
+        # A step without an id is not in toJSON(steps) at all.
+        "{}",
+    ],
+)
+def test_a_package_without_a_verdict_is_never_reported_as_built(tmp_path, steps):
+    layout(
+        tmp_path, sweep_present_txt="pkg_a\npkg_b\n", sweep_results_txt="pkg_a success skipped\n"
+    )
+    summary, _, code = run(tmp_path, steps=steps)
+    assert code == 0
+    assert "**1 of 2 packages have no verdict.**" in summary
+    assert "packages built" not in summary
+
+
+def test_a_failed_logs_upload_is_not_a_pipeline_fault(tmp_path):
+    layout(tmp_path, sweep_present_txt="pkg_a\n", sweep_results_txt="pkg_a success skipped\n")
+    steps = '{"logs": {"outcome": "failure", "conclusion": "success"}}'
+    summary, _, _ = run(tmp_path, steps=steps)
+    assert "pipeline fault" not in summary
+    assert "**All 1 packages built.**" in summary
+
+
+def test_step_names_match_the_workflow(repo_root):
+    workflow = yaml.safe_load((repo_root / ".github/workflows/build-repository.yaml").read_text())
+    steps = {s["id"]: s["name"] for s in workflow["jobs"]["build"]["steps"] if "id" in s}
+    for step_id, name in build_report.STEP_NAMES.items():
+        assert steps.get(step_id) == name, step_id
+    # Every step that can leave packages without a verdict is named.
+    assert set(steps) - set(build_report.STEP_NAMES) == {"handoff", "logs"}
+
+
+def test_compiler_text_is_escaped_for_html(tmp_path):
+    log = "--- output: pkg_a\n/src/a.cpp:1:1: error: no match for std::vector<int> | x\n---\n"
+    layout(
+        tmp_path,
+        sweep_present_txt="pkg_a\n",
+        sweep_results_txt="pkg_a failure skipped\n",
+        sweep_build_log=log,
+    )
+    summary, annotations, _ = run(tmp_path)
+    assert (
+        "<summary>pkg_a: /src/a.cpp:1:1: error: no match for std::vector&lt;int&gt; \\| x</summary>"
+        in summary
+    )
+    assert "std::vector<int>" in summary  # the fenced excerpt stays verbatim
+    assert "std::vector<int>" in annotations[0]
 
 
 def test_all_green(tmp_path):

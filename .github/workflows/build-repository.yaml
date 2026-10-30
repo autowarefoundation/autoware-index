@@ -95,15 +95,6 @@ jobs:
       has-tests: ${{ steps.handoff.outputs.has-tests }}
       cache-key: ${{ steps.handoff.outputs.cache-key }}
     steps:
-      # Only for scripts/build_report.py. Kept outside src/, so colcon never
-      # sees it, and outside the cached paths.
-      - name: Check out index scripts
-        uses: actions/checkout@v7
-        with:
-          path: _index
-          sparse-checkout: scripts
-          persist-credentials: false
-
       - name: Clone repository
         id: clone
         env:
@@ -212,7 +203,6 @@ jobs:
               cp "${pkg_path[$pkg]}/package.xml" "package-xmls/${pkg}.xml"
             else
               absent+=("$pkg")
-              echo "::error::registered package '${pkg}' not found in the repository tree at this ref"
             fi
           done
 
@@ -235,6 +225,7 @@ jobs:
           echo "found ${#present[@]} present / ${#absent[@]} absent of $(wc -w <<< "${PACKAGES}") registered package(s)"
 
       - name: Remove exec_depend
+        id: remove-exec-depend
         if: steps.scan.outputs.present != ''
         uses: autowarefoundation/autoware-github-actions/remove-exec-depend@v1
 
@@ -387,6 +378,9 @@ jobs:
             echo "${pkg} success skipped" >> .sweep-results.txt
           done < .sweep-present.txt
           cat .sweep-results.txt
+          if [ -s .sweep-reasons.txt ]; then
+            echo "failed=true" >> "${GITHUB_OUTPUT}"
+          fi
 
       - name: Compose result.json
         if: always()
@@ -490,17 +484,35 @@ jobs:
 
       - name: Upload build logs
         id: logs
-        if: always()
+        # Only when there is something to explain. The Report step reads the
+        # step conclusions, so a failed upload must not look like a pipeline
+        # fault.
+        if: failure() || steps.verdict.outputs.failed == 'true'
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           # Not validate-result-*, so the record jobs never download it.
           name: build-logs-${{ inputs.ros_distro }}-${{ inputs.repo_name }}-${{ inputs.autoware_version }}
+          # log/latest* are symlinks to the same files.
           path: |
-            log/
+            log/build_*/
             .sweep-*.log
             .sweep-*.txt
+          include-hidden-files: true
           if-no-files-found: ignore
+          retention-days: 14
           overwrite: true
+
+      # Only for scripts/build_report.py. Here and not first, so a failed
+      # checkout cannot cost the build its verdicts. Kept outside src/ and
+      # outside the cached paths.
+      - name: Check out index scripts
+        if: always()
+        uses: actions/checkout@v7
+        with:
+          path: _index
+          sparse-checkout: scripts
+          persist-credentials: false
 
       - name: Report
         if: always()
