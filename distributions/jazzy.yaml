@@ -166,3 +166,17 @@ repositories:
         tags:
           - sensing
           - driver
+  autoware_latent_drive:
+    url: https://github.com/autowarefoundation/autoware_latent_drive
+    ref:
+      kind: tag
+      value: v1.0.0
+    governance: foundation
+    maintainers:
+      - name: Jixin Han
+        email: cld-jixin.han@tier4.jp
+        github: kalfazed
+    packages:
+      latentdrive_ros:
+        tags:
+          - e2e-driving
