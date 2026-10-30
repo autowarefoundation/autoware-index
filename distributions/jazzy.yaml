@@ -32,7 +32,7 @@ repositories:
     url: https://github.com/autowarefoundation/autoware_component_monitor
     ref:
       kind: tag
-      value: 1.0.0
+      value: 1.0.1
     governance: foundation
     maintainers:
       - name: Mehmet Emin Başoğlu
