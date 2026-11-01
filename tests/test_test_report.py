@@ -8,6 +8,7 @@ annotations.
 
 import json
 from pathlib import Path
+from xml.sax.saxutils import quoteattr
 
 import test_report
 import yaml
@@ -16,9 +17,9 @@ GTEST_XML = """\
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuites tests="3" failures="1">
   <testsuite name="TestPlanner" tests="3" failures="1">
-    <testcase name="plans" classname="TestPlanner"/>
-    <testcase name="stops" classname="TestPlanner"/>
-    <testcase name="avoids" classname="TestPlanner">
+    <testcase name="plans" classname="pkg_a.TestPlanner"/>
+    <testcase name="stops" classname="pkg_a.TestPlanner"/>
+    <testcase name="avoids" classname="pkg_a.TestPlanner">
       <failure message="/__w/autoware-index/autoware-index/src/repository/test/test_planner.cpp:42&#10;Expected equality of these values:&#10;  path.size()&#10;    Which is: 0&#10;  3"><![CDATA[/__w/autoware-index/autoware-index/src/repository/test/test_planner.cpp:42
 Expected equality of these values:
   path.size()
@@ -71,14 +72,14 @@ def test_gtest_failure_names_the_case_and_its_message(tmp_path):
     assert code == 1
     assert "**1 of 1 tested packages failed:** pkg_a" in summary
     assert (
-        "| pkg_a | failure | 1 of 3 test cases failed: TestPlanner.avoids"
+        "| pkg_a | failure | 1 of 3 test cases failed: pkg_a.TestPlanner.avoids"
         " (first: test_planner.cpp:42: Expected equality of these values:) |" in summary
     )
-    assert "TestPlanner.avoids\n  /__w/autoware-index/" in summary
+    assert "pkg_a.TestPlanner.avoids\n  /__w/autoware-index/" in summary
     assert summary.count("Which is: 0") == 1
     assert "[test logs artifact](https://example.com/artifact/7)" in summary
     assert annotations == [
-        "::error title=pkg_a tests failed::1 of 3 test cases failed: TestPlanner.avoids"
+        "::error title=pkg_a tests failed::1 of 3 test cases failed: pkg_a.TestPlanner.avoids"
         " (first: test_planner.cpp:42: Expected equality of these values:)"
     ]
 
@@ -102,30 +103,68 @@ def test_xml_that_is_not_junit_is_ignored(tmp_path):
     assert "1 of 3 test cases failed" in summary
 
 
-def test_a_crashed_gtest_shows_the_log_not_only_the_missing_result(tmp_path):
-    # What ament_cmake's run_test.py writes when the test binary wrote no XML.
+def missing_result(pkg: str, test: str, message: str) -> str:
+    """Return the stand-in that ament_cmake_test's run_test.py writes (_generate_result)."""
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="{pkg}" tests="1" failures="0" time="0.000" errors="1" skipped="0">
+  <testcase classname="{pkg}" name="{test}.missing_result" time="0.000">
+    <error message={quoteattr(message)}/>
+  </testcase>
+</testsuite>
+"""
+
+
+def colcon_log(tmp_path: Path, pkg: str, text: str) -> None:
+    path = tmp_path / "log" / "test_2026-10-30_11-00-00" / pkg
+    path.mkdir(parents=True)
+    (path / "stdout_stderr.log").write_text(text)
+
+
+LINTER_OUTPUT = "".join(f"xmllint: checking file {i}.xml\n" for i in range(80))
+
+
+def test_a_crashed_gtest_shows_its_own_output(tmp_path):
+    result(tmp_path, {"pkg_a": ("success", "failure")})
+    output = "[ RUN      ] Node.starts\nSegmentation fault (core dumped)"
+    junit(
+        tmp_path,
+        "pkg_a",
+        "test_node.gtest.xml",
+        missing_result(
+            "pkg_a", "test_node.gtest", f"The test did not generate a result file:\n\n{output}"
+        ),
+    )
+    # ctest -V runs the linters after the gtests, so the log ends with them.
+    colcon_log(tmp_path, "pkg_a", f"{output}\n{LINTER_OUTPUT}")
+    summary, annotations, _ = run(tmp_path)
+    assert (
+        "1 test(s) ended without a result: pkg_a.test_node.gtest.missing_result" in annotations[0]
+    )
+    assert "test cases failed" not in annotations[0]
+    assert "  Segmentation fault (core dumped)" in summary
+    assert "xmllint" not in summary
+
+
+def test_a_timed_out_test_shows_the_ctest_list_of_failed_tests(tmp_path):
     result(tmp_path, {"pkg_a": ("success", "failure")})
     junit(
         tmp_path,
         "pkg_a",
         "test_node.gtest.xml",
-        '<testsuite name="pkg_a" tests="1" failures="1"><testcase classname="pkg_a"'
-        ' name="test_node.missing_result"><failure message="Result file not found at'
-        " '/__w/build/pkg_a/test_results/pkg_a/test_node.gtest.xml'\"/></testcase>"
-        "</testsuite>",
+        missing_result("pkg_a", "test_node.gtest", "The test did not generate a result file."),
     )
-    path = tmp_path / "log" / "test_2026-10-30_11-00-00" / "pkg_a"
-    path.mkdir(parents=True)
-    (path / "stdout_stderr.log").write_text(
-        "[ RUN      ] Node.starts\nSegmentation fault (core dumped)\n"
+    colcon_log(
+        tmp_path,
+        "pkg_a",
+        f"{LINTER_OUTPUT}The following tests FAILED:\n\t  1 - test_node (Timeout)\n"
+        "Errors while running CTest\n",
     )
     summary, annotations, _ = run(tmp_path)
-    assert (
-        "1 test(s) wrote no result, likely a crash: pkg_a.test_node.missing_result"
-        in annotations[0]
+    assert "1 test(s) were killed or timed out: pkg_a.test_node.gtest.missing_result" in (
+        annotations[0]
     )
-    assert "test cases failed" not in annotations[0]
-    assert "Segmentation fault (core dumped)" in summary
+    assert "1 - test_node (Timeout)" in summary
+    assert "xmllint" not in summary
 
 
 def test_a_crash_next_to_real_failures_shows_both(tmp_path):
@@ -135,12 +174,14 @@ def test_a_crash_next_to_real_failures_shows_both(tmp_path):
         tmp_path,
         "pkg_a",
         "test_node.gtest.xml",
-        '<testsuite><testcase classname="pkg_a" name="test_node.missing_result">'
-        '<failure message="Result file not found at x"/></testcase></testsuite>',
+        missing_result(
+            "pkg_a", "test_node.gtest", "The test did not generate a result file:\n\nAborted"
+        ),
     )
     summary, _, _ = run(tmp_path)
-    assert "1 of 4 test cases failed: TestPlanner.avoids" in summary
-    assert "; 1 test(s) wrote no result, likely a crash: pkg_a.test_node.missing_result" in summary
+    assert "1 of 4 test cases failed: pkg_a.TestPlanner.avoids" in summary
+    assert "; 1 test(s) ended without a result: pkg_a.test_node.gtest.missing_result" in summary
+    assert "  Aborted" in summary
 
 
 def test_failure_without_a_failed_case_falls_back_to_the_newest_log(tmp_path):

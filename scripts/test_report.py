@@ -49,6 +49,11 @@ MAX_CASES_LISTED = 5
 # A JUnit file larger than this is not parsed; its package falls back to the log.
 MAX_XML_BYTES = 10 * 1024 * 1024
 # gtest puts "<absolute path>:<line>" on the first line of a failure message.
+# ament_cmake's run_test.py writes "<test>.missing_result" with this message
+# before a test runs. After a crash it appends ":\n\n" and the test output;
+# when ctest kills the test (a timeout) the message stays as it is.
+NO_RESULT = "The test did not generate a result file"
+CTEST_FAILED = "The following tests FAILED:"
 LOCATION_RE = re.compile(r"^(\S+):(\d+):?$")
 
 STEP_NAMES = {
@@ -71,14 +76,14 @@ class FailedCase:
 
     @property
     def missing_result(self) -> bool:
-        """Whether ament_cmake made this case up for a test that wrote no result.
+        """Whether ament_cmake made this case up for a test that wrote no result."""
+        return self.name.endswith(".missing_result") or self.message.startswith(NO_RESULT)
 
-        That happens when the test binary crashed or aborted; the reason is
-        then in the colcon test log, not in the XML.
-        """
-        return self.name.endswith(".missing_result") or self.message.startswith(
-            "Result file not found"
-        )
+    @property
+    def output(self) -> str:
+        """Return the test output that run_test.py put in a missing_result message."""
+        _, _, output = self.message.partition(f"{NO_RESULT}:\n\n")
+        return output.strip("\n")
 
     def first_line(self) -> str:
         """Return the first line of the failure, with a gtest location shortened."""
@@ -138,10 +143,23 @@ def case_list(cases: list[FailedCase]) -> str:
     return names + (f" and {more} more" if more > 0 else "")
 
 
+def log_excerpt(workspace: Path, pkg: str) -> list[str]:
+    """Return the ctest list of failed tests from the log, else the log tail.
+
+    colcon runs ctest -V, so the log holds the output of every test, and the
+    linters run last; a blind tail would show their output.
+    """
+    lines = package_test_log(workspace, pkg)
+    if CTEST_FAILED in lines:
+        return lines[lines.index(CTEST_FAILED) :][:TAIL_LINES]
+    return lines[-TAIL_LINES:]
+
+
 def package_test_cause(workspace: Path, pkg: str) -> Cause:
     total, failed = junit_cases(workspace / "build" / pkg)
     real = [case for case in failed if not case.missing_result]
-    crashed = [case for case in failed if case.missing_result]
+    crashed = [case for case in failed if case.missing_result and case.output]
+    killed = [case for case in failed if case.missing_result and not case.output]
     parts, blocks = [], []
     if real:
         part = f"{len(real)} of {total} test cases failed: {case_list(real)}"
@@ -155,16 +173,20 @@ def package_test_cause(workspace: Path, pkg: str) -> Cause:
             lines = (case.details or case.message).splitlines()[:CASE_LINES]
             blocks.append("\n".join([case.name, *("  " + line for line in lines)]))
     if crashed:
-        parts.append(
-            f"{len(crashed)} test(s) wrote no result, likely a crash: {case_list(crashed)}"
-        )
-    if crashed or not real:
+        parts.append(f"{len(crashed)} test(s) ended without a result: {case_list(crashed)}")
+        for case in crashed:
+            # A crash is at the end of the output.
+            lines = case.output.splitlines()[-TAIL_LINES:]
+            blocks.append("\n".join([case.name, *("  " + line for line in lines)]))
+    if killed:
+        parts.append(f"{len(killed)} test(s) were killed or timed out: {case_list(killed)}")
+    if killed or not failed:
         if not failed:
             parts.append("tests failed, but no failed case is in the JUnit results")
-        lines = package_test_log(workspace, pkg)
+        lines = log_excerpt(workspace, pkg)
         if lines:
-            blocks.append("\n".join(["colcon test log, last lines:", *lines[-TAIL_LINES:]]))
-    return Cause("; ".join(parts), cap("\n\n".join(blocks), BLOCK_BYTES))
+            blocks.append("\n".join(["colcon test log:", *lines]))
+    return Cause("; ".join(parts), cap("\n\n".join(blocks), BLOCK_BYTES, "test logs"))
 
 
 def report(

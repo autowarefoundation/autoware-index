@@ -203,8 +203,8 @@ jobs:
                   # Report tests writes the annotation, with the failed cases.
                   print(f"{package}: its own tests failed", flush=True)
                   if not failed:
-                      # Now, not after the loop: a job timeout cancels the
-                      # loop, and the logs upload still needs this output.
+                      # Now, not after the loop, so the output is set also
+                      # when a later package is cancelled.
                       with open(os.environ["GITHUB_OUTPUT"], "a") as output:
                           output.write("failed=true\n")
                   failed = True

@@ -139,11 +139,11 @@ def headline_of(lines: list[str]) -> str | None:
     return None
 
 
-def cap(text: str, limit: int) -> str:
+def cap(text: str, limit: int, artifact: str = "build logs") -> str:
     data = text.encode()
     if len(data) <= limit:
         return text
-    return data[:limit].decode(errors="ignore") + "\n... (cut, see the build logs artifact)"
+    return data[:limit].decode(errors="ignore") + f"\n... (cut, see the {artifact} artifact)"
 
 
 def shorten(text: str, limit: int) -> str:
