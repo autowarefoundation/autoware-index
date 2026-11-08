@@ -87,7 +87,7 @@ permissions:
 
 jobs:
   resolve:
-    name: resolve autoware_version
+    name: resolve image stage and autoware_version
     runs-on: ubuntu-24.04
     outputs:
       autoware_version: ${{ inputs.autoware_version || steps.latest.outputs.autoware_version }}
