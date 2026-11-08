@@ -1,7 +1,9 @@
 name: sweep-repository
 
 # One repository row resolves Autoware once, then calls separate build and
-# test workflows. Tests consume the exact cached workspace from that build.
+# test workflows. The resolve job also picks the image stage: core-devel-cuda
+# when a package to build, or an index dependency of it, needs CUDA, else
+# core-devel. Tests consume the exact cached workspace from that build.
 # Both stages preserve the schema-2 validate-result artifact read by the
 # post-merge recorder; PR runs retain read-only permissions and never record.
 
@@ -59,10 +61,14 @@ on:
         type: string
         default: "{}"
       base_image_stage:
-        description: Container image stage. Defaults to core-devel.
+        description: |
+          Container image stage (e.g. "core-devel" or "core-devel-cuda").
+          When empty (the default), the resolve job clones the repository
+          and its index dependencies and runs the detect-base-image-stage
+          action of autoware-index-github-actions on the packages to build.
         required: false
         type: string
-        default: core-devel
+        default: ""
       runs-on:
         description: |
           Runner label as a JSON-encoded array (workaround for the lack
@@ -85,14 +91,48 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       autoware_version: ${{ inputs.autoware_version || steps.latest.outputs.autoware_version }}
+      base_image_stage: ${{ inputs.base_image_stage || steps.stage.outputs.base_image_stage }}
     steps:
+      - name: Clone repository and index dependencies
+        if: inputs.base_image_stage == ''
+        env:
+          REPOSITORY: ${{ inputs.repository }}
+          REF_VALUE: ${{ inputs.ref_value }}
+          DEPENDENCY_REPOSITORIES: ${{ inputs.dependency_repositories }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone "${REPOSITORY}" src/repository
+          git -C src/repository checkout "${REF_VALUE}"
+          python3 - <<'EOF'
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+
+          dependencies = json.loads(os.environ["DEPENDENCY_REPOSITORIES"] or "[]") or []
+          for dependency in dependencies:
+              path = Path("src") / "index-dependencies" / dependency["repo_name"]
+              path.parent.mkdir(parents=True, exist_ok=True)
+              subprocess.run(["git", "clone", dependency["repository"], str(path)], check=True)
+              subprocess.run(["git", "-C", str(path), "checkout", dependency["ref_value"]], check=True)
+          EOF
+
+      - name: Detect base image stage
+        id: stage
+        if: inputs.base_image_stage == ''
+        uses: autowarefoundation/autoware-index-github-actions/.github/actions/detect-base-image-stage@main
+        with:
+          paths: src
+          packages: ${{ inputs.packages }} ${{ inputs.dependency_packages }}
+
       - name: Resolve latest autoware_version
         id: latest
         if: inputs.autoware_version == ''
         uses: autowarefoundation/autoware-index-github-actions/.github/actions/latest-autoware-version@main
         with:
           ros_distro: ${{ inputs.ros_distro }}
-          base_image_stage: ${{ inputs.base_image_stage }}
+          base_image_stage: ${{ inputs.base_image_stage || steps.stage.outputs.base_image_stage }}
 
   build:
     needs: resolve
@@ -108,7 +148,7 @@ jobs:
       dependency_repositories: ${{ inputs.dependency_repositories }}
       dependency_packages: ${{ inputs.dependency_packages }}
       index_dependencies: ${{ inputs.index_dependencies }}
-      base_image_stage: ${{ inputs.base_image_stage }}
+      base_image_stage: ${{ needs.resolve.outputs.base_image_stage }}
       runs-on: ${{ inputs.runs-on }}
 
   test:
@@ -122,5 +162,5 @@ jobs:
       autoware_version: ${{ needs.resolve.outputs.autoware_version }}
       repo_name: ${{ inputs.repo_name }}
       cache_key: ${{ needs.build.outputs.cache-key }}
-      base_image_stage: ${{ inputs.base_image_stage }}
+      base_image_stage: ${{ needs.resolve.outputs.base_image_stage }}
       runs-on: ${{ inputs.runs-on }}

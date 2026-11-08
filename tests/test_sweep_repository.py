@@ -680,6 +680,26 @@ def test_split_workflows_allow_testing_successful_siblings_after_build_failure(r
         assert build["with"][key] == test["with"][key]
 
 
+def test_resolve_job_detects_the_image_stage_unless_the_caller_sets_it(repo_root):
+    workflow = yaml.safe_load((repo_root / ".github/workflows/sweep-repository.yaml").read_text())
+    assert workflow[True]["workflow_call"]["inputs"]["base_image_stage"]["default"] == ""
+    resolve = workflow["jobs"]["resolve"]
+    stage = "${{ inputs.base_image_stage || steps.stage.outputs.base_image_stage }}"
+    assert resolve["outputs"]["base_image_stage"] == stage
+    steps = {step.get("id"): step for step in resolve["steps"]}
+    assert steps["stage"]["uses"].startswith(
+        "autowarefoundation/autoware-index-github-actions/.github/actions/detect-base-image-stage@"
+    )
+    assert steps["stage"]["if"] == "inputs.base_image_stage == ''"
+    assert "inputs.dependency_packages" in steps["stage"]["with"]["packages"]
+    assert steps["latest"]["with"]["base_image_stage"] == stage
+    for job in ("build", "test"):
+        assert (
+            workflow["jobs"][job]["with"]["base_image_stage"]
+            == "${{ needs.resolve.outputs.base_image_stage }}"
+        )
+
+
 def test_cache_restores_exact_build_without_fallback_or_rebuild(repo_root):
     save = workflow_step(repo_root, "Cache built workspace")
     restore = workflow_step(repo_root, "Restore built workspace", "test-repository")
