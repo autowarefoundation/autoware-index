@@ -715,7 +715,7 @@ def source_repository(git_repo, name: str):
     return git_repo.commit("first")
 
 
-def run_resolve_clone(repo_root, tmp_path, repository, ref_value, dependencies="[]"):
+def run_resolve_clone(repo_root, tmp_path, repository, ref_value, dependencies="[]", stubs=None):
     env = step_env(
         workflow_step(repo_root, RESOLVE_CLONE_STEP, "sweep-repository"),
         {
@@ -732,9 +732,16 @@ def run_resolve_clone(repo_root, tmp_path, repository, ref_value, dependencies="
         workspace,
         RESOLVE_CLONE_STEP,
         {**env, "GITHUB_OUTPUT": str(output)},
+        stubs=stubs,
         workflow_name="sweep-repository",
     )
     return proc, workspace, output
+
+
+# A git that refuses a shallow fetch, as a server that gives no commit by SHA.
+NO_SHALLOW_GIT = (
+    'for a in "$@"; do [ "$a" = "--depth" ] && exit 128; done\nexec /usr/bin/git "$@"\n'
+)
 
 
 @pytest.mark.parametrize("ref_kind", ["tag", "branch", "sha"])
@@ -759,8 +766,56 @@ def test_resolve_clone_step_checks_out_the_ref_and_reports_its_commit(
     assert (workspace / "src/repository/later.txt").exists() == (expected == second)
 
 
+@pytest.mark.parametrize("ref_kind", ["tag", "branch", "sha"])
+def test_resolve_clone_step_falls_back_to_the_full_history(repo_root, tmp_path, git_repo, ref_kind):
+    first = source_repository(git_repo, "pkg_a")
+    git_repo.git("tag", "1.0.0")
+    (git_repo.path / "later.txt").write_text("later")
+    second = git_repo.commit("second")
+    ref_value, expected = {
+        "tag": ("1.0.0", first),
+        "branch": ("main", second),
+        "sha": (first, first),
+    }[ref_kind]
+
+    proc, _, output = run_resolve_clone(
+        repo_root, tmp_path, git_repo.path, ref_value, stubs={"git": NO_SHALLOW_GIT}
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert output.read_text() == f"sha={expected}\n"
+
+
+@pytest.mark.parametrize("field", ["repository", "ref_value"])
+def test_resolve_clone_step_refuses_a_value_that_git_reads_as_an_option(
+    repo_root, tmp_path, git_repo, field
+):
+    source_repository(git_repo, "pkg_a")
+    marker = tmp_path / "ran"
+    bad = f"--upload-pack=touch {marker};"
+    repository, ref_value = (bad, "main") if field == "repository" else (git_repo.path, bad)
+
+    proc, _, _ = run_resolve_clone(repo_root, tmp_path, repository, ref_value)
+
+    assert proc.returncode != 0
+    assert "refusing a repository or ref" in proc.stderr
+    assert not marker.exists()
+
+
+def source_files(root: Path) -> set[str]:
+    return {
+        str(path.relative_to(root))
+        for path in root.rglob("*")
+        if path.is_file() and ".git" not in path.parts
+    }
+
+
 def test_resolve_clone_step_uses_the_source_layout_of_the_build(repo_root, tmp_path, git_repo):
-    """The detection must read the tree that the build job builds."""
+    """The detection must read the tree that the build job builds.
+
+    Both jobs run their real clone steps here, and the two src/ trees must
+    hold the same files.
+    """
     source_repository(git_repo, "pkg_a")
     dependencies = json.dumps(
         [
@@ -772,16 +827,30 @@ def test_resolve_clone_step_uses_the_source_layout_of_the_build(repo_root, tmp_p
             }
         ]
     )
+    expressions = {
+        "inputs.repository": str(git_repo.path),
+        "inputs.ref_value": "main",
+        "inputs.checkout_ref": "",
+        "inputs.dependency_repositories": dependencies,
+    }
 
-    proc, workspace, _ = run_resolve_clone(repo_root, tmp_path, git_repo.path, "main", dependencies)
-
+    proc, resolve_workspace, _ = run_resolve_clone(
+        repo_root, tmp_path, git_repo.path, "main", dependencies
+    )
     assert proc.returncode == 0, proc.stderr
-    assert (workspace / "src/repository/package.xml").is_file()
-    assert (workspace / "src/index-dependencies/dep_repo/package.xml").is_file()
-    build_clone = workflow_step(repo_root, "Clone repository")["run"]
-    build_dependencies = workflow_step(repo_root, "Clone index dependencies")["run"]
-    assert "src/repository" in build_clone
-    assert '"src" / "index-dependencies" / name' in build_dependencies
+
+    build_workspace = tmp_path / "build-workspace"
+    build_workspace.mkdir()
+    for name in ("Clone repository", "Clone index dependencies"):
+        env = step_env(workflow_step(repo_root, name), expressions)
+        proc = run_step(
+            repo_root, build_workspace, name, {**env, "GITHUB_WORKSPACE": str(build_workspace)}
+        )
+        assert proc.returncode == 0, proc.stderr
+
+    expected = {"repository/package.xml", "index-dependencies/dep_repo/package.xml"}
+    assert source_files(resolve_workspace / "src") == expected
+    assert source_files(build_workspace / "src") == expected
 
 
 def test_resolve_clone_step_fails_on_a_ref_that_does_not_exist(repo_root, tmp_path, git_repo):
