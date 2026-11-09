@@ -38,6 +38,14 @@ on:
         description: Tag, branch, or SHA of repository to check out.
         required: true
         type: string
+      checkout_ref:
+        description: |
+          Commit to check out in place of ref_value. The sweep passes the
+          commit that its image stage detection read. ref_value is still
+          the ref that result.json records.
+        required: false
+        type: string
+        default: ""
       packages:
         description: Space-separated registered ROS package names hosted by this repository.
         required: true
@@ -100,6 +108,7 @@ jobs:
         env:
           REPOSITORY: ${{ inputs.repository }}
           REF_VALUE: ${{ inputs.ref_value }}
+          CHECKOUT_REF: ${{ inputs.checkout_ref }}
         shell: bash
         run: |
           set -euo pipefail
@@ -110,7 +119,7 @@ jobs:
           git config --global --add safe.directory "${GITHUB_WORKSPACE}/src/repository"
           mkdir -p src
           git clone "${REPOSITORY}" src/repository
-          git -C src/repository checkout "${REF_VALUE}"
+          git -C src/repository checkout "${CHECKOUT_REF:-${REF_VALUE}}"
 
       - name: Clone index dependencies
         id: clone-dependencies

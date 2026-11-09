@@ -89,34 +89,55 @@ jobs:
   resolve:
     name: resolve image stage and autoware_version
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     outputs:
       autoware_version: ${{ inputs.autoware_version || steps.latest.outputs.autoware_version }}
       base_image_stage: ${{ inputs.base_image_stage || steps.stage.outputs.base_image_stage }}
+      source_sha: ${{ steps.clone.outputs.sha }}
     steps:
       - name: Clone repository and index dependencies
+        id: clone
         if: inputs.base_image_stage == ''
         env:
           REPOSITORY: ${{ inputs.repository }}
           REF_VALUE: ${{ inputs.ref_value }}
           DEPENDENCY_REPOSITORIES: ${{ inputs.dependency_repositories }}
+          GIT_LFS_SKIP_SMUDGE: "1"
         shell: bash
         run: |
           set -euo pipefail
-          git clone "${REPOSITORY}" src/repository
-          git -C src/repository checkout "${REF_VALUE}"
           python3 - <<'EOF'
           import json
           import os
           from pathlib import Path
           import subprocess
 
+
+          def clone(repository, ref, path):
+              git = ["git", "-C", str(path)]
+              path.mkdir(parents=True)
+              subprocess.run(["git", "init", "--quiet", str(path)], check=True)
+              subprocess.run([*git, "remote", "add", "origin", repository], check=True)
+              # The detection reads only package.xml and CMake files, so one
+              # commit is enough. Not every server gives a commit by SHA.
+              # Then the full history is fetched.
+              shallow = subprocess.run([*git, "fetch", "--quiet", "--depth", "1", "origin", ref], check=False)
+              if shallow.returncode == 0:
+                  subprocess.run([*git, "checkout", "--quiet", "FETCH_HEAD"], check=True)
+                  return
+              subprocess.run([*git, "fetch", "--quiet", "--tags", "origin", "+refs/heads/*:refs/remotes/origin/*"], check=True)
+              subprocess.run([*git, "checkout", "--quiet", ref], check=True)
+
+
+          clone(os.environ["REPOSITORY"], os.environ["REF_VALUE"], Path("src") / "repository")
           dependencies = json.loads(os.environ["DEPENDENCY_REPOSITORIES"] or "[]") or []
           for dependency in dependencies:
               path = Path("src") / "index-dependencies" / dependency["repo_name"]
-              path.parent.mkdir(parents=True, exist_ok=True)
-              subprocess.run(["git", "clone", dependency["repository"], str(path)], check=True)
-              subprocess.run(["git", "-C", str(path), "checkout", dependency["ref_value"]], check=True)
+              clone(dependency["repository"], dependency["ref_value"], path)
           EOF
+          # The build job checks out this commit, so the detection and the
+          # build read the same sources when the ref is a branch.
+          echo "sha=$(git -C src/repository rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
 
       - name: Detect base image stage
         id: stage
@@ -144,6 +165,7 @@ jobs:
       repository: ${{ inputs.repository }}
       ref_kind: ${{ inputs.ref_kind }}
       ref_value: ${{ inputs.ref_value }}
+      checkout_ref: ${{ needs.resolve.outputs.source_sha }}
       packages: ${{ inputs.packages }}
       dependency_repositories: ${{ inputs.dependency_repositories }}
       dependency_packages: ${{ inputs.dependency_packages }}
