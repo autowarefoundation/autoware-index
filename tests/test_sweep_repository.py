@@ -57,6 +57,7 @@ EXPRESSIONS = {
     "inputs.ref_kind": "tag",
     "inputs.ref_value": "1.2.0",
     "inputs.autoware_version": VERSION,
+    "inputs.base_image_stage": "core-devel",
     "steps.resolve.outputs.sha": SHA,
     "steps.scan.outputs.present": "",
     "inputs.packages": "pkg_a",
@@ -208,7 +209,9 @@ def test_compose_top_level_keys_match_the_schema_exactly(repo_root, tmp_path):
     """
     result = compose(repo_root, tmp_path, packages="pkg_a", results="", present="")
     schema = result_schema(repo_root)
-    assert set(result) == set(schema["required"]) == set(schema["properties"])
+    assert set(result) == set(schema["properties"])
+    # base_image_stage is provenance: the reader records a verdict without it.
+    assert set(schema["required"]) == set(schema["properties"]) - {"base_image_stage"}
 
 
 def test_package_outcome_keys_match_the_schema_exactly(repo_root, tmp_path):
@@ -312,6 +315,7 @@ def test_compose_step_has_exactly_one_heredoc_and_the_env_the_tests_supply(repo_
         "REF_KIND",
         "REF_VALUE",
         "RESOLVED_SHA",
+        "BASE_IMAGE_STAGE",
         "PACKAGES",
     }
 
@@ -327,6 +331,69 @@ def test_green_package_round_trips_to_pass(repo_root, tmp_path):
     )
     assert_valid(repo_root, result)
     assert statuses(result, "pkg_a") == {"pkg_a": "pass"}
+
+
+def records(result: dict, packages: str) -> list[dict]:
+    envelopes, _ = build_envelopes.envelopes_for_row(
+        row(packages), result, "eager", "2026-06-11T12:00:00Z", "https://example.com/run/42"
+    )
+    return [envelope["record"] for envelope in envelopes]
+
+
+@pytest.mark.parametrize("stage", ["core-devel", "core-devel-cuda"])
+def test_image_stage_round_trips_into_a_schema_valid_record(repo_root, tmp_path, stage):
+    result = compose(
+        repo_root,
+        tmp_path,
+        packages="pkg_a",
+        results="pkg_a success success\n",
+        present="pkg_a\n",
+        expressions={"inputs.base_image_stage": stage},
+    )
+    assert_valid(repo_root, result)
+    assert result["base_image_stage"] == stage
+    (record,) = records(result, "pkg_a")
+    assert record["base_image_stage"] == stage
+    history_schema = json.loads((repo_root / "schema/history-record.schema.json").read_text())
+    jsonschema.Draft202012Validator(history_schema).validate(record)
+
+
+@pytest.mark.parametrize("stage", ["", "Core Devel", None, 7])
+def test_a_missing_or_malformed_image_stage_never_costs_the_verdict(repo_root, tmp_path, stage):
+    result = compose(
+        repo_root, tmp_path, packages="pkg_a", results="pkg_a success success\n", present="pkg_a\n"
+    )
+    if stage is None:
+        del result["base_image_stage"]
+    else:
+        result["base_image_stage"] = stage
+    (record,) = records(result, "pkg_a")
+    assert record["status"] == "pass"
+    assert "base_image_stage" not in record
+
+
+def test_test_workflow_keeps_the_image_stage_of_the_build(repo_root, tmp_path):
+    """test-repository.yaml rewrites result.json, and the stage must survive."""
+    result = compose(
+        repo_root,
+        tmp_path,
+        packages="pkg_a",
+        results="pkg_a success success\n",
+        present="pkg_a\n",
+        expressions={"inputs.base_image_stage": "core-devel-cuda"},
+    )
+    path = tmp_path / "_result" / "result.json"
+    path.parent.mkdir()
+    path.write_text(json.dumps(result))
+    proc = run_step(
+        repo_root,
+        tmp_path,
+        "Select successfully built packages",
+        {"GITHUB_OUTPUT": str(tmp_path / "output")},
+        workflow_name="test-repository",
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(path.read_text())["base_image_stage"] == "core-devel-cuda"
 
 
 def test_build_failure_round_trips_to_fail(repo_root, tmp_path):

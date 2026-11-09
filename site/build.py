@@ -197,6 +197,7 @@ def summarize(records: list[dict]) -> dict:
             "status": rec.get("status", "unknown"),
             "ref_at_test": rec.get("ref_at_test", {}),
             "resolved_sha": rec.get("resolved_sha", ""),
+            "base_image_stage": rec.get("base_image_stage", ""),
             "at": rec.get("at", ""),
             "actions_run_url": rec.get("actions_run_url", ""),
         }

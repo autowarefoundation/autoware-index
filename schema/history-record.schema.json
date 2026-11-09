@@ -52,6 +52,11 @@
       "type": "string",
       "pattern": "^\\d+\\.\\d+\\.\\d+$"
     },
+    "base_image_stage": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Stage of the Autoware container image the package was built and tested in, e.g. 'core-devel' or 'core-devel-cuda'. With autoware_version and the record's distro it names the image: ghcr.io/autowarefoundation/autoware:<base_image_stage>-<distro>-<autoware_version>. Optional: lines written before this field carry none, and all of those ran in 'core-devel'."
+    },
     "status": {
       "type": "string",
       "enum": ["pass", "fail"],

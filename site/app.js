@@ -111,6 +111,7 @@ function versionTable(versions) {
       el("th", { text: "Status" }),
       el("th", { text: "Ref tested" }),
       el("th", { text: "Commit" }),
+      el("th", { text: "Image" }),
       el("th", { text: "Tested" }),
     ),
   );
@@ -130,6 +131,7 @@ function versionTable(versions) {
         el("td", {}, statusPill(v.status || "unknown")),
         el("td", {}, el("code", { text: refText(v.ref_at_test) })),
         el("td", {}, el("code", {}, shaNode)),
+        el("td", {}, v.base_image_stage ? el("code", { text: v.base_image_stage }) : "-"),
         el("td", { text: v.at ? v.at.slice(0, 10) : "-" }),
       ),
     );
