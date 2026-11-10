@@ -972,6 +972,44 @@ def test_clone_steps_use_the_repository_key_rule_of_the_registry_schema(repo_roo
         assert f're.compile(r"{pattern}")' in step["run"]
 
 
+def test_build_clones_a_dependency_at_the_commit_that_the_detection_read(
+    repo_root, tmp_path, git_repo
+):
+    """A branch tip that moves after the detection must not reach the build."""
+    first = source_repository(git_repo, "pkg_a")
+    proc, _, output = run_resolve_clone(
+        repo_root, tmp_path, git_repo.path, "main", dependency_row(git_repo.path)
+    )
+    assert proc.returncode == 0, proc.stderr
+    outputs = dict(line.split("=", 1) for line in output.read_text().splitlines())
+    assert outputs["sha"] == first
+    assert json.loads(outputs["dependency_repositories"]) == json.loads(
+        dependency_row(git_repo.path, checkout_ref=first)
+    )
+
+    (git_repo.path / "later.txt").write_text("later")
+    git_repo.commit("second")
+    proc, workspace = run_build_dependency_clone(
+        repo_root, tmp_path, outputs["dependency_repositories"]
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert not (workspace / "src/index-dependencies/dep_repo/later.txt").exists()
+
+
+def test_sweep_passes_the_pinned_dependencies_to_the_build(repo_root):
+    workflow = yaml.safe_load((repo_root / ".github/workflows/sweep-repository.yaml").read_text())
+    assert (
+        workflow["jobs"]["resolve"]["outputs"]["dependency_repositories"]
+        == "${{ steps.clone.outputs.dependency_repositories }}"
+    )
+    # The resolve output is empty when the caller sets base_image_stage.
+    assert (
+        workflow["jobs"]["build"]["with"]["dependency_repositories"]
+        == "${{ needs.resolve.outputs.dependency_repositories || inputs.dependency_repositories }}"
+    )
+
+
 @pytest.mark.parametrize("field", ["repository", "ref_value", "checkout_ref"])
 def test_build_clone_step_refuses_a_value_that_git_reads_as_an_option(
     repo_root, tmp_path, git_repo, field

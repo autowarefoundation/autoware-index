@@ -51,7 +51,11 @@ on:
         required: true
         type: string
       dependency_repositories:
-        description: JSON array of transitive registered repository dependencies.
+        description: |
+          JSON array of transitive registered repository dependencies. An
+          entry with a checkout_ref is checked out at that commit in place
+          of its ref_value. The sweep sets it to the commit that its image
+          stage detection read.
         required: false
         type: string
         default: "[]"
@@ -155,7 +159,8 @@ jobs:
               path.parent.mkdir(parents=True, exist_ok=True)
               subprocess.run(["git", "config", "--global", "--add", "safe.directory", str(path)], check=True)
               subprocess.run(["git", "clone", dependency["repository"], str(path)], check=True)
-              subprocess.run(["git", "-C", str(path), "checkout", dependency["ref_value"]], check=True)
+              ref = dependency.get("checkout_ref") or dependency["ref_value"]
+              subprocess.run(["git", "-C", str(path), "checkout", ref], check=True)
           EOF
 
       - name: Record index dependency closures
