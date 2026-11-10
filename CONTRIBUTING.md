@@ -60,6 +60,13 @@ Autoware release, and appends one result per package to the
 nightly. The [browse site](README.md) renders the resulting per-package
 compatibility tables.
 
+A `tag` or `sha` repository with an up to date result is not swept again. After a change of the
+pipeline (for example of the container image), a maintainer can sweep it again by hand: start the
+`sweep-eager` workflow with `workflow_dispatch` and put the repository keys in the `repositories`
+input, separated by spaces or commas. A key that is not registered fails the run. If the forced
+sweep records only a part of the packages of a repository, no later sweep takes that repository
+again. Read the annotations of the `record` job and start the workflow again.
+
 ## Registering a monorepo (several packages, one repository)
 
 A repository hosting several ROS packages is **one** `repositories:` entry:

@@ -362,8 +362,9 @@ def main() -> None:
         if len(valid) == len(registered):
             # Every registered package recorded conclusively: the state file
             # may advance, so the level-triggered discover stops re-sweeping
-            # this row. Partial rows stay stale on purpose: they re-sweep
-            # (and re-annotate) until the registry or the pipeline is fixed.
+            # this row. Partial rows do not advance on purpose: a stale row
+            # re-sweeps (and re-annotates) until the registry or the pipeline
+            # is fixed. A forced row with an up to date state does not.
             state = {
                 "url": row["repository"],
                 "ref": {"kind": row["ref_kind"], "value": row["ref_value"]},
@@ -380,7 +381,9 @@ def main() -> None:
         else:
             print(
                 f"::warning::{distro}/{repo_name}: {len(valid)}/{len(registered)} package(s) "
-                f"recorded conclusively; state not advanced, so the row re-sweeps until conclusive",
+                f"recorded conclusively; state not advanced. The next sweep takes the row again "
+                f"only when its state is stale. After a forced sweep of an up to date row, "
+                f"dispatch the forced sweep again",
                 file=sys.stderr,
             )
 

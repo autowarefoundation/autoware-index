@@ -94,6 +94,7 @@ jobs:
       autoware_version: ${{ inputs.autoware_version || steps.latest.outputs.autoware_version }}
       base_image_stage: ${{ inputs.base_image_stage || steps.stage.outputs.base_image_stage }}
       source_sha: ${{ steps.clone.outputs.sha }}
+      dependency_repositories: ${{ steps.clone.outputs.dependency_repositories }}
     steps:
       - name: Clone repository and index dependencies
         id: clone
@@ -110,14 +111,22 @@ jobs:
           import json
           import os
           from pathlib import Path
+          import re
           import subprocess
           import sys
+
+          # The repository key rule of schema/distribution.schema.json. The
+          # name becomes a directory, and this job has no checkout of the schema.
+          REPO_NAME = re.compile(r"^[a-z][a-z0-9_-]*$")
 
 
           def clone(repository, ref, path):
               # git reads an argument that starts with "-" as an option.
               if repository.startswith("-") or ref.startswith("-"):
                   sys.exit(f"::error::refusing a repository or ref that starts with '-': {repository!r} {ref!r}")
+              # git prints the value in its own messages, and a line break there starts a workflow command.
+              if not (repository + ref).isprintable():
+                  sys.exit(f"::error::refusing a repository or ref with a control character: {repository!r} {ref!r}")
               git = ["git", "-C", str(path)]
               path.mkdir(parents=True)
               subprocess.run(["git", "init", "--quiet", str(path)], check=True)
@@ -133,15 +142,33 @@ jobs:
               subprocess.run([*git, "checkout", "--quiet", ref], check=True)
 
 
-          clone(os.environ["REPOSITORY"], os.environ["REF_VALUE"], Path("src") / "repository")
+          def clone_or_exit(repository, ref, path):
+              try:
+                  clone(repository, ref, path)
+              except subprocess.CalledProcessError:
+                  sys.exit(f"::error::cannot clone {repository!r} at ref {ref!r}")
+
+
+          clone_or_exit(os.environ["REPOSITORY"], os.environ["REF_VALUE"], Path("src") / "repository")
           dependencies = json.loads(os.environ["DEPENDENCY_REPOSITORIES"] or "[]") or []
           for dependency in dependencies:
+              name = dependency["repo_name"]
+              if not REPO_NAME.fullmatch(name):
+                  sys.exit(f"::error::refusing an index dependency name that is not a registry key: {name!r}")
+          pinned = []
+          for dependency in dependencies:
               path = Path("src") / "index-dependencies" / dependency["repo_name"]
-              clone(dependency["repository"], dependency["ref_value"], path)
+              clone_or_exit(dependency["repository"], dependency["ref_value"], path)
+              head = subprocess.run(
+                  ["git", "-C", str(path), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+              )
+              pinned.append({**dependency, "checkout_ref": head.stdout.strip()})
+          if pinned:
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+                  output.write(f"dependency_repositories={json.dumps(pinned)}\n")
           EOF
-          # The build job checks out this commit, so the detection and the
-          # build read the same sources of this repository when the ref is a
-          # branch. An index dependency on a branch ref is not pinned.
+          # The build job checks out these commits, so the detection and the
+          # build read the same sources when a ref is a branch.
           echo "sha=$(git -C src/repository rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
 
       - name: Detect base image stage
@@ -172,7 +199,7 @@ jobs:
       ref_value: ${{ inputs.ref_value }}
       checkout_ref: ${{ needs.resolve.outputs.source_sha }}
       packages: ${{ inputs.packages }}
-      dependency_repositories: ${{ inputs.dependency_repositories }}
+      dependency_repositories: ${{ needs.resolve.outputs.dependency_repositories || inputs.dependency_repositories }}
       dependency_packages: ${{ inputs.dependency_packages }}
       index_dependencies: ${{ inputs.index_dependencies }}
       base_image_stage: ${{ needs.resolve.outputs.base_image_stage }}

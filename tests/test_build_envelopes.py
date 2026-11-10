@@ -360,6 +360,9 @@ def test_main_partial_row_does_not_advance_state(monkeypatch, tmp_path, capsys):
     assert states == []
     err = capsys.readouterr().err
     assert "state not advanced" in err
+    # A forced row has an up to date state, so no later sweep selects it.
+    assert "re-sweeps until conclusive" not in err
+    assert "dispatch the forced sweep again" in err
 
 
 def test_main_fail_records_still_advance_state(monkeypatch, tmp_path):

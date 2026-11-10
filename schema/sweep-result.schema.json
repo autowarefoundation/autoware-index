@@ -59,8 +59,7 @@
       "description": "The exact commit that was checked out, 40 lowercase hex. Empty is the documented 'clone/resolve never completed' signal: nothing was validated, every package also carries present:false, and envelopes_for_row() skips the whole row on it. Left unconstrained here on purpose so that gate keeps owning the message; the recorder re-validates the 40-hex form via SHA_RE before it reaches a record."
     },
     "base_image_stage": {
-      "type": "string",
-      "description": "Stage of the Autoware container image the build ran in, e.g. 'core-devel' or 'core-devel-cuda'. Copied into each record's base_image_stage when it has the form that history-record.schema.json accepts. Provenance only, so it is not in 'required': a missing value, or a value in another form, is left out of the record by envelopes_for_row() and never costs the verdict."
+      "description": "Stage of the Autoware container image the build ran in, e.g. 'core-devel' or 'core-devel-cuda'. Copied into each record's base_image_stage when it has the form that history-record.schema.json accepts. Provenance only, so it is not in 'required' and has no 'type' here on purpose: a missing value, or a value in another form or of another type, is left out of the record by envelopes_for_row() and never costs the verdict."
     },
     "packages": {
       "type": "object",

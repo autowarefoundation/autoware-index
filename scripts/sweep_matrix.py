@@ -44,7 +44,7 @@ Chunking across multiple workflow runs is the documented follow-up when the
 registry approaches that many repositories.
 
 --force "<repo_name> ..." adds a row for each named repository in every mode,
-also when its state file is up to date.
+also when its state file is up to date. Spaces or commas separate the names.
 
 Usage:
     scripts/sweep_matrix.py --mode eager   --state-dir _data/state
@@ -250,7 +250,7 @@ def main() -> None:
     parser.add_argument(
         "--force",
         default="",
-        help="Space-separated repository keys to sweep also when their state is up to date",
+        help="Repository keys, separated by spaces or commas, to sweep also when their state is up to date",
     )
     parser.add_argument("--max-rows", type=int, default=MAX_ROWS_DEFAULT)
     parser.add_argument("--output", default="-", help="Output path; '-' for stdout")
@@ -261,7 +261,7 @@ def main() -> None:
             Path(args.distributions_dir),
             Path(args.state_dir),
             args.mode,
-            frozenset(args.force.split()),
+            frozenset(args.force.replace(",", " ").split()),
         )
     except RegistryError as exc:
         sys.exit(f"::error::{exc}")

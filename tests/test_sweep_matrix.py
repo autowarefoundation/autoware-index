@@ -385,6 +385,35 @@ def test_force_rejects_a_repository_that_is_not_registered(tmp_path):
         m.build_matrix(dist, tmp_path / "state", "eager", frozenset({"no_such_repo"}))
 
 
+@pytest.mark.parametrize("force", ["awesome_tools,other_tools", "awesome_tools, other_tools"])
+def test_force_accepts_names_separated_by_commas(tmp_path, monkeypatch, force):
+    repositories = {
+        name: {
+            "url": f"https://github.com/example-org/{name}",
+            "ref": {"kind": "tag", "value": "1.2.0"},
+            "packages": {f"{name}_pkg": {"tags": ["sensing"]}},
+        }
+        for name in ("awesome_tools", "other_tools")
+    }
+    dist = write_distribution(tmp_path / "distributions", repositories=repositories)
+    state = tmp_path / "state"
+    for name in repositories:
+        write_state(
+            state,
+            "jazzy",
+            name,
+            url=f"https://github.com/example-org/{name}",
+            kind="tag",
+            value="1.2.0",
+            packages=[f"{name}_pkg"],
+        )
+    out = tmp_path / "matrix.json"
+    argv = ["--mode", "eager", "--distributions-dir", str(dist), "--state-dir", str(state)]
+    run_main(monkeypatch, [*argv, "--output", str(out), f"--force={force}"])
+    rows = json.loads(out.read_text())["include"]
+    assert [r["repo_name"] for r in rows] == ["awesome_tools", "other_tools"]
+
+
 def test_eager_workflow_passes_the_dispatch_input_to_force(repo_root):
     import yaml
 
