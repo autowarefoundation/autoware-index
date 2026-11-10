@@ -341,3 +341,83 @@ def test_dependents_of_one_failure_share_one_excerpt(tmp_path):
     summary, annotations, _ = run(tmp_path)
     assert summary.count("<details>") == 1
     assert len(annotations) == 3
+
+
+# The output of the fixture runs on the fork,
+# https://github.com/xmfcx/autoware-index/actions/runs/42752957023
+GCC_FAILURE_LOG = """\
+--- output: index_fixture_compile_error
+[ 50%] Building CXX object CMakeFiles/index_fixture_compile_error.dir/src/lib.cpp.o
+{ws}/src/repository/index_fixture_compile_error/src/lib.cpp: \
+In function ‘int index_fixture_compile_error::answer()’:
+{ws}/src/repository/index_fixture_compile_error/src/lib.cpp:6:28: \
+error: invalid conversion from ‘const char*’ to ‘int’ [-fpermissive]
+    6 | int answer() {{ int value = "forty two"; return value; }}
+      |                            ^~~~~~~~~~~
+gmake: *** [Makefile:146: all] Error 2
+---
+"""
+
+WRAPPED_CMAKE_LOG = """\
+--- output: index_fixture_cmake_missing
+CMake Error at CMakeLists.txt:4 (find_package):
+  By not providing "Findindex_fixture_no_such_cmake_package.cmake" in
+  CMAKE_MODULE_PATH this project has asked CMake to find a package
+  configuration file provided by "index_fixture_no_such_cmake_package", but
+  CMake did not find one.
+
+  Could not find a package configuration file provided by
+  "index_fixture_no_such_cmake_package" with any of the following names:
+
+    index_fixture_no_such_cmake_packageConfig.cmake
+    index_fixture_no_such_cmake_package-config.cmake
+
+-- Configuring incomplete, errors occurred!
+---
+"""
+
+
+def test_error_in_a_cpp_name_is_not_the_headline(tmp_path):
+    layout(
+        tmp_path,
+        sweep_present_txt="index_fixture_compile_error\n",
+        sweep_results_txt="index_fixture_compile_error failure skipped\n",
+        sweep_reasons_txt="index_fixture_compile_error\tfailed\tindex_fixture_compile_error\n",
+        sweep_build_log=GCC_FAILURE_LOG.format(ws=tmp_path),
+    )
+    summary, annotations, _ = run(tmp_path)
+    assert annotations == [
+        "::error title=index_fixture_compile_error build failed::"
+        "src/repository/index_fixture_compile_error/src/lib.cpp:6:28: error: invalid conversion"
+        " from ‘const char*’ to ‘int’ [-fpermissive]"
+    ]
+    # The excerpt keeps the full path, as the log has it.
+    assert f"{tmp_path}/src/repository/index_fixture_compile_error/src/lib.cpp:6:28" in summary
+
+
+def test_wrapped_cmake_package_name_is_the_headline(tmp_path):
+    layout(
+        tmp_path,
+        sweep_present_txt="index_fixture_cmake_missing\n",
+        sweep_results_txt="index_fixture_cmake_missing failure skipped\n",
+        sweep_reasons_txt="index_fixture_cmake_missing\tfailed\tindex_fixture_cmake_missing\n",
+        sweep_build_log=WRAPPED_CMAKE_LOG,
+    )
+    _, annotations, _ = run(tmp_path)
+    assert annotations == [
+        "::error title=index_fixture_cmake_missing build failed::"
+        'CMake: package "index_fixture_no_such_cmake_package" not found'
+    ]
+
+
+def test_shared_excerpt_is_shown_under_the_package_that_failed(tmp_path):
+    layout(
+        tmp_path,
+        sweep_present_txt="pkg_a_blocked\npkg_b_dep\n",
+        sweep_results_txt="pkg_a_blocked failure skipped\npkg_b_dep failure skipped\n",
+        sweep_reasons_txt="pkg_a_blocked\tfailed\tpkg_b_dep\npkg_b_dep\tfailed\tpkg_b_dep\n",
+        sweep_build_log="--- output: pkg_b_dep\n/src/d.cpp:1:1: error: boom\n---\n",
+    )
+    summary, _, _ = run(tmp_path)
+    assert summary.count("<details>") == 1
+    assert "<details><summary>pkg_b_dep: /src/d.cpp:1:1: error: boom</summary>" in summary

@@ -38,7 +38,9 @@ from pathlib import Path
 import re
 import sys
 
-ERROR_RE = re.compile(r"CMake Error|error:|undefined reference|fatal error")
+# "error:" as a word, so a C++ name such as foo_error::bar in a GCC
+# "In function" line does not count as the error.
+ERROR_RE = re.compile(r"CMake Error|\berror:(?!:)|undefined reference|fatal error")
 CMAKE_NOT_FOUND_RE = re.compile(
     r'Could not find a package configuration file provided by\s+"([^"]+)"'
 )
@@ -119,10 +121,10 @@ def excerpt_of(lines: list[str]) -> str:
 
 def headline_of(lines: list[str]) -> str | None:
     """Return a one-line cause: the first error line of the log."""
-    for line in lines:
-        missing = CMAKE_NOT_FOUND_RE.search(line)
-        if missing:
-            return f'CMake: package "{missing.group(1)}" not found'
+    # CMake wraps its message, so a long package name can start a new line.
+    missing = CMAKE_NOT_FOUND_RE.search("\n".join(lines))
+    if missing:
+        return f'CMake: package "{missing.group(1)}" not found'
     for i, line in enumerate(lines):
         if ERROR_RE.search(line):
             text = line.strip()
@@ -161,7 +163,9 @@ def own_cause(workspace: Path, pkg: str, unresolved: dict[str, list[str]]) -> Ca
         ]
         return Cause(f"rosdep cannot resolve key(s): {keys}", "\n".join(lines))
     lines = package_log(workspace, pkg)
-    headline = headline_of(lines)
+    # The workspace prefix is the same on every path; drop it before the
+    # headline is shortened.
+    headline = headline_of([line.replace(f"{workspace}/", "") for line in lines])
     if headline is None:
         headline = "build failed; no error line found, see the log tail"
     return Cause(headline, excerpt_of(lines) if lines else "")
@@ -259,10 +263,13 @@ def report(
             unresolved.setdefault(fields[0], []).append(fields[1])
 
     causes: dict[str, Cause] = {}
+    blocked: set[str] = set()
     for pkg in present:
         if results.get(pkg) == "failure":
             kind, member = reasons.get(pkg, ("failed", pkg))
             causes[pkg] = failure_cause(workspace, pkg, kind, member, unresolved)
+            if member != pkg:
+                blocked.add(pkg)
     for pkg in absent:
         causes[pkg] = Cause("not found in the repository tree at this ref")
 
@@ -304,9 +311,10 @@ def report(
     out.append("")
 
     size = sum(len(line.encode()) + 1 for line in out)
-    # Packages blocked by the same dependency share its excerpt; show it once.
+    # Packages blocked by the same dependency share its excerpt; show it once,
+    # under the package that failed by itself when it is registered too.
     shown: set[str] = set()
-    for pkg, cause in causes.items():
+    for pkg, cause in sorted(causes.items(), key=lambda item: item[0] in blocked):
         if not cause.excerpt or cause.excerpt in shown:
             continue
         shown.add(cause.excerpt)
