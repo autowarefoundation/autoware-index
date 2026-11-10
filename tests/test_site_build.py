@@ -500,6 +500,7 @@ def test_summarize_version_cell_fields_and_defaults():
         "status": "pass",
         "ref_at_test": {"name": "main"},
         "resolved_sha": "abc",
+        "base_image_stage": "",
         "at": "2024-01-01",
         "actions_run_url": "http://ci/1",
     }

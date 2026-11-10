@@ -356,3 +356,40 @@ def test_main_v1_file_exits_with_error(tmp_path, monkeypatch):
             ],
         )
     assert "not supported" in str(exc.value)
+
+
+# ---------------------------------------------------------------------------
+# --force: sweep a repository again although its state is up to date
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("mode", ["eager", "nightly"])
+def test_forced_repository_is_swept_with_fresh_state(tmp_path, mode):
+    dist = write_distribution(tmp_path / "distributions")
+    state = tmp_path / "state"
+    write_state(state, "jazzy", "awesome_tools", **MATCHING_STATE)
+    assert m.build_matrix(dist, state, mode) == []
+    rows = m.build_matrix(dist, state, mode, frozenset({"awesome_tools"}))
+    assert [r["repo_name"] for r in rows] == ["awesome_tools"]
+
+
+def test_forced_repository_that_is_stale_gets_one_row(tmp_path):
+    dist = write_distribution(tmp_path / "distributions")
+    rows = m.build_matrix(dist, tmp_path / "state", "eager", frozenset({"awesome_tools"}))
+    assert len(rows) == 1
+
+
+def test_force_rejects_a_repository_that_is_not_registered(tmp_path):
+    dist = write_distribution(tmp_path / "distributions")
+    with pytest.raises(m.RegistryError, match="not registered: no_such_repo"):
+        m.build_matrix(dist, tmp_path / "state", "eager", frozenset({"no_such_repo"}))
+
+
+def test_eager_workflow_passes_the_dispatch_input_to_force(repo_root):
+    import yaml
+
+    workflow = yaml.safe_load((repo_root / ".github/workflows/sweep-eager.yaml").read_text())
+    assert "repositories" in workflow[True]["workflow_dispatch"]["inputs"]
+    step = next(s for s in workflow["jobs"]["discover"]["steps"] if s.get("id") == "matrix")
+    assert step["env"]["FORCE_REPOSITORIES"] == "${{ inputs.repositories }}"
+    assert '--force="${FORCE_REPOSITORIES}"' in step["run"]

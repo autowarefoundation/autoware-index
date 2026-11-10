@@ -68,6 +68,11 @@ SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 SCHEMA_DIR = Path(__file__).resolve().parent.parent / "schema"
 SCHEMA_PATH = SCHEMA_DIR / "history-record.schema.json"
 RESULT_SCHEMA_PATH = SCHEMA_DIR / "sweep-result.schema.json"
+# The form of a stage that a history record accepts. Read from the schema, so
+# that the two cannot drift: a stage the schema rejects would drop the record.
+STAGE_RE = re.compile(
+    json.loads(SCHEMA_PATH.read_text())["properties"]["base_image_stage"]["pattern"]
+)
 
 
 def status_for(outcome: dict) -> str | None:
@@ -194,6 +199,12 @@ def envelopes_for_row(
             f"({resolved_sha!r}); nothing was validated"
         ]
 
+    # Optional provenance. A missing or malformed stage is left out of the
+    # record and never costs the verdict.
+    base_image_stage = result.get("base_image_stage")
+    if not (isinstance(base_image_stage, str) and STAGE_RE.match(base_image_stage)):
+        base_image_stage = None
+
     outcomes = result.get("packages") or {}
     envelopes: list[dict] = []
     for package in packages:
@@ -234,6 +245,8 @@ def envelopes_for_row(
                 },
             }
         )
+        if base_image_stage:
+            envelopes[-1]["record"]["base_image_stage"] = base_image_stage
     return envelopes, skips
 
 

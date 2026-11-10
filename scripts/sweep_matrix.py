@@ -43,6 +43,9 @@ itself enforces --max-rows (default 250) and fails LOUDLY here instead.
 Chunking across multiple workflow runs is the documented follow-up when the
 registry approaches that many repositories.
 
+--force "<repo_name> ..." adds a row for each named repository in every mode,
+also when its state file is up to date.
+
 Usage:
     scripts/sweep_matrix.py --mode eager   --state-dir _data/state
     scripts/sweep_matrix.py --mode nightly --state-dir _data/state [--output -]
@@ -173,13 +176,24 @@ def matrix_row(distro: str, repo_name: str, desired: dict) -> dict:
     return row
 
 
-def build_matrix(distributions_dir: Path, state_dir: Path, mode: str) -> list[dict]:
+def build_matrix(
+    distributions_dir: Path, state_dir: Path, mode: str, force: frozenset[str] = frozenset()
+) -> list[dict]:
+    """Build the matrix rows.
+
+    `force` names repositories that get a row in every distro that registers
+    them, also when their state file is up to date. It is the way to sweep a
+    pinned repository again after the pipeline changed, for example the
+    image that it builds in.
+    """
     rows: list[dict] = []
     malformed: list[str] = []
+    registered: set[str] = set()
     for path, doc in load_distributions_dir(distributions_dir):
         distro = doc.get("ros_distro") or path.stem
         for repo_name, spec in sorted((doc.get("repositories") or {}).items()):
             spec = spec or {}
+            registered.add(repo_name)
             desired = registered_state(spec, dependency_context(doc, repo_name))
             ref = spec.get("ref") or {}
             if not (
@@ -201,7 +215,12 @@ def build_matrix(distributions_dir: Path, state_dir: Path, mode: str) -> list[di
                 dep["ref_kind"] == "branch" for dep in desired.get("dependency_repositories", [])
             )
             differs = recorded_state(state_dir, distro, repo_name) != desired
-            if (mode == "eager" and differs) or (mode == "nightly" and (is_branch or differs)):
+            forced = repo_name in force
+            if (
+                forced
+                or (mode == "eager" and differs)
+                or (mode == "nightly" and (is_branch or differs))
+            ):
                 rows.append(matrix_row(distro, repo_name, desired))
 
     if malformed:
@@ -209,6 +228,12 @@ def build_matrix(distributions_dir: Path, state_dir: Path, mode: str) -> list[di
             "malformed repository entries (registered but unsweepable): " + "; ".join(malformed)
         )
 
+    unknown = sorted(force - registered)
+    if unknown:
+        # A typo must not end as a green run that swept nothing.
+        raise RegistryError(
+            "--force names repositories that are not registered: " + " ".join(unknown)
+        )
     rows.sort(key=lambda r: (r["ros_distro"], r["repo_name"]))
     return rows
 
@@ -222,12 +247,22 @@ def main() -> None:
         required=True,
         help="Path to the data branch's state/ dir (missing/empty = sweep everything)",
     )
+    parser.add_argument(
+        "--force",
+        default="",
+        help="Space-separated repository keys to sweep also when their state is up to date",
+    )
     parser.add_argument("--max-rows", type=int, default=MAX_ROWS_DEFAULT)
     parser.add_argument("--output", default="-", help="Output path; '-' for stdout")
     args = parser.parse_args()
 
     try:
-        rows = build_matrix(Path(args.distributions_dir), Path(args.state_dir), args.mode)
+        rows = build_matrix(
+            Path(args.distributions_dir),
+            Path(args.state_dir),
+            args.mode,
+            frozenset(args.force.split()),
+        )
     except RegistryError as exc:
         sys.exit(f"::error::{exc}")
 

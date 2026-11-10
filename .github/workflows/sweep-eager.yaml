@@ -7,6 +7,8 @@ name: sweep-eager
 # data:state/<distro>/<repo_name>.json, so a sweep that was cancelled,
 # displaced from a concurrency queue, or interrupted before recording is
 # simply re-detected by the next run. URL-only changes trigger too.
+# A manual dispatch can name repositories to sweep again although their
+# cursor is up to date.
 #
 # One matrix row per (distro, repository): sweep-repository.yaml clones and
 # builds the repo once and derives an honest per-package verdict inside the
@@ -26,6 +28,16 @@ on:
     paths:
       - distributions/**.yaml
   workflow_dispatch:
+    inputs:
+      repositories:
+        description: |
+          Repository keys to sweep again, separated by spaces, also when
+          their state on the data branch is up to date. Use it after a
+          change of the pipeline, for example of the image that a
+          repository builds in.
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -55,9 +67,11 @@ jobs:
 
       - name: Compute sweep matrix
         id: matrix
+        env:
+          FORCE_REPOSITORIES: ${{ inputs.repositories }}
         run: |
           set -euo pipefail
-          matrix=$(scripts/sweep_matrix.py --mode eager --state-dir _data/state)
+          matrix=$(scripts/sweep_matrix.py --mode eager --state-dir _data/state --force="${FORCE_REPOSITORIES}")
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           rows=$(printf '%s' "$matrix" | python -c "import json,sys; print(len(json.load(sys.stdin).get('include', [])))")
           if [ "$rows" -gt 0 ]; then

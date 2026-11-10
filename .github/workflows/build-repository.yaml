@@ -401,6 +401,7 @@ jobs:
           REF_KIND: ${{ inputs.ref_kind }}
           REF_VALUE: ${{ inputs.ref_value }}
           RESOLVED_SHA: ${{ steps.resolve.outputs.sha }}
+          BASE_IMAGE_STAGE: ${{ inputs.base_image_stage }}
           PACKAGES: ${{ inputs.packages }}
         shell: bash
         run: |
@@ -442,6 +443,7 @@ jobs:
               "repository": os.environ["REPOSITORY"],
               "ref": {"kind": os.environ["REF_KIND"], "value": os.environ["REF_VALUE"]},
               "resolved_sha": os.environ["RESOLVED_SHA"],
+              "base_image_stage": os.environ["BASE_IMAGE_STAGE"],
               "packages": packages,
           }
           Path("result.json").write_text(json.dumps(result, indent=2))
