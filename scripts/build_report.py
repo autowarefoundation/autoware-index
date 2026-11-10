@@ -38,11 +38,16 @@ from pathlib import Path
 import re
 import sys
 
-# "error:" as a word, so a C++ name such as foo_error::bar in a GCC
-# "In function" line does not count as the error.
+# "error:" not as the end of a longer name, so a C++ name such as
+# foo_error::bar in a GCC "In function" line does not count as the error.
 ERROR_RE = re.compile(r"CMake Error|\berror:(?!:)|undefined reference|fatal error")
+# Only inside a "CMake Error" message: an optional find_package prints the
+# same text as a "CMake Warning". The message body is indented, and CMake
+# wraps it, so a long package name can start a new line.
 CMAKE_NOT_FOUND_RE = re.compile(
-    r'Could not find a package configuration file provided by\s+"([^"]+)"'
+    r"^CMake Error[^\n]*\n(?:(?:[ \t][^\n]*)?\n)*?"
+    r'[ \t]+Could not find a package configuration file provided by\s+"([^"]+)"',
+    re.MULTILINE,
 )
 
 CONTEXT_LINES = 10
@@ -121,7 +126,6 @@ def excerpt_of(lines: list[str]) -> str:
 
 def headline_of(lines: list[str]) -> str | None:
     """Return a one-line cause: the first error line of the log."""
-    # CMake wraps its message, so a long package name can start a new line.
     missing = CMAKE_NOT_FOUND_RE.search("\n".join(lines))
     if missing:
         return f'CMake: package "{missing.group(1)}" not found'

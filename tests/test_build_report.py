@@ -421,3 +421,33 @@ def test_shared_excerpt_is_shown_under_the_package_that_failed(tmp_path):
     summary, _, _ = run(tmp_path)
     assert summary.count("<details>") == 1
     assert "<details><summary>pkg_b_dep: /src/d.cpp:1:1: error: boom</summary>" in summary
+
+
+def test_cmake_warning_for_an_optional_package_is_not_the_headline(tmp_path):
+    log = (
+        "--- output: pkg_a\n"
+        "CMake Warning at CMakeLists.txt:9 (find_package):\n"
+        '  By not providing "FindCUDA.cmake" in CMAKE_MODULE_PATH this project has\n'
+        '  asked CMake to find a package configuration file provided by "CUDA", but\n'
+        "  CMake did not find one.\n"
+        "\n"
+        '  Could not find a package configuration file provided by "CUDA" with any\n'
+        "  of the following names:\n"
+        "\n"
+        "    CUDAConfig.cmake\n"
+        "\n"
+        "-- Configuring done (1.2s)\n"
+        "/src/a.cpp:3:10: error: 'foo' was not declared in this scope\n"
+        "---\n"
+    )
+    layout(
+        tmp_path,
+        sweep_present_txt="pkg_a\n",
+        sweep_results_txt="pkg_a failure skipped\n",
+        sweep_reasons_txt="pkg_a\tfailed\tpkg_a\n",
+        sweep_build_log=log,
+    )
+    _, annotations, _ = run(tmp_path)
+    assert annotations == [
+        "::error title=pkg_a build failed::/src/a.cpp:3:10: error: 'foo' was not declared in this scope"
+    ]
