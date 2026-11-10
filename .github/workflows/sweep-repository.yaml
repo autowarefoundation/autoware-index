@@ -1,7 +1,9 @@
 name: sweep-repository
 
 # One repository row resolves Autoware once, then calls separate build and
-# test workflows. Tests consume the exact cached workspace from that build.
+# test workflows. The resolve job also picks the image stage: core-devel-cuda
+# when a package to build, or an index dependency of it, needs CUDA, else
+# core-devel. Tests consume the exact cached workspace from that build.
 # Both stages preserve the schema-2 validate-result artifact read by the
 # post-merge recorder; PR runs retain read-only permissions and never record.
 
@@ -59,10 +61,14 @@ on:
         type: string
         default: "{}"
       base_image_stage:
-        description: Container image stage. Defaults to core-devel.
+        description: |
+          Container image stage (e.g. "core-devel" or "core-devel-cuda").
+          When empty (the default), the resolve job clones the repository
+          and its index dependencies and runs the detect-base-image-stage
+          action of autoware-index-github-actions on the packages to build.
         required: false
         type: string
-        default: core-devel
+        default: ""
       runs-on:
         description: |
           Runner label as a JSON-encoded array (workaround for the lack
@@ -81,18 +87,78 @@ permissions:
 
 jobs:
   resolve:
-    name: resolve autoware_version
+    name: resolve image stage and autoware_version
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     outputs:
       autoware_version: ${{ inputs.autoware_version || steps.latest.outputs.autoware_version }}
+      base_image_stage: ${{ inputs.base_image_stage || steps.stage.outputs.base_image_stage }}
+      source_sha: ${{ steps.clone.outputs.sha }}
     steps:
+      - name: Clone repository and index dependencies
+        id: clone
+        if: inputs.base_image_stage == ''
+        env:
+          REPOSITORY: ${{ inputs.repository }}
+          REF_VALUE: ${{ inputs.ref_value }}
+          DEPENDENCY_REPOSITORIES: ${{ inputs.dependency_repositories }}
+          GIT_LFS_SKIP_SMUDGE: "1"
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'EOF'
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+          import sys
+
+
+          def clone(repository, ref, path):
+              # git reads an argument that starts with "-" as an option.
+              if repository.startswith("-") or ref.startswith("-"):
+                  sys.exit(f"::error::refusing a repository or ref that starts with '-': {repository!r} {ref!r}")
+              git = ["git", "-C", str(path)]
+              path.mkdir(parents=True)
+              subprocess.run(["git", "init", "--quiet", str(path)], check=True)
+              subprocess.run([*git, "remote", "add", "origin", repository], check=True)
+              # The detection reads only package.xml and CMake files, so one
+              # commit is enough. Not every server gives a commit by SHA.
+              # Then the full history is fetched.
+              shallow = subprocess.run([*git, "fetch", "--quiet", "--depth", "1", "--end-of-options", "origin", ref], check=False)
+              if shallow.returncode == 0:
+                  subprocess.run([*git, "checkout", "--quiet", "FETCH_HEAD"], check=True)
+                  return
+              subprocess.run([*git, "fetch", "--quiet", "--tags", "origin", "+refs/heads/*:refs/remotes/origin/*"], check=True)
+              subprocess.run([*git, "checkout", "--quiet", ref], check=True)
+
+
+          clone(os.environ["REPOSITORY"], os.environ["REF_VALUE"], Path("src") / "repository")
+          dependencies = json.loads(os.environ["DEPENDENCY_REPOSITORIES"] or "[]") or []
+          for dependency in dependencies:
+              path = Path("src") / "index-dependencies" / dependency["repo_name"]
+              clone(dependency["repository"], dependency["ref_value"], path)
+          EOF
+          # The build job checks out this commit, so the detection and the
+          # build read the same sources of this repository when the ref is a
+          # branch. An index dependency on a branch ref is not pinned.
+          echo "sha=$(git -C src/repository rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+
+      - name: Detect base image stage
+        id: stage
+        if: inputs.base_image_stage == ''
+        uses: autowarefoundation/autoware-index-github-actions/.github/actions/detect-base-image-stage@main
+        with:
+          paths: src
+          packages: ${{ inputs.packages }} ${{ inputs.dependency_packages }}
+
       - name: Resolve latest autoware_version
         id: latest
         if: inputs.autoware_version == ''
         uses: autowarefoundation/autoware-index-github-actions/.github/actions/latest-autoware-version@main
         with:
           ros_distro: ${{ inputs.ros_distro }}
-          base_image_stage: ${{ inputs.base_image_stage }}
+          base_image_stage: ${{ inputs.base_image_stage || steps.stage.outputs.base_image_stage }}
 
   build:
     needs: resolve
@@ -104,11 +170,12 @@ jobs:
       repository: ${{ inputs.repository }}
       ref_kind: ${{ inputs.ref_kind }}
       ref_value: ${{ inputs.ref_value }}
+      checkout_ref: ${{ needs.resolve.outputs.source_sha }}
       packages: ${{ inputs.packages }}
       dependency_repositories: ${{ inputs.dependency_repositories }}
       dependency_packages: ${{ inputs.dependency_packages }}
       index_dependencies: ${{ inputs.index_dependencies }}
-      base_image_stage: ${{ inputs.base_image_stage }}
+      base_image_stage: ${{ needs.resolve.outputs.base_image_stage }}
       runs-on: ${{ inputs.runs-on }}
 
   test:
@@ -122,5 +189,5 @@ jobs:
       autoware_version: ${{ needs.resolve.outputs.autoware_version }}
       repo_name: ${{ inputs.repo_name }}
       cache_key: ${{ needs.build.outputs.cache-key }}
-      base_image_stage: ${{ inputs.base_image_stage }}
+      base_image_stage: ${{ needs.resolve.outputs.base_image_stage }}
       runs-on: ${{ inputs.runs-on }}
