@@ -367,6 +367,9 @@ def test_a_missing_or_malformed_image_stage_never_costs_the_verdict(repo_root, t
         del result["base_image_stage"]
     else:
         result["base_image_stage"] = stage
+    # main() runs the schema gate first, and a row error there skips the row.
+    validator = jsonschema.Draft202012Validator(result_schema(repo_root))
+    assert build_envelopes.result_schema_errors(result, validator) == ([], {})
     (record,) = records(result, "pkg_a")
     assert record["status"] == "pass"
     assert "base_image_stage" not in record
