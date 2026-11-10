@@ -124,6 +124,9 @@ jobs:
               # git reads an argument that starts with "-" as an option.
               if repository.startswith("-") or ref.startswith("-"):
                   sys.exit(f"::error::refusing a repository or ref that starts with '-': {repository!r} {ref!r}")
+              # git prints the value in its own messages, and a line break there starts a workflow command.
+              if not (repository + ref).isprintable():
+                  sys.exit(f"::error::refusing a repository or ref with a control character: {repository!r} {ref!r}")
               git = ["git", "-C", str(path)]
               path.mkdir(parents=True)
               subprocess.run(["git", "init", "--quiet", str(path)], check=True)
@@ -143,7 +146,7 @@ jobs:
               try:
                   clone(repository, ref, path)
               except subprocess.CalledProcessError:
-                  sys.exit(f"::error::cannot clone {repository} at ref {ref!r}")
+                  sys.exit(f"::error::cannot clone {repository!r} at ref {ref!r}")
 
 
           clone_or_exit(os.environ["REPOSITORY"], os.environ["REF_VALUE"], Path("src") / "repository")

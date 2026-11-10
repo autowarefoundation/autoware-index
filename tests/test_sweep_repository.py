@@ -928,7 +928,7 @@ def test_resolve_clone_step_fails_on_a_ref_that_does_not_exist(repo_root, tmp_pa
     proc, _, output = run_resolve_clone(repo_root, tmp_path, git_repo.path, "no-such-ref")
     assert proc.returncode != 0
     assert not output.exists() or output.read_text() == ""
-    assert f"::error::cannot clone {git_repo.path} at ref 'no-such-ref'" in proc.stderr
+    assert f"::error::cannot clone {str(git_repo.path)!r} at ref 'no-such-ref'" in proc.stderr
     assert "Traceback" not in proc.stderr
 
 
@@ -1035,6 +1035,50 @@ def test_build_clone_step_refuses_a_value_that_git_reads_as_an_option(
     assert proc.returncode != 0
     assert "::error::refusing a repository or ref that starts with '-'" in proc.stdout
     assert not (workspace / "src").exists()
+
+
+@pytest.mark.parametrize("field", ["repository", "ref_value", "checkout_ref"])
+def test_build_dependency_clone_refuses_a_value_that_git_reads_as_an_option(
+    repo_root, tmp_path, git_repo, field
+):
+    source_repository(git_repo, "pkg_a")
+    dependency = json.loads(dependency_row(git_repo.path))[0]
+    dependency[field] = "--orphan=x"
+
+    proc, workspace = run_build_dependency_clone(repo_root, tmp_path, json.dumps([dependency]))
+
+    assert proc.returncode != 0
+    assert "::error::refusing a repository or ref that starts with '-'" in proc.stderr
+    assert "Traceback" not in proc.stderr
+    assert not (workspace / "src/index-dependencies").exists()
+
+
+def test_clone_steps_refuse_a_line_break_in_a_repository(repo_root, tmp_path, git_repo):
+    """A line break in a value must not start a second workflow command."""
+    source_repository(git_repo, "pkg_a")
+    repository = "/nonexistent\n::error::injected"
+    message = "::error::refusing a repository or ref with a control character"
+
+    resolve, _, _ = run_resolve_clone(repo_root, tmp_path, repository, "main")
+    dependency = {**json.loads(dependency_row(git_repo.path))[0], "repository": repository}
+    build_dependency, _ = run_build_dependency_clone(repo_root, tmp_path, json.dumps([dependency]))
+    expressions = {
+        "inputs.repository": repository,
+        "inputs.ref_value": "main",
+        "inputs.checkout_ref": "",
+    }
+    env = step_env(workflow_step(repo_root, "Clone repository"), expressions)
+    workspace = tmp_path / "clone-workspace"
+    workspace.mkdir()
+    build = run_step(
+        repo_root, workspace, "Clone repository", {**env, "GITHUB_WORKSPACE": str(workspace)}
+    )
+
+    for proc in (resolve, build_dependency, build):
+        output = proc.stdout + proc.stderr
+        assert proc.returncode != 0
+        assert message in output
+        assert not [line for line in output.splitlines() if line.startswith("::error::injected")]
 
 
 @pytest.mark.parametrize("use_checkout_ref", [True, False])

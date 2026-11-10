@@ -120,7 +120,11 @@ jobs:
           checkout="${CHECKOUT_REF:-${REF_VALUE}}"
           # git reads an argument that starts with "-" as an option.
           if [[ "${REPOSITORY}" == -* || "${checkout}" == -* ]]; then
-            echo "::error::refusing a repository or ref that starts with '-': '${REPOSITORY}' '${checkout}'"
+            echo "::error::refusing a repository or ref that starts with '-': ${REPOSITORY@Q} ${checkout@Q}"
+            exit 1
+          fi
+          if [[ "${REPOSITORY}${checkout}" == *[[:cntrl:]]* ]]; then
+            echo "::error::refusing a repository or ref with a control character: ${REPOSITORY@Q} ${checkout@Q}"
             exit 1
           fi
           # The container runs as a different user than owns the mounted
@@ -155,11 +159,17 @@ jobs:
               name = dependency["repo_name"]
               if not REPO_NAME.fullmatch(name):
                   sys.exit(f"::error::refusing an index dependency name that is not a registry key: {name!r}")
+              repository = dependency["repository"]
+              ref = dependency.get("checkout_ref") or dependency["ref_value"]
+              # git reads an argument that starts with "-" as an option.
+              if repository.startswith("-") or ref.startswith("-"):
+                  sys.exit(f"::error::refusing a repository or ref that starts with '-': {repository!r} {ref!r}")
+              if not (repository + ref).isprintable():
+                  sys.exit(f"::error::refusing a repository or ref with a control character: {repository!r} {ref!r}")
               path = Path(os.environ["GITHUB_WORKSPACE"]) / "src" / "index-dependencies" / name
               path.parent.mkdir(parents=True, exist_ok=True)
               subprocess.run(["git", "config", "--global", "--add", "safe.directory", str(path)], check=True)
-              subprocess.run(["git", "clone", dependency["repository"], str(path)], check=True)
-              ref = dependency.get("checkout_ref") or dependency["ref_value"]
+              subprocess.run(["git", "clone", repository, str(path)], check=True)
               subprocess.run(["git", "-C", str(path), "checkout", ref], check=True)
           EOF
 

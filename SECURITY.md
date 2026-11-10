@@ -19,8 +19,8 @@ builds of externally-hosted package source**:
   fetches and checks out the repository and its index dependencies on the
   hosted runner, outside a container. This job runs no code from these
   sources. It reads `package.xml` and CMake files to select the container
-  image, and its token has only `contents: read`. Then the build and test jobs
-  clone the same commits and build them inside an Autoware container, selected
+  image, and its token has only `contents: read`. Then the build job clones
+  the same commits and builds them inside an Autoware container, selected
   by its version tag. A malicious or compromised registered repository is
   therefore executed by our runners. Registrations are reviewed by maintainers
   before merge for exactly this reason.
