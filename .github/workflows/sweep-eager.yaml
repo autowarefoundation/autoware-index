@@ -31,10 +31,11 @@ on:
     inputs:
       repositories:
         description: |
-          Repository keys to sweep again, separated by spaces, also when
-          their state on the data branch is up to date. Use it after a
-          change of the pipeline, for example of the image that a
-          repository builds in.
+          Repository keys to sweep again, separated by spaces or commas,
+          also when their state on the data branch is up to date. Use it
+          after a change of the pipeline, for example of the image that a
+          repository builds in. If a forced row records only a part of
+          its packages, no later sweep takes it again. Dispatch it again.
         required: false
         type: string
         default: ""
