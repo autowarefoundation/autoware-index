@@ -45,6 +45,14 @@ not change the build check. Re-running a failed test reuses its original build c
 cache has expired or been evicted, re-run all jobs to produce it again; missing caches leave
 test outcomes inconclusive and do not record package failures.
 
+The checks run in an Autoware container image. CI picks the image from your sources:
+`core-devel-cuda` when a registered package, or an Index dependency of it, needs CUDA, and
+the lighter `core-devel` for every other repository. To get the CUDA image, declare
+`<depend>autoware_cuda_dependency_meta</depend>` in the `package.xml` of the package. CI also
+reads the CMake files of the package for CUDA and TensorRT calls. The full list of signals is
+in the [`detect-base-image-stage`](https://github.com/autowarefoundation/autoware-index-github-actions#detect-base-image-stage-composite-action)
+action. The summary of the `resolve` job shows the image and the reason.
+
 After merge, the **eager sweep** clones your repository once at its registered
 `ref`, validates every registered package against the current latest published
 Autoware release, and appends one result per package to the
