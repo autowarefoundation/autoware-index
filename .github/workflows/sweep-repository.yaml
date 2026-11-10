@@ -110,8 +110,13 @@ jobs:
           import json
           import os
           from pathlib import Path
+          import re
           import subprocess
           import sys
+
+          # The repository key rule of schema/distribution.schema.json. The
+          # name becomes a directory, and this job has no checkout of the schema.
+          REPO_NAME = re.compile(r"^[a-z][a-z0-9_-]*$")
 
 
           def clone(repository, ref, path):
@@ -133,11 +138,22 @@ jobs:
               subprocess.run([*git, "checkout", "--quiet", ref], check=True)
 
 
-          clone(os.environ["REPOSITORY"], os.environ["REF_VALUE"], Path("src") / "repository")
+          def clone_or_exit(repository, ref, path):
+              try:
+                  clone(repository, ref, path)
+              except subprocess.CalledProcessError:
+                  sys.exit(f"::error::cannot clone {repository} at ref {ref!r}")
+
+
+          clone_or_exit(os.environ["REPOSITORY"], os.environ["REF_VALUE"], Path("src") / "repository")
           dependencies = json.loads(os.environ["DEPENDENCY_REPOSITORIES"] or "[]") or []
           for dependency in dependencies:
+              name = dependency["repo_name"]
+              if not REPO_NAME.fullmatch(name):
+                  sys.exit(f"::error::refusing an index dependency name that is not a registry key: {name!r}")
+          for dependency in dependencies:
               path = Path("src") / "index-dependencies" / dependency["repo_name"]
-              clone(dependency["repository"], dependency["ref_value"], path)
+              clone_or_exit(dependency["repository"], dependency["ref_value"], path)
           EOF
           # The build job checks out this commit, so the detection and the
           # build read the same sources of this repository when the ref is a

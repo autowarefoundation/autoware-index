@@ -925,6 +925,75 @@ def test_resolve_clone_step_fails_on_a_ref_that_does_not_exist(repo_root, tmp_pa
     proc, _, output = run_resolve_clone(repo_root, tmp_path, git_repo.path, "no-such-ref")
     assert proc.returncode != 0
     assert not output.exists() or output.read_text() == ""
+    assert f"::error::cannot clone {git_repo.path} at ref 'no-such-ref'" in proc.stderr
+    assert "Traceback" not in proc.stderr
+
+
+def dependency_row(repository, repo_name="dep_repo", **extra) -> str:
+    row = {"repo_name": repo_name, "repository": str(repository), "ref_kind": "branch"}
+    return json.dumps([{**row, "ref_value": "main", **extra}])
+
+
+def run_build_dependency_clone(repo_root, tmp_path, dependencies):
+    name = "Clone index dependencies"
+    env = step_env(workflow_step(repo_root, name), {"inputs.dependency_repositories": dependencies})
+    workspace = tmp_path / "build-workspace"
+    workspace.mkdir()
+    proc = run_step(repo_root, workspace, name, {**env, "GITHUB_WORKSPACE": str(workspace)})
+    return proc, workspace
+
+
+@pytest.mark.parametrize("repo_name", ["../../../escape", "a/b", "..", "Dep", "dep\n", ""])
+def test_clone_steps_refuse_a_dependency_name_that_is_not_a_registry_key(
+    repo_root, tmp_path, git_repo, repo_name
+):
+    source_repository(git_repo, "pkg_a")
+    dependencies = dependency_row(git_repo.path, repo_name)
+
+    resolve, resolve_workspace, _ = run_resolve_clone(
+        repo_root, tmp_path, git_repo.path, "main", dependencies
+    )
+    build, build_workspace = run_build_dependency_clone(repo_root, tmp_path, dependencies)
+
+    for proc, workspace in ((resolve, resolve_workspace), (build, build_workspace)):
+        assert proc.returncode != 0
+        assert "::error::refusing an index dependency name" in proc.stderr
+        assert "Traceback" not in proc.stderr
+        assert not (workspace / "src/index-dependencies").exists()
+    assert not (tmp_path / "escape").exists()
+
+
+def test_clone_steps_use_the_repository_key_rule_of_the_registry_schema(repo_root):
+    schema = json.loads((repo_root / "schema/distribution.schema.json").read_text())
+    pattern = schema["properties"]["repositories"]["propertyNames"]["pattern"]
+    resolve = workflow_step(repo_root, RESOLVE_CLONE_STEP, "sweep-repository")
+    build = workflow_step(repo_root, "Clone index dependencies")
+    for step in (resolve, build):
+        assert f're.compile(r"{pattern}")' in step["run"]
+
+
+@pytest.mark.parametrize("field", ["repository", "ref_value", "checkout_ref"])
+def test_build_clone_step_refuses_a_value_that_git_reads_as_an_option(
+    repo_root, tmp_path, git_repo, field
+):
+    source_repository(git_repo, "pkg_a")
+    expressions = {
+        "inputs.repository": str(git_repo.path),
+        "inputs.ref_value": "main",
+        "inputs.checkout_ref": "",
+        f"inputs.{field}": "--orphan=x",
+    }
+    env = step_env(workflow_step(repo_root, "Clone repository"), expressions)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    proc = run_step(
+        repo_root, workspace, "Clone repository", {**env, "GITHUB_WORKSPACE": str(workspace)}
+    )
+
+    assert proc.returncode != 0
+    assert "::error::refusing a repository or ref that starts with '-'" in proc.stdout
+    assert not (workspace / "src").exists()
 
 
 @pytest.mark.parametrize("use_checkout_ref", [True, False])

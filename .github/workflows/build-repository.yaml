@@ -113,13 +113,19 @@ jobs:
         run: |
           set -euo pipefail
           cd "${GITHUB_WORKSPACE}"
+          checkout="${CHECKOUT_REF:-${REF_VALUE}}"
+          # git reads an argument that starts with "-" as an option.
+          if [[ "${REPOSITORY}" == -* || "${checkout}" == -* ]]; then
+            echo "::error::refusing a repository or ref that starts with '-': '${REPOSITORY}' '${checkout}'"
+            exit 1
+          fi
           # The container runs as a different user than owns the mounted
           # workspace, so git refuses operations here ("dubious ownership").
           # Mark it safe before later git-based steps.
           git config --global --add safe.directory "${GITHUB_WORKSPACE}/src/repository"
           mkdir -p src
           git clone "${REPOSITORY}" src/repository
-          git -C src/repository checkout "${CHECKOUT_REF:-${REF_VALUE}}"
+          git -C src/repository checkout "${checkout}"
 
       - name: Clone index dependencies
         id: clone-dependencies
@@ -132,11 +138,19 @@ jobs:
           import json
           import os
           from pathlib import Path
+          import re
           import subprocess
+          import sys
+
+          # The repository key rule of schema/distribution.schema.json. The
+          # name becomes a directory, and this job has no checkout of the schema.
+          REPO_NAME = re.compile(r"^[a-z][a-z0-9_-]*$")
 
           dependencies = json.loads(os.environ["DEPENDENCY_REPOSITORIES"] or "[]") or []
           for dependency in dependencies:
               name = dependency["repo_name"]
+              if not REPO_NAME.fullmatch(name):
+                  sys.exit(f"::error::refusing an index dependency name that is not a registry key: {name!r}")
               path = Path(os.environ["GITHUB_WORKSPACE"]) / "src" / "index-dependencies" / name
               path.parent.mkdir(parents=True, exist_ok=True)
               subprocess.run(["git", "config", "--global", "--add", "safe.directory", str(path)], check=True)
