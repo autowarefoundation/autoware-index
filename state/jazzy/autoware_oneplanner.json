@@ -2,11 +2,11 @@
   "url": "https://github.com/autowarefoundation/autoware_oneplanner",
   "ref": {
     "kind": "tag",
-    "value": "1.1.0"
+    "value": "1.1.1"
   },
   "packages": [
     "autoware_oneplanner"
   ],
-  "last_run_url": "https://github.com/autowarefoundation/autoware-index/actions/runs/42733327750",
-  "at": "2026-11-10T01:16:10Z"
+  "last_run_url": "https://github.com/autowarefoundation/autoware-index/actions/runs/42776769193",
+  "at": "2026-11-10T07:48:11Z"
 }
