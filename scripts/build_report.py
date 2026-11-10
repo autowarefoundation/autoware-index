@@ -139,11 +139,11 @@ def headline_of(lines: list[str]) -> str | None:
     return None
 
 
-def cap(text: str, limit: int) -> str:
+def cap(text: str, limit: int, artifact: str = "build logs") -> str:
     data = text.encode()
     if len(data) <= limit:
         return text
-    return data[:limit].decode(errors="ignore") + "\n... (cut, see the build logs artifact)"
+    return data[:limit].decode(errors="ignore") + f"\n... (cut, see the {artifact} artifact)"
 
 
 def shorten(text: str, limit: int) -> str:
@@ -187,7 +187,7 @@ def failure_cause(
     return Cause(f"unknown reason `{kind} {member}`")
 
 
-def failed_steps(steps_json: str) -> list[str]:
+def failed_steps(steps_json: str, names: dict[str, str] = STEP_NAMES) -> list[str]:
     """Return the steps that failed or were cancelled, with the conclusion.
 
     `conclusion`, not `outcome`: a step with continue-on-error, such as the
@@ -198,7 +198,7 @@ def failed_steps(steps_json: str) -> list[str]:
     except json.JSONDecodeError:
         return []
     return [
-        f"`{STEP_NAMES.get(step_id, step_id)}` ({step['conclusion']})"
+        f"`{names.get(step_id, step_id)}` ({step['conclusion']})"
         for step_id, step in steps.items()
         if isinstance(step, dict) and step.get("conclusion") in ("failure", "cancelled")
     ]
