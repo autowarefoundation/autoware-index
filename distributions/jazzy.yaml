@@ -202,3 +202,19 @@ repositories:
           - sensing
           - perception
           - planning
+  autoware_carla_interface_v2:
+    url: https://github.com/autowarefoundation/autoware_carla_interface_v2.git
+    ref:
+      kind: branch
+      value: main
+    governance: foundation
+    maintainers:
+      - name: Masaya Kataoka
+        email: masaya.kataoka@tier4.jp
+        github: hakuturu583
+    packages:
+      autoware_carla_interface_v2:
+        tags:
+          - simulator
+        index_dependencies:
+          - tamagawa_imu_driver
