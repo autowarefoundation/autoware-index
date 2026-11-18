@@ -1,0 +1,28 @@
+{
+  "url": "https://github.com/autowarefoundation/autoware_carla_interface_v2.git",
+  "ref": {
+    "kind": "branch",
+    "value": "main"
+  },
+  "packages": [
+    "autoware_carla_interface_v2"
+  ],
+  "last_run_url": "https://github.com/autowarefoundation/autoware-index/actions/runs/44266117341",
+  "at": "2026-11-18T08:23:18Z",
+  "index_dependencies": {
+    "autoware_carla_interface_v2": [
+      "tamagawa_imu_driver"
+    ]
+  },
+  "dependency_repositories": [
+    {
+      "repo_name": "tamagawa_imu_driver",
+      "repository": "https://github.com/tier4/tamagawa_imu_driver.git",
+      "ref_kind": "branch",
+      "ref_value": "ros2"
+    }
+  ],
+  "dependency_packages": [
+    "tamagawa_imu_driver"
+  ]
+}

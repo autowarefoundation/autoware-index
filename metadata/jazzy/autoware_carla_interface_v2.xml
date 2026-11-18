@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>autoware_carla_interface_v2</name>
+  <version>1.0.0</version>
+  <description>Runs Autoware on CARLA 1.0's native ROS 2 interface: an rclpy node that loads the level, spawns the ego and its sensor kit and ticks the world through the typesafe_carla client</description>
+  <maintainer email="masaya.kataoka@tier4.jp">Masaya Kataoka</maintainer>
+  <license>Apache License 2.0</license>
+
+  <url type="repository">https://github.com/hakuturu583/autoware_carla_interface_v2</url>
+  <url type="bugtracker">https://github.com/hakuturu583/autoware_carla_interface_v2/issues</url>
+
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>autoware_adapi_v1_msgs</exec_depend>
+  <exec_depend>autoware_control_msgs</exec_depend>
+  <exec_depend>autoware_launch</exec_depend>
+  <exec_depend>autoware_perception_msgs</exec_depend>
+  <exec_depend>autoware_vehicle_msgs</exec_depend>
+  <exec_depend>builtin_interfaces</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>nebula_hesai</exec_depend>
+  <exec_depend>python3-pyproj</exec_depend>
+  <exec_depend>python3-typesafe-carla-pip</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>ros2_socketcan</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>septentrio_gnss_driver</exec_depend>
+  <exec_depend>tamagawa_imu_driver</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
