@@ -7,8 +7,8 @@
   "packages": [
     "autoware_carla_interface_v2"
   ],
-  "last_run_url": "https://github.com/autowarefoundation/autoware-index/actions/runs/45029807425",
-  "at": "2026-11-22T13:57:33Z",
+  "last_run_url": "https://github.com/autowarefoundation/autoware-index/actions/runs/45223068607",
+  "at": "2026-11-23T17:05:43Z",
   "index_dependencies": {
     "autoware_carla_interface_v2": [
       "tamagawa_imu_driver"
