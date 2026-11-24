@@ -125,7 +125,7 @@ repositories:
     url: https://github.com/autowarefoundation/vision_pilot
     ref:
       kind: sha
-      value: fb71488da95940bfb2232887583833d08702f8c1
+      value: 0a742c8e485bceb32a35b8d01c8355dcc8a64e44
     governance: foundation
     reference_design: true
     maintainers:
