@@ -2,11 +2,11 @@
   "url": "https://github.com/autowarefoundation/vision_pilot",
   "ref": {
     "kind": "sha",
-    "value": "0a742c8e485bceb32a35b8d01c8355dcc8a64e44"
+    "value": "3defd2b5f09794beffba4786789e776f0d72fac6"
   },
   "packages": [
     "vision_pilot"
   ],
-  "last_run_url": "https://github.com/autowarefoundation/autoware-index/actions/runs/45449835176",
-  "at": "2026-11-24T17:39:40Z"
+  "last_run_url": "https://github.com/autowarefoundation/autoware-index/actions/runs/45624730966",
+  "at": "2026-11-25T13:39:39Z"
 }
